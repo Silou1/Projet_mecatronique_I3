@@ -85,7 +85,7 @@ Quoridor est un jeu de stratégie abstrait pour 2 joueurs où chacun doit attein
 
 1. **Cloner le repository**
    ```bash
-   git clone https://github.com/Silou1/Projet_m-catronique_I3.git
+   git clone https://github.com/Silou1/Projet_mecatronique_I3.git
    cd Projet_m-catronique_I3
    ```
 
@@ -275,7 +275,7 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 ## 📞 Contact
 
 Pour toute question ou suggestion :
-- **GitHub Issues** : [Créer une issue](https://github.com/Silou1/Projet_m-catronique_I3/issues)
+- **GitHub Issues** : [Créer une issue](https://github.com/Silou1/Projet_mecatronique_I3/issues)
 - **Email** : [Contacter via GitHub](https://github.com/Silou1)
 
 ---

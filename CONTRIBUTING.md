@@ -26,7 +26,7 @@ Ce projet adhère à un code de conduite simple :
 Il existe plusieurs façons de contribuer :
 
 ### 🐛 Signaler des bugs
-- Vérifiez d'abord que le bug n'a pas déjà été signalé dans les [Issues](https://github.com/Silou1/Projet_m-catronique_I3/issues)
+- Vérifiez d'abord que le bug n'a pas déjà été signalé dans les [Issues](https://github.com/Silou1/Projet_mecatronique_I3/issues)
 - Créez une nouvelle issue avec le label `bug`
 - Décrivez le problème de manière détaillée :
   - Étapes pour reproduire
@@ -279,7 +279,7 @@ git commit -m "⚡ Optimiser l'algorithme Minimax avec cache"
 ## 🤔 Questions ?
 
 Si vous avez des questions :
-- 💬 Ouvrez une [Discussion](https://github.com/Silou1/Projet_m-catronique_I3/discussions)
+- 💬 Ouvrez une [Discussion](https://github.com/Silou1/Projet_mecatronique_I3/discussions)
 - 📧 Contactez via [GitHub](https://github.com/Silou1)
 
 ---
