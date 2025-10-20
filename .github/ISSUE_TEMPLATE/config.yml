@@ -1,0 +1,12 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/Silou1/Projet_mecatronique_I3/discussions
+    about: Posez des questions, discutez d'idées ou partagez vos projets utilisant ce moteur
+  - name: 📚 Documentation
+    url: https://github.com/Silou1/Projet_mecatronique_I3/blob/main/README.md
+    about: Consultez la documentation complète du projet
+  - name: 🧪 Tests
+    url: https://github.com/Silou1/Projet_mecatronique_I3/blob/main/tests/README_TESTS.md
+    about: Documentation sur les tests unitaires
+

@@ -74,8 +74,8 @@ Voir les sections ci-dessous pour les détails techniques.
 
 ```bash
 # Fork le projet sur GitHub, puis :
-git clone https://github.com/VOTRE-USERNAME/Projet_m-catronique_I3.git
-cd Projet_m-catronique_I3
+git clone https://github.com/VOTRE-USERNAME/Projet_mecatronique_I3.git
+cd Projet_mecatronique_I3
 ```
 
 ### 2. Créer un environnement virtuel

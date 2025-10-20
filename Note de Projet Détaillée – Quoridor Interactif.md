@@ -1,15 +1,15 @@
-# ****Note de Projet Détaillée – Quoridor Interactif****  
-#   
+# ****Note de Projet Détaillée – Quoridor Interactif****
+
 ## ****1. Contexte et Objectifs du Projet****  
   
 * **Projet :** Il s’agit d’un projet de mécatronique mené par une équipe de six élèves.  
 * **Concept :** L’équipe recrée le jeu de société « Le Quoridor ».  
 * **Objectif Principal :** Concevoir un plateau de jeu intelligent permettant à un joueur humain d’affronter une intelligence artificielle (IA).  
 * **Expérience Visée :** Offrir une expérience de jeu plus immersive et dynamique que le jeu classique.  
-* **Règles du Jeu :** Les règles fondamentales du Quoridor classique sont conservées sans modification. Le projet se concentre sur l’ajout d’une dimension interactive.  
-  
-## ****2. Fonctionnement et Interaction Utilisateur (Interface de Jeu)****  
-##   
+* **Règles du Jeu :** Les règles fondamentales du Quoridor classique sont conservées sans modification. Le projet se concentre sur l'ajout d'une dimension interactive.
+
+## ****2. Fonctionnement et Interaction Utilisateur (Interface de Jeu)****
+
 Le joueur interagit directement avec le plateau, qui lui fournit un retour visuel et tactile.  
   
 * **Double Mode d’Action :** Le plateau dispose d’un bouton dédié pour basculer entre le « mode pion » (pour se déplacer) et le « mode mur » (pour placer un obstacle).  
@@ -25,10 +25,10 @@ Le joueur interagit directement avec le plateau, qui lui fournit un retour visue
         * Deux murs physiques monteront alors de l’intérieur du plateau pour créer la barrière.  
     * **Placement des Murs (IA) :**  
         * Les murs sont intégrés au plateau, et non des pièces amovibles.  
-        * Cette intégration permet à l’IA de placer ses murs de manière fluide et stratégique, sans intervention manuelle du joueur.  
-  
-## ****3. Conception Mécanique Détaillée (Système des Murs)****  
-##   
+        * Cette intégration permet à l'IA de placer ses murs de manière fluide et stratégique, sans intervention manuelle du joueur.
+
+## ****3. Conception Mécanique Détaillée (Système des Murs)****
+
 Le mécanisme des murs est géré par un plateau 3D conçu en plusieurs niveaux.  
   
 * **Simplification des Murs :** Pour réduire la complexité, les murs physiques ne font qu’une case de long, au lieu des deux cases traditionnelles. Pour simuler un mur classique, le mécanisme soulèvera *deux* de ces murs d’une case.  
@@ -60,28 +60,7 @@ Le mécanisme des murs est géré par un plateau 3D conçu en plusieurs niveaux.
   
 * **Contrôleur Principal :** Le jeu et le plateau sont contrôlés par une carte Raspberry Pi 5.  
 * **Rôle du Raspberry Pi 5 :** Cette carte gérera tous les mécanismes complexes ainsi que la partie Intelligence Artificielle (IA).  
-* **Flexibilité :** D’autres contrôleurs pourront être définis ultérieurement pour adapter le jeu à différents contextes d’utilisation.  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+* **Flexibilité :** D'autres contrôleurs pourront être définis ultérieurement pour adapter le jeu à différents contextes d'utilisation.
   
   
   

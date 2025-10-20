@@ -1,0 +1,120 @@
+name: ✨ Demande de Fonctionnalité
+description: Proposer une nouvelle fonctionnalité pour le projet
+title: "[FEATURE] "
+labels: ["enhancement", "à trier"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de proposer une nouvelle fonctionnalité ! 
+        Vos idées sont précieuses pour améliorer le projet.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème ou besoin
+      description: Quel problème cette fonctionnalité résout-elle ?
+      placeholder: |
+        Je suis frustré quand...
+        Il serait utile de pouvoir...
+        Actuellement, il n'est pas possible de...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+      description: Comment imaginez-vous cette fonctionnalité ?
+      placeholder: |
+        Décrivez en détail comment la fonctionnalité devrait fonctionner.
+        Incluez des exemples d'utilisation si possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considérées
+      description: Avez-vous envisagé d'autres solutions ?
+      placeholder: |
+        J'ai aussi pensé à...
+        Une autre approche serait...
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Catégorie
+      description: À quelle partie du projet cette fonctionnalité se rapporte-t-elle ?
+      options:
+        - Moteur de jeu (core.py)
+        - Intelligence Artificielle (ai.py)
+        - Interface console
+        - Interface graphique
+        - Interface matérielle (Raspberry Pi)
+        - Tests
+        - Documentation
+        - Autre
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité suggérée
+      description: Quelle importance accordez-vous à cette fonctionnalité ?
+      options:
+        - Basse (nice to have)
+        - Moyenne (utile)
+        - Haute (très important)
+        - Critique (essentiel)
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Idées d'implémentation
+      description: Si vous avez des idées techniques, partagez-les
+      placeholder: |
+        Cette fonctionnalité pourrait être implémentée en...
+        Il faudrait modifier les fichiers suivants...
+        Voici un pseudo-code...
+      render: python
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Exemples d'utilisation
+      description: Montrez comment cette fonctionnalité serait utilisée
+      placeholder: |
+        ```python
+        # Exemple de code utilisant la nouvelle fonctionnalité
+        game = QuoridorGame()
+        game.nouvelle_fonctionnalite()
+        ```
+      render: python
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Contexte supplémentaire
+      description: Autres informations utiles
+      placeholder: |
+        - Captures d'écran ou maquettes
+        - Liens vers des implémentations similaires
+        - Cas d'usage spécifiques
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Seriez-vous prêt à contribuer ?
+      options:
+        - label: Je serais prêt(e) à implémenter cette fonctionnalité
+          required: false
+        - label: Je peux aider à tester cette fonctionnalité
+          required: false
+        - label: Je peux aider à documenter cette fonctionnalité
+          required: false
+

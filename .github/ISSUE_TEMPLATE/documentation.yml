@@ -1,0 +1,102 @@
+name: 📝 Amélioration de Documentation
+description: Suggérer des améliorations pour la documentation
+title: "[DOCS] "
+labels: ["documentation", "à trier"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de contribuer à améliorer la documentation ! 
+        Une bonne documentation est essentielle pour un projet réussi.
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Type de documentation
+      description: Quel type de documentation souhaitez-vous améliorer ?
+      options:
+        - README.md
+        - CONTRIBUTING.md
+        - Documentation des tests (README_TESTS.md)
+        - Docstrings dans le code
+        - Commentaires de code
+        - Exemples d'utilisation
+        - Guide d'installation
+        - FAQ / Troubleshooting
+        - Autre
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: Problème actuel
+      description: Qu'est-ce qui manque ou pose problème dans la documentation actuelle ?
+      placeholder: |
+        La section X n'explique pas...
+        Il manque des exemples pour...
+        La documentation de Y est confuse car...
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Amélioration suggérée
+      description: Comment améliorer cette partie de la documentation ?
+      placeholder: |
+        Il faudrait ajouter...
+        Cette section devrait expliquer...
+        Un exemple montrant... serait utile
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-content
+    attributes:
+      label: Contenu proposé
+      description: Si vous avez déjà rédigé du contenu, partagez-le ici
+      placeholder: |
+        ## Nouveau titre
+
+        Voici le contenu proposé...
+
+        ```python
+        # Exemple de code
+        ```
+      render: markdown
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Public cible
+      description: Pour qui cette amélioration est-elle importante ?
+      options:
+        - Débutants en Python
+        - Utilisateurs du moteur de jeu
+        - Développeurs contributeurs
+        - Utilisateurs de l'interface matérielle
+        - Tous les utilisateurs
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Contexte supplémentaire
+      description: Autres informations utiles
+      placeholder: |
+        - Liens vers des exemples de bonne documentation
+        - Captures d'écran
+        - Raisons pour lesquelles c'est important
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: Je peux rédiger cette amélioration moi-même
+          required: false
+        - label: J'ai vérifié que cette amélioration n'existe pas déjà
+          required: true
+

@@ -1,0 +1,114 @@
+name: 🐛 Rapport de Bug
+description: Signaler un bug ou un comportement inattendu
+title: "[BUG] "
+labels: ["bug", "à trier"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de signaler ce bug ! 
+        Plus votre rapport sera détaillé, plus il sera facile de le résoudre.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du bug
+      description: Une description claire et concise du bug
+      placeholder: Qu'est-ce qui ne fonctionne pas comme prévu ?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      description: Comment reproduire le problème ?
+      placeholder: |
+        1. Lancez le jeu avec '...'
+        2. Cliquez sur '...'
+        3. Entrez la commande '...'
+        4. Observez l'erreur
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+      description: Que devrait-il se passer ?
+      placeholder: Décrivez le comportement correct attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+      description: Que se passe-t-il réellement ?
+      placeholder: Décrivez ce qui se passe actuellement
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Messages d'erreur
+      description: Copiez-collez les messages d'erreur complets
+      render: shell
+      placeholder: |
+        Traceback (most recent call last):
+          File "main.py", line 42, in <module>
+            ...
+
+  - type: dropdown
+    id: python-version
+    attributes:
+      label: Version de Python
+      description: Quelle version de Python utilisez-vous ?
+      options:
+        - Python 3.12
+        - Python 3.11
+        - Python 3.10
+        - Autre (précisez dans les informations supplémentaires)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Système d'exploitation
+      description: Sur quel système rencontrez-vous le problème ?
+      options:
+        - Windows
+        - macOS
+        - Linux (Ubuntu/Debian)
+        - Linux (Fedora/RHEL)
+        - Raspberry Pi OS
+        - Autre (précisez dans les informations supplémentaires)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Informations supplémentaires
+      description: Tout autre contexte utile pour résoudre le bug
+      placeholder: |
+        - Capture d'écran
+        - Configuration spécifique
+        - Tentatives de résolution
+        - Autres observations
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Vérifiez les points suivants avant de soumettre
+      options:
+        - label: J'ai vérifié que ce bug n'est pas déjà signalé dans les issues existantes
+          required: true
+        - label: J'utilise la dernière version du projet
+          required: false
+        - label: J'ai testé avec Python 3.10 ou supérieur
+          required: false
+
