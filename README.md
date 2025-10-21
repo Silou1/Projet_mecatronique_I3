@@ -255,6 +255,7 @@ print(f"Tour actuel : Joueur {state.current_player}")
     ├── test_moves.py          # Tests des déplacements
     ├── test_walls.py          # Tests des murs
     ├── test_game.py           # Tests de partie complète
+    ├── test_ai.py             # Tests de l'Intelligence Artificielle
     └── README_TESTS.md        # Documentation des tests
 ```
 
@@ -287,14 +288,22 @@ pytest --cov=quoridor_engine --cov-report=html
 pytest tests/test_moves.py
 
 # Tests de l'IA uniquement
-pytest tests/test_game.py -k "test_ai"
+pytest tests/test_ai.py
+
+# Tests du moteur de jeu uniquement
+pytest tests/test_core.py tests/test_moves.py tests/test_walls.py
 ```
 
 ### Statistiques de tests
 
-- **65 tests** au total
-- **75%** de couverture du moteur de jeu principal (core.py)
-- **Tous les cas limites** couverts
+- **90 tests** au total (100% de réussite)
+- **82%** de couverture globale
+  - `core.py` : 75% (moteur de jeu)
+  - `ai.py` : 92% (intelligence artificielle)
+- **Tests complets** : règles, déplacements, murs, victoire, IA, performance
+- **Temps d'exécution** : ~3,5 minutes
+
+📖 Voir [tests/README_TESTS.md](tests/README_TESTS.md) pour plus de détails
 
 ---
 

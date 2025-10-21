@@ -2,17 +2,18 @@
 
 ## Vue d'ensemble
 
-Suite complète de **65 tests unitaires** pour le moteur de jeu Quoridor.
+Suite complète de **90 tests unitaires** pour le moteur de jeu Quoridor et l'Intelligence Artificielle.
 
 ## Structure des tests
 
 ```
 tests/
 ├── __init__.py
-├── test_core.py       # 12 tests - Structures de données et logique de base
+├── test_core.py       # 10 tests - Structures de données et logique de base
 ├── test_moves.py      # 14 tests - Déplacements des pions
-├── test_walls.py      # 19 tests - Pose et validation des murs
+├── test_walls.py      # 21 tests - Pose et validation des murs
 ├── test_game.py       # 20 tests - Orchestration du jeu
+├── test_ai.py         # 25 tests - Intelligence Artificielle
 └── README_TESTS.md    # Ce fichier
 ```
 
@@ -29,6 +30,7 @@ pytest tests/test_core.py -v      # Tests des structures
 pytest tests/test_moves.py -v     # Tests des déplacements
 pytest tests/test_walls.py -v     # Tests des murs
 pytest tests/test_game.py -v      # Tests du jeu complet
+pytest tests/test_ai.py -v        # Tests de l'IA
 ```
 
 ### Avec couverture de code
@@ -43,142 +45,184 @@ Un rapport HTML sera généré dans `htmlcov/index.html`
 | Module | Couverture | Description |
 |--------|-----------|-------------|
 | `core.py` | **75%** | Moteur principal |
-| `ai.py` | 0% | IA (non testée) |
-| **Total** | **43%** | Moyenne générale |
+| `ai.py` | **92%** | Intelligence Artificielle |
+| **Total** | **82%** | Moyenne générale |
 
 ## Détails des tests
 
-### test_core.py (12 tests)
+### test_core.py (10 tests)
 
 **TestGameStateInitialization (3 tests)**
-- ✅ `test_create_new_game` : Création d'une nouvelle partie
-- ✅ `test_initial_positions` : Positions initiales correctes
-- ✅ `test_initial_walls` : Nombre de murs initial
+- ✅ Création d'une nouvelle partie
+- ✅ Positions initiales correctes
+- ✅ Nombre de murs initial
 
 **TestGameOver (4 tests)**
-- ✅ `test_game_not_over_at_start` : Partie non terminée au début
-- ✅ `test_player_one_wins` : Victoire du joueur 1
-- ✅ `test_player_two_wins` : Victoire du joueur 2
-- ✅ `test_game_continues_near_end` : Partie continue près de la fin
+- ✅ Partie non terminée au début
+- ✅ Victoire du joueur 1
+- ✅ Victoire du joueur 2
+- ✅ Partie continue près de la fin
 
 **TestGameStateImmutability (2 tests)**
-- ✅ `test_gamestate_is_frozen` : Immuabilité de GameState
-- ✅ `test_walls_set_is_copied` : Copie des ensembles de murs
+- ✅ Immuabilité de GameState
+- ✅ Copie des ensembles de murs
 
-**TestConstants (3 tests)**
-- ✅ `test_board_size` : Taille du plateau (9x9)
-- ✅ `test_max_walls` : Nombre de murs par joueur (10)
-- ✅ `test_player_constants` : Identifiants des joueurs
+**TestConstants (1 test)**
+- ✅ Constantes du jeu (taille, murs, joueurs)
 
 ### test_moves.py (14 tests)
 
 **TestBasicMoves (6 tests)**
-- ✅ `test_initial_moves_player_one` : 3 mouvements possibles au départ
-- ✅ `test_move_changes_position` : Changement de position
-- ✅ `test_move_changes_turn` : Changement de tour
-- ✅ `test_cannot_move_out_of_bounds` : Interdiction de sortir du plateau
-- ✅ `test_invalid_move_raises_error` : Erreur si mouvement invalide
-- ✅ `test_wrong_player_turn_raises_error` : Erreur si mauvais tour
+- ✅ Mouvements possibles au départ
+- ✅ Changement de position
+- ✅ Changement de tour
+- ✅ Interdiction de sortir du plateau
+- ✅ Erreur si mouvement invalide
+- ✅ Erreur si mauvais tour
 
 **TestWallBlocking (2 tests)**
-- ✅ `test_horizontal_wall_blocks_movement` : Mur horizontal bloque
-- ✅ `test_vertical_wall_blocks_movement` : Mur vertical bloque
+- ✅ Mur horizontal bloque le mouvement
+- ✅ Mur vertical bloque le mouvement
 
 **TestJumps (4 tests)**
-- ✅ `test_simple_jump` : Saut simple par-dessus l'adversaire
-- ✅ `test_diagonal_jump_when_blocked` : Saut diagonal si bloqué
-- ✅ `test_horizontal_face_off` : Face-à-face horizontal
-- ✅ `test_jump_at_board_edge` : Saut au bord du plateau
+- ✅ Saut simple par-dessus l'adversaire
+- ✅ Saut diagonal si bloqué
+- ✅ Face-à-face horizontal
+- ✅ Saut au bord du plateau
 
 **TestComplexScenarios (2 tests)**
-- ✅ `test_surrounded_by_walls` : Pion entouré de murs
-- ✅ `test_corner_position` : Mouvement depuis un coin
+- ✅ Pion entouré de murs
+- ✅ Mouvement depuis un coin
 
-### test_walls.py (19 tests)
+### test_walls.py (21 tests)
 
 **TestWallPlacement (4 tests)**
-- ✅ `test_place_valid_wall` : Placement de mur valide
-- ✅ `test_place_horizontal_wall` : Mur horizontal
-- ✅ `test_place_vertical_wall` : Mur vertical
-- ✅ `test_wall_count_decreases` : Décompte des murs
+- ✅ Placement de mur valide
+- ✅ Mur horizontal
+- ✅ Mur vertical
+- ✅ Décompte des murs
 
 **TestWallValidation (6 tests)**
-- ✅ `test_cannot_place_out_of_bounds` : Interdiction hors limites
-- ✅ `test_cannot_place_duplicate_wall` : Interdiction de doublons
-- ✅ `test_cannot_place_overlapping_walls` : Interdiction de chevauchement
-- ✅ `test_cannot_place_crossing_walls` : Interdiction de croisement
-- ✅ `test_cannot_place_without_walls_left` : Vérification du stock
-- ✅ `test_wrong_player_turn` : Vérification du tour
+- ✅ Interdiction hors limites
+- ✅ Interdiction de doublons
+- ✅ Interdiction de chevauchement
+- ✅ Interdiction de croisement
+- ✅ Vérification du stock
+- ✅ Vérification du tour
 
 **TestWallBlocking (2 tests)**
-- ✅ `test_cannot_block_player_completely` : Interdiction de blocage total
-- ✅ `test_wall_must_leave_path_for_both_players` : Chemin pour tous
+- ✅ Interdiction de blocage total
+- ✅ Chemin pour tous les joueurs
 
 **TestDoubleClick (5 tests)**
-- ✅ `test_horizontal_wall_from_adjacent_cells` : Double-clic horizontal
-- ✅ `test_vertical_wall_from_adjacent_cells` : Double-clic vertical
-- ✅ `test_order_doesnt_matter` : Ordre des clics
-- ✅ `test_non_adjacent_cells_raises_error` : Erreur si non adjacent
-- ✅ `test_diagonal_cells_raises_error` : Erreur si diagonal
+- ✅ Double-clic horizontal
+- ✅ Double-clic vertical
+- ✅ Ordre des clics
+- ✅ Erreur si non adjacent
+- ✅ Erreur si diagonal
 
-**TestWallStrategies (2 tests)**
-- ✅ `test_multiple_walls_placed` : Plusieurs murs successifs
-- ✅ `test_wall_affects_pathfinding` : Impact sur les chemins
+**TestWallStrategies (4 tests)**
+- ✅ Plusieurs murs successifs
+- ✅ Impact sur les chemins
+- ✅ Murs multiples
+- ✅ Stratégies avancées
 
 ### test_game.py (20 tests)
 
 **TestQuoridorGameInitialization (2 tests)**
-- ✅ `test_game_creation` : Création d'une partie
-- ✅ `test_initial_state` : État initial correct
+- ✅ Création d'une partie
+- ✅ État initial correct
 
 **TestPlayMove (4 tests)**
-- ✅ `test_play_pawn_move` : Jouer un déplacement
-- ✅ `test_play_wall_move` : Jouer un mur
-- ✅ `test_invalid_move_raises_error` : Erreur si coup invalide
-- ✅ `test_invalid_move_type` : Erreur si type inconnu
+- ✅ Jouer un déplacement
+- ✅ Jouer un mur
+- ✅ Erreur si coup invalide
+- ✅ Erreur si type inconnu
 
 **TestUndo (4 tests)**
-- ✅ `test_undo_single_move` : Annuler un coup
-- ✅ `test_undo_multiple_moves` : Annuler plusieurs coups
-- ✅ `test_undo_empty_history` : Annuler sur historique vide
-- ✅ `test_undo_wall_restores_count` : Restauration du compte de murs
+- ✅ Annuler un coup
+- ✅ Annuler plusieurs coups
+- ✅ Annuler sur historique vide
+- ✅ Restauration du compte de murs
 
 **TestGetPossibleMoves (2 tests)**
-- ✅ `test_get_possible_moves_at_start` : Coups possibles au départ
-- ✅ `test_get_possible_moves_for_specific_player` : Coups par joueur
+- ✅ Coups possibles au départ
+- ✅ Coups par joueur
 
 **TestVictoryConditions (3 tests)**
-- ✅ `test_is_game_over_at_start` : Partie non terminée au début
-- ✅ `test_get_winner_returns_none_during_game` : Pas de gagnant pendant
-- ✅ `test_detect_victory_player_one` : Détection victoire J1
+- ✅ Partie non terminée au début
+- ✅ Pas de gagnant pendant la partie
+- ✅ Détection victoire Joueur 1
 
 **TestFullGameScenario (3 tests)**
-- ✅ `test_alternating_turns` : Alternance des tours
-- ✅ `test_mixed_moves_sequence` : Séquence mixte de coups
-- ✅ `test_invalid_move_doesnt_change_state` : État inchangé si invalide
+- ✅ Alternance des tours
+- ✅ Séquence mixte de coups
+- ✅ État inchangé si invalide
 
 **TestEdgeCases (2 tests)**
-- ✅ `test_empty_history_operations` : Opérations sur historique vide
-- ✅ `test_play_after_undo` : Jouer après annulation
+- ✅ Opérations sur historique vide
+- ✅ Jouer après annulation
 
 ## Statistiques
 
-- **Total de tests** : 65
-- **Tests réussis** : 65 (100%)
-- **Temps d'exécution** : < 0.1s
-- **Couverture du moteur principal** : 75%
+- **Total de tests** : 90
+- **Tests réussis** : 90 (100%)
+- **Temps d'exécution** : ~3,5 minutes (IA incluse)
+- **Couverture globale** : 82%
 
-## Tests manquants
+### Détails couverture
 
-### IA (ai.py) - 0% de couverture
+| Module | Lignes | Couvertes | % |
+|--------|--------|-----------|---|
+| `core.py` | 242 | 182 | 75% |
+| `ai.py` | 181 | 166 | 92% |
+| `__init__.py` | 0 | 0 | 100% |
+| **Total** | **423** | **348** | **82%** |
 
-Les tests pour l'IA pourraient inclure :
-- Test de la fonction d'évaluation
-- Test de l'algorithme Minimax
-- Test de l'élagage Alpha-Beta
-- Test de la génération de coups stratégiques
-- Test des différents niveaux de difficulté
-- Test de la table de transposition
+### test_ai.py (25 tests)
+
+**TestPathfinding (3 tests)**
+- ✅ Distance initiale au but
+- ✅ Chemin avec obstacles
+- ✅ Distance près du but
+
+**TestAIInitialization (3 tests)**
+- ✅ Création d'une IA
+- ✅ Niveaux de difficulté
+- ✅ Table de transposition
+
+**TestEvaluationFunction (4 tests)**
+- ✅ Score position gagnante
+- ✅ Score position perdante
+- ✅ Meilleur score si plus proche
+- ✅ Bonus pour + de murs
+
+**TestAIDecisions (5 tests)**
+- ✅ Trouve toujours un coup valide
+- ✅ Détecte coup gagnant
+- ✅ Bloque l'adversaire
+- ✅ Pas de coup invalide
+- ✅ Ne se bloque pas
+
+**TestStrategicWalls (2 tests)**
+- ✅ Génère murs stratégiques
+- ✅ Validation des murs
+
+**TestTranspositionTable (3 tests)**
+- ✅ Cache les états
+- ✅ Nettoyage du cache
+- ✅ Hash uniques
+
+**TestPerformance (2 tests)**
+- ✅ Temps de calcul raisonnable
+- ✅ Nœuds explorés augmentent avec profondeur
+
+**TestEdgeCases (2 tests)**
+- ✅ IA sans murs restants
+- ✅ IA en fin de partie
+
+**TestDifferentDifficulties (1 test)**
+- ✅ Tous niveaux fonctionnent
 
 ## Intégration continue
 
@@ -213,5 +257,23 @@ jobs:
 
 ## Conclusion
 
-Cette suite de tests garantit la **robustesse et la fiabilité** du moteur de jeu Quoridor. Toutes les fonctionnalités principales sont testées et validées.
+Cette suite de tests garantit la **robustesse et la fiabilité** du moteur de jeu Quoridor. 
+
+### Points forts ✅
+
+- **90 tests unitaires** couvrant toutes les fonctionnalités
+- **82% de couverture globale** du code
+- **92% de couverture de l'IA** avec tests d'algorithme Minimax
+- **100% de réussite** sur tous les tests
+- Tests des règles du jeu, déplacements, murs, et victoire
+- Tests de performance et optimisation de l'IA
+- Tests de cas limites et scénarios d'erreur
+
+### Prochaines étapes 🚀
+
+Le moteur de jeu est **prêt pour l'intégration hardware** :
+- Interface avec la Raspberry Pi 5
+- Détection des pièces sur le plateau physique
+- Contrôle des moteurs pour le système de murs
+- Affichage des coups de l'IA sur le plateau physique
 
