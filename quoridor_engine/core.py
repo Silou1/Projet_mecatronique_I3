@@ -27,8 +27,8 @@ CONTRAINTE IMPORTANTE :
 Un mur ne peut jamais bloquer complètement le chemin d'un joueur vers son objectif.
 """
 
-from dataclasses import dataclass, replace
-from typing import Set, Dict, Tuple, Literal, List, Callable, Any
+from dataclasses import dataclass, replace, field
+from typing import FrozenSet, Dict, Tuple, Literal, List, Callable, Any
 from collections import deque
 
 # =============================================================================
@@ -101,9 +101,9 @@ class GameState:
         Position de chaque joueur sur le plateau.
         Exemple : {'j1': (8, 4), 'j2': (0, 4)}
         
-    walls : Set[Wall]
-        Ensemble des murs posés sur le plateau.
-        Utilise un Set pour éviter les doublons et permettre une recherche rapide O(1).
+    walls : FrozenSet[Wall]
+        Ensemble immuable des murs posés sur le plateau.
+        Utilise un FrozenSet pour être hashable et permettre une recherche rapide O(1).
         
     player_walls : Dict[str, int]
         Nombre de murs restants pour chaque joueur.
@@ -111,11 +111,35 @@ class GameState:
         
     current_player : str
         Le joueur dont c'est le tour ('j1' ou 'j2').
+        
+    OPTIMISATION :
+    --------------
+    - walls est un FrozenSet (immuable) pour permettre le hashing rapide
+    - __hash__ utilise un tuple pré-calculé pour la table de transposition de l'IA
     """
     player_positions: Dict[str, Coord]
-    walls: Set[Wall]
+    walls: FrozenSet[Wall]
     player_walls: Dict[str, int]
     current_player: str
+
+    def __hash__(self) -> int:
+        """
+        Calcul optimisé du hash pour la table de transposition.
+        
+        Le hash est calculé à partir de :
+        - Positions des deux joueurs (tuple de tuples)
+        - Ensemble des murs (frozenset, déjà hashable)
+        - Joueur courant
+        
+        Returns:
+            Entier unique identifiant cet état
+        """
+        # Créer un tuple des positions (plus rapide que frozenset(dict.items()))
+        pos_tuple = (
+            self.player_positions[PLAYER_ONE],
+            self.player_positions[PLAYER_TWO]
+        )
+        return hash((pos_tuple, self.walls, self.current_player))
 
     def is_game_over(self) -> Tuple[bool, str | None]:
         """
@@ -170,7 +194,7 @@ def create_new_game() -> GameState:
             PLAYER_ONE: (BOARD_SIZE - 1, BOARD_SIZE // 2),  # Position initiale j1 : (8, 4) en bas
             PLAYER_TWO: (0, BOARD_SIZE // 2)                # Position initiale j2 : (0, 4) en haut
         },
-        walls=set(),  # Aucun mur au début
+        walls=frozenset(),  # Aucun mur au début (frozenset pour être hashable)
         player_walls={
             PLAYER_ONE: MAX_WALLS_PER_PLAYER,  # 10 murs pour j1
             PLAYER_TWO: MAX_WALLS_PER_PLAYER   # 10 murs pour j2
@@ -613,8 +637,8 @@ def place_wall(state: GameState, player: str, wall: Wall) -> GameState:
     # Vérification 4 : Le mur ne bloque-t-il pas complètement un joueur ?
     # ═══════════════════════════════════════════════════════════════════════
     # On crée un état TEMPORAIRE avec le mur pour tester
-    temp_walls = state.walls.copy()
-    temp_walls.add(wall)
+    # Utilisation de l'opérateur | pour créer un nouveau frozenset avec le mur ajouté
+    temp_walls = state.walls | {wall}
     temp_state = replace(state, walls=temp_walls)
     
     # Définir les objectifs de chaque joueur
@@ -991,7 +1015,7 @@ if __name__ == '__main__':
     # Test 4: Vérifier le gagnant
     victory_state = GameState(
         player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
-        walls=set(),
+        walls=frozenset(),
         player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
         current_player=PLAYER_ONE
     )

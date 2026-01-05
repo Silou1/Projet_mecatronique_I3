@@ -74,7 +74,7 @@ class TestWallBlocking:
         """Un mur horizontal bloque le passage vertical."""
         game = GameState(
             player_positions={PLAYER_ONE: (8, 4), PLAYER_TWO: (0, 4)},
-            walls={('h', 7, 4, 2)},  # Mur horizontal au-dessus de J1
+            walls=frozenset({('h', 7, 4, 2)}),  # Mur horizontal au-dessus de J1
             player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -89,7 +89,7 @@ class TestWallBlocking:
         """Un mur vertical bloque le passage horizontal."""
         game = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (0, 4)},
-            walls={('v', 4, 4, 2)},  # Mur vertical à droite de J1
+            walls=frozenset({('v', 4, 4, 2)}),  # Mur vertical à droite de J1
             player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -107,7 +107,7 @@ class TestJumps:
         """Saut simple par-dessus l'adversaire."""
         game = GameState(
             player_positions={PLAYER_ONE: (3, 4), PLAYER_TWO: (4, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -121,7 +121,7 @@ class TestJumps:
         """Saut diagonal si le saut simple est bloqué."""
         game = GameState(
             player_positions={PLAYER_ONE: (3, 4), PLAYER_TWO: (4, 4)},
-            walls={('h', 4, 4, 2)},  # Mur derrière J2
+            walls=frozenset({('h', 4, 4, 2)}),  # Mur derrière J2
             player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -136,7 +136,7 @@ class TestJumps:
         """Face-à-face horizontal."""
         game = GameState(
             player_positions={PLAYER_ONE: (4, 3), PLAYER_TWO: (4, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -149,7 +149,7 @@ class TestJumps:
         """Saut diagonal quand l'adversaire est au bord."""
         game = GameState(
             player_positions={PLAYER_ONE: (7, 4), PLAYER_TWO: (8, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -168,10 +168,10 @@ class TestComplexScenarios:
         """Pion avec des murs autour (mais pas complètement bloqué)."""
         game = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},
-            walls={
+            walls=frozenset({
                 ('h', 3, 4, 2),  # Mur horizontal au-dessus
                 ('h', 4, 4, 2),  # Mur horizontal en dessous
-            },
+            }),
             player_walls={PLAYER_ONE: 8, PLAYER_TWO: 8},
             current_player=PLAYER_ONE
         )
@@ -189,7 +189,7 @@ class TestComplexScenarios:
         """Mouvements depuis un coin."""
         game = GameState(
             player_positions={PLAYER_ONE: (0, 0), PLAYER_TWO: (8, 8)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )

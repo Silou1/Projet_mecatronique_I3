@@ -111,7 +111,7 @@ class TestWallValidation:
         """Impossible de placer un mur si on n'en a plus."""
         game = GameState(
             player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 0, PLAYER_TWO: 10},  # Plus de murs pour J1
             current_player=PLAYER_ONE
         )
@@ -136,7 +136,7 @@ class TestWallBlocking:
         # J1 est en (8, 0), son but est la ligne 0
         game = GameState(
             player_positions={PLAYER_ONE: (8, 0), PLAYER_TWO: (0, 4)},
-            walls={('v', 7, 1, 2)},  # Mur vertical à droite
+            walls=frozenset({('v', 7, 1, 2)}),  # Mur vertical à droite
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 9},
             current_player=PLAYER_TWO
         )
@@ -151,7 +151,7 @@ class TestWallBlocking:
         """Un mur doit laisser un chemin pour les deux joueurs."""
         game = GameState(
             player_positions={PLAYER_ONE: (7, 1), PLAYER_TWO: (1, 7)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )

@@ -63,7 +63,7 @@ class TestGameOver:
         """Joueur 1 gagne en atteignant la ligne 0."""
         game = GameState(
             player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -77,7 +77,7 @@ class TestGameOver:
         """Joueur 2 gagne en atteignant la ligne 8."""
         game = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},  # J1 pas à la fin
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_TWO
         )
@@ -91,7 +91,7 @@ class TestGameOver:
         """La partie continue même si un joueur est proche de la fin."""
         game = GameState(
             player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
             current_player=PLAYER_ONE
         )
@@ -112,17 +112,19 @@ class TestGameStateImmutability:
         with pytest.raises(Exception):  # dataclass frozen raises FrozenInstanceError
             game.current_player = PLAYER_TWO
     
-    def test_walls_set_is_copied(self):
-        """Les murs doivent être copiés, pas partagés."""
+    def test_walls_is_immutable(self):
+        """Les murs doivent être dans un frozenset immuable."""
         game = create_new_game()
-        walls_before = game.walls.copy()
         
-        # Tenter de modifier l'ensemble (ne devrait pas affecter l'état)
-        new_wall = ('h', 1, 1, 2)
-        walls_before.add(new_wall)
+        # Vérifier que walls est un frozenset (immuable)
+        assert isinstance(game.walls, frozenset)
         
-        # L'état du jeu ne doit pas avoir changé
-        assert new_wall not in game.walls
+        # Vérifier qu'on ne peut pas modifier le frozenset
+        # (frozenset n'a pas de méthode add, contrairement à set)
+        assert not hasattr(game.walls, 'add') or not callable(getattr(game.walls, 'add', None))
+        
+        # Vérifier que l'état est hashable grâce à frozenset
+        assert hash(game) is not None
 
 
 class TestConstants:

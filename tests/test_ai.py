@@ -49,7 +49,7 @@ class TestPathfinding:
         """Distance correcte près du but."""
         game = GameState(
             player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -97,7 +97,7 @@ class TestEvaluationFunction:
         # J1 a gagné (atteint ligne 0)
         winning_state = GameState(
             player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -112,7 +112,7 @@ class TestEvaluationFunction:
         # J2 a gagné (atteint ligne 8)
         losing_state = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_TWO
         )
@@ -127,7 +127,7 @@ class TestEvaluationFunction:
         # J1 à 2 cases du but (ligne 0)
         close_state = GameState(
             player_positions={PLAYER_ONE: (2, 4), PLAYER_TWO: (6, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -135,7 +135,7 @@ class TestEvaluationFunction:
         # J1 à 4 cases du but (ligne 0)
         far_state = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (6, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
@@ -151,14 +151,14 @@ class TestEvaluationFunction:
         
         state_more_walls = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (4, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 8, PLAYER_TWO: 5},  # J1 a 3 murs de plus
             current_player=PLAYER_ONE
         )
         
         state_equal_walls = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (4, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 7, PLAYER_TWO: 7},
             current_player=PLAYER_ONE
         )
@@ -188,7 +188,7 @@ class TestAIDecisions:
         # J2 est à une case de la victoire (ligne 8)
         game = GameState(
             player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (7, 4)},  # J1 loin
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
             current_player=PLAYER_TWO
         )
@@ -205,7 +205,7 @@ class TestAIDecisions:
         # J1 est à une case de la victoire (ligne 0), c'est le tour de J2
         game = GameState(
             player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
             current_player=PLAYER_TWO
         )
@@ -373,7 +373,7 @@ class TestEdgeCases:
         """L'IA fonctionne sans murs restants."""
         game = GameState(
             player_positions={PLAYER_ONE: (2, 4), PLAYER_TWO: (6, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 0},  # J2 n'a plus de murs
             current_player=PLAYER_TWO
         )
@@ -388,7 +388,7 @@ class TestEdgeCases:
         """L'IA fonctionne en fin de partie."""
         game = GameState(
             player_positions={PLAYER_ONE: (6, 4), PLAYER_TWO: (2, 4)},
-            walls=set(),
+            walls=frozenset(),
             player_walls={PLAYER_ONE: 2, PLAYER_TWO: 2},
             current_player=PLAYER_ONE
         )

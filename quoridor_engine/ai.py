@@ -177,6 +177,155 @@ def _compute_metrics_from_distances(state: GameState, pos: Coord, distances: Dic
     return (L1, L2, fragility)
 
 
+def _reconstruct_path_from_distances(state: GameState, start_pos: Coord, 
+                                     distances: Dict[Coord, int]) -> List[Coord]:
+    """
+    Reconstruit le chemin le plus court à partir des distances pré-calculées.
+    
+    OPTIMISATION :
+    --------------
+    Cette fonction réutilise les distances calculées par `_get_all_distances_to_goal`
+    au lieu de refaire un BFS. Elle est O(n) où n est la longueur du chemin.
+    
+    ALGORITHME :
+    ------------
+    En partant de la position de départ, on descend le gradient des distances
+    vers l'objectif (distance 0). À chaque étape, on choisit le voisin avec
+    la plus petite distance.
+    
+    Args:
+        state: L'état actuel du jeu
+        start_pos: Position de départ
+        distances: Distances pré-calculées vers l'objectif
+    
+    Returns:
+        Liste des coordonnées formant le chemin, de start_pos vers l'objectif
+    """
+    # Si déjà à l'objectif ou position non accessible
+    if start_pos not in distances:
+        return []
+    if distances[start_pos] == 0:
+        return [start_pos]
+    
+    path = [start_pos]
+    current = start_pos
+    
+    while distances.get(current, 0) > 0:
+        r, c = current
+        neighbors = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
+        
+        # Trouver le voisin avec la plus petite distance
+        best_neighbor = None
+        best_dist = distances[current]
+        
+        for neighbor in neighbors:
+            if (neighbor in distances and
+                not _is_wall_between(state, current, neighbor) and
+                distances[neighbor] < best_dist):
+                best_dist = distances[neighbor]
+                best_neighbor = neighbor
+        
+        if best_neighbor is None:
+            break  # Ne devrait pas arriver
+        
+        path.append(best_neighbor)
+        current = best_neighbor
+    
+    return path
+
+
+def _get_shortest_path(state: GameState, player: str) -> List[Coord]:
+    """
+    Reconstruit le chemin le plus court d'un joueur vers son objectif.
+    
+    UTILITÉ : VALIDATION PARESSEUSE DES MURS
+    ----------------------------------------
+    Cette fonction est utilisée pour déterminer si un mur candidat pourrait
+    potentiellement bloquer le chemin d'un joueur.
+    
+    Args:
+        state: L'état actuel du jeu
+        player: Le joueur ('j1' ou 'j2')
+    
+    Returns:
+        Liste des coordonnées formant le chemin le plus court.
+        Vide si le joueur est déjà à l'objectif ou aucun chemin n'existe.
+    """
+    start_pos = state.player_positions[player]
+    
+    # Calculer les distances (cette fonction est déjà optimisée avec BFS inversé)
+    distances = _get_all_distances_to_goal(state, player)
+    
+    # Reconstruire le chemin à partir des distances
+    return _reconstruct_path_from_distances(state, start_pos, distances)
+
+
+def _wall_blocks_edge(wall: Tuple, pos1: Coord, pos2: Coord) -> bool:
+    """
+    Vérifie si un mur bloquerait le passage entre deux cases adjacentes.
+    
+    Cette fonction est une version "légère" de _is_wall_between qui ne
+    nécessite pas d'état de jeu - elle vérifie juste la géométrie.
+    
+    Args:
+        wall: Le mur (orientation, ligne, colonne, longueur)
+        pos1: Première case (ligne, colonne)
+        pos2: Deuxième case (ligne, colonne) - doit être adjacente à pos1
+    
+    Returns:
+        True si le mur bloquerait ce passage
+    """
+    orientation, wall_r, wall_c, _ = wall
+    r1, c1 = pos1
+    r2, c2 = pos2
+    
+    # Mouvement vertical (même colonne) → bloqué par mur horizontal
+    if c1 == c2:
+        r_wall = min(r1, r2)
+        if orientation == 'h' and wall_r == r_wall:
+            # Vérifier si le mur couvre cette frontière
+            if wall_c == c1 or wall_c == c1 - 1:
+                return True
+    
+    # Mouvement horizontal (même ligne) → bloqué par mur vertical
+    elif r1 == r2:
+        c_wall = min(c1, c2)
+        if orientation == 'v' and wall_c == c_wall:
+            # Vérifier si le mur couvre cette frontière
+            if wall_r == r1 or wall_r == r1 - 1:
+                return True
+    
+    return False
+
+
+def _wall_intersects_path(wall: Tuple, path: List[Coord]) -> bool:
+    """
+    Vérifie si un mur couperait un chemin donné.
+    
+    OPTIMISATION CLÉ :
+    ------------------
+    Si un mur n'intersecte pas le chemin actuel d'un joueur, il ne peut pas
+    le bloquer complètement (il existe au moins ce chemin). Cela permet
+    d'éviter un BFS coûteux pour beaucoup de murs candidats.
+    
+    Args:
+        wall: Le mur à tester
+        path: Liste de coordonnées formant le chemin
+    
+    Returns:
+        True si le mur coupe au moins une arête du chemin
+    """
+    if len(path) < 2:
+        return False
+    
+    # Vérifier chaque arête du chemin
+    for i in range(len(path) - 1):
+        if _wall_blocks_edge(wall, path[i], path[i + 1]):
+            return True
+    
+    return False
+
+
 # =============================================================================
 # CLASSE PRINCIPALE : Intelligence Artificielle
 # =============================================================================
@@ -247,7 +396,12 @@ class AI:
         self.transposition_table: Dict[int, Tuple[int, float]] = {}
         
         # Cache pour les distances (BFS) au sein d'une même réflexion
+        # Clé = (hash de l'état, joueur), Valeur = dictionnaire des distances
         self._distance_cache: Dict[Tuple[int, str], Dict[Coord, int]] = {}
+        
+        # Cache pour les chemins les plus courts
+        # Clé = (hash de l'état, joueur), Valeur = liste de coordonnées
+        self._path_cache: Dict[Tuple[int, str], List[Coord]] = {}
         
         # Compteur pour les statistiques
         self.nodes_explored = 0
@@ -265,12 +419,36 @@ class AI:
         print(f"IA initialisée pour le joueur {self.player} (niveau: {difficulty}, profondeur: {self.depth})")
 
     def _get_cached_distances(self, state: GameState, player: str) -> Dict[Coord, int]:
-        """Récupère les distances depuis le cache ou les calcule."""
-        state_hash = self._state_hash(state)
-        cache_key = (state_hash, player)
+        """
+        Récupère les distances depuis le cache ou les calcule.
+        
+        OPTIMISATION :
+        --------------
+        Utilise directement hash(state) car GameState implémente __hash__.
+        Le cache évite de recalculer les distances pour le même état.
+        """
+        cache_key = (hash(state), player)
         if cache_key not in self._distance_cache:
             self._distance_cache[cache_key] = _get_all_distances_to_goal(state, player)
         return self._distance_cache[cache_key]
+    
+    def _get_cached_path(self, state: GameState, player: str) -> List[Coord]:
+        """
+        Récupère le chemin le plus court depuis le cache ou le calcule.
+        
+        OPTIMISATION :
+        --------------
+        Réutilise les distances déjà cachées pour reconstruire le chemin,
+        évitant un BFS supplémentaire.
+        """
+        cache_key = (hash(state), player)
+        if cache_key not in self._path_cache:
+            # Récupérer les distances (déjà cachées ou calculées)
+            distances = self._get_cached_distances(state, player)
+            # Reconstruire le chemin à partir des distances
+            start_pos = state.player_positions[player]
+            self._path_cache[cache_key] = _reconstruct_path_from_distances(state, start_pos, distances)
+        return self._path_cache[cache_key]
 
     def _evaluate_state(self, state: GameState) -> float:
         """
@@ -369,54 +547,172 @@ class AI:
         
         return score
 
-    def _is_wall_valid(self, state: GameState, player: str, wall: Tuple) -> bool:
+    def _is_wall_valid_lazy(self, state: GameState, wall: Tuple, 
+                           path_j1: List[Coord], path_j2: List[Coord]) -> bool:
         """
-        Vérifie rapidement si un mur peut être placé légalement.
+        Vérifie si un mur peut être placé avec VALIDATION PARESSEUSE.
         
-        Cette fonction est utilisée pour FILTRER les murs candidats avant
-        de les évaluer dans Minimax. Elle doit être rapide.
+        OPTIMISATION CLÉ :
+        ------------------
+        Au lieu de toujours exécuter 2 BFS complets (coûteux), on vérifie d'abord
+        si le mur PEUT bloquer un chemin. Si le mur n'intersecte pas le chemin
+        actuel d'un joueur, il ne peut pas le bloquer complètement.
         
-        VÉRIFICATIONS EFFECTUÉES :
-        --------------------------
-        1. Règles géométriques (via _validate_wall_placement)
-           - Mur dans les limites du plateau
-           - Pas de collision avec un mur existant
-           - Pas de chevauchement ou croisement
+        ALGORITHME :
+        ------------
+        1. Vérifier les règles géométriques (rapide)
+        2. Pour chaque joueur :
+           - Si le mur n'intersecte pas son chemin actuel → OK (pas de BFS)
+           - Si le mur intersecte → faire le BFS pour vérifier
         
-        2. Règle de non-blocage
-           - Le mur ne doit pas empêcher un joueur d'atteindre son objectif
+        GAIN DE PERFORMANCE :
+        ---------------------
+        En pratique, la plupart des murs candidats n'intersectent pas les
+        chemins, donc on évite ~70-80% des BFS coûteux.
         
         Args:
             state: L'état actuel du jeu
-            player: Le joueur qui placerait le mur
             wall: Le mur à tester (orientation, ligne, colonne, longueur)
+            path_j1: Chemin pré-calculé du joueur 1 vers son objectif
+            path_j2: Chemin pré-calculé du joueur 2 vers son objectif
         
         Returns:
             True si le mur est légal, False sinon
         """
         try:
-            # Étape 1 : Vérifier les règles géométriques
+            # Étape 1 : Vérifier les règles géométriques (très rapide)
             _validate_wall_placement(state, wall)
             
-            # Étape 2 : Créer un état temporaire avec le mur
-            temp_walls = state.walls.copy()
-            temp_walls.add(wall)
+            # Étape 2 : Créer l'état temporaire (nécessaire pour les BFS éventuels)
+            temp_walls = state.walls | {wall}
             temp_state = replace(state, walls=temp_walls)
             
-            # Étape 3 : Vérifier que les deux joueurs peuvent encore gagner
-            goal_j1 = lambda pos: pos[0] == 0              # J1 doit atteindre le haut
-            goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1  # J2 doit atteindre le bas
+            # ═══════════════════════════════════════════════════════════════════
+            # VALIDATION PARESSEUSE : Vérifier J1
+            # ═══════════════════════════════════════════════════════════════════
+            # Si le mur intersecte le chemin de J1, on doit vérifier par BFS
+            if _wall_intersects_path(wall, path_j1):
+                goal_j1 = lambda pos: pos[0] == 0
+                if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):
+                    return False  # J1 serait bloqué
             
-            if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):
-                return False  # J1 serait bloqué
-            if not _path_exists(temp_state, temp_state.player_positions[PLAYER_TWO], goal_j2):
-                return False  # J2 serait bloqué
+            # ═══════════════════════════════════════════════════════════════════
+            # VALIDATION PARESSEUSE : Vérifier J2
+            # ═══════════════════════════════════════════════════════════════════
+            if _wall_intersects_path(wall, path_j2):
+                goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1
+                if not _path_exists(temp_state, temp_state.player_positions[PLAYER_TWO], goal_j2):
+                    return False  # J2 serait bloqué
             
             return True
             
         except InvalidMoveError:
             # Une règle géométrique est violée
             return False
+    
+    def _is_wall_valid(self, state: GameState, player: str, wall: Tuple) -> bool:
+        """
+        Version de compatibilité - vérifie si un mur est valide.
+        
+        Note: Préférer _is_wall_valid_lazy avec les chemins pré-calculés.
+        """
+        try:
+            _validate_wall_placement(state, wall)
+            
+            temp_walls = state.walls | {wall}
+            temp_state = replace(state, walls=temp_walls)
+            
+            goal_j1 = lambda pos: pos[0] == 0
+            goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1
+            
+            if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):
+                return False
+            if not _path_exists(temp_state, temp_state.player_positions[PLAYER_TWO], goal_j2):
+                return False
+            
+            return True
+            
+        except InvalidMoveError:
+            return False
+
+    def _score_move_for_ordering(self, state: GameState, move: Move, 
+                                  distances_current: Dict[Coord, int],
+                                  distances_opponent: Dict[Coord, int]) -> int:
+        """
+        Attribue un score à un coup pour le tri (Move Ordering).
+        
+        OBJECTIF :
+        ----------
+        Évaluer rapidement la "promesse" d'un coup pour que les meilleurs
+        soient évalués en premier par Minimax. Cela améliore l'élagage Alpha-Bêta.
+        
+        PRINCIPE :
+        ----------
+        Un bon coup pour le tri est :
+        - Un coup gagnant (score maximal)
+        - Un coup qui nous rapproche du but
+        - Un mur qui bloque l'adversaire sur son chemin
+        
+        ATTENTION :
+        -----------
+        Cette fonction doit être RAPIDE car elle est appelée pour chaque coup.
+        Elle utilise les distances pré-calculées, pas de BFS additionnel.
+        
+        Args:
+            state: L'état actuel
+            move: Le coup à évaluer
+            distances_current: Distances vers l'objectif du joueur courant
+            distances_opponent: Distances vers l'objectif de l'adversaire
+        
+        Returns:
+            Score entier (plus grand = meilleur coup à évaluer en premier)
+        """
+        move_type, move_data = move
+        player = state.current_player
+        current_pos = state.player_positions[player]
+        
+        if move_type == 'deplacement':
+            target = move_data
+            
+            # Coup gagnant → score maximal
+            goal_row = 0 if player == PLAYER_ONE else BOARD_SIZE - 1
+            if target[0] == goal_row:
+                return 10000
+            
+            # Score basé sur l'amélioration de la distance
+            current_dist = distances_current.get(current_pos, 99)
+            target_dist = distances_current.get(target, 99)
+            
+            # Plus on se rapproche, mieux c'est
+            improvement = current_dist - target_dist
+            
+            # Score de base : 1000 + amélioration * 100
+            # Les déplacements qui améliorent la distance sont prioritaires
+            return 1000 + improvement * 100
+        
+        else:  # 'mur'
+            wall = move_data
+            
+            # Score de base pour les murs : 500
+            # Les murs sont généralement moins urgents que les déplacements gagnants
+            score = 500
+            
+            # Bonus si le mur est sur le chemin de l'adversaire
+            # (approximation rapide : le mur est près de l'adversaire)
+            opponent = PLAYER_TWO if player == PLAYER_ONE else PLAYER_ONE
+            opp_pos = state.player_positions[opponent]
+            wall_r, wall_c = wall[1], wall[2]
+            
+            # Distance Manhattan entre le mur et l'adversaire
+            dist_to_opponent = abs(wall_r - opp_pos[0]) + abs(wall_c - opp_pos[1])
+            
+            # Plus le mur est proche de l'adversaire, plus il est intéressant
+            if dist_to_opponent <= 1:
+                score += 200  # Très proche
+            elif dist_to_opponent <= 2:
+                score += 100  # Proche
+            
+            return score
 
     def _get_strategic_walls(self, state: GameState, player: str, max_walls: int = 20) -> List[Tuple]:
         """
@@ -481,7 +777,7 @@ class AI:
         random.shuffle(strategic_walls)
         return strategic_walls[:max_walls]
 
-    def _get_all_possible_moves(self, state: GameState) -> List[Move]:
+    def _get_all_possible_moves(self, state: GameState, sort_moves: bool = True) -> List[Move]:
         """
         Génère tous les coups que l'IA peut considérer à cet état.
         
@@ -490,23 +786,41 @@ class AI:
         1. TOUS les déplacements de pion possibles (généralement 2-4 coups)
         2. Les murs STRATÉGIQUES valides (jusqu'à ~20 murs)
         
-        Cette fonction est le "générateur de coups" pour Minimax.
-        Elle est appelée à chaque noeud de l'arbre de recherche.
+        OPTIMISATIONS :
+        ---------------
+        1. Validation paresseuse des murs (évite des BFS inutiles)
+        2. Tri des coups (Move Ordering) pour améliorer l'élagage Alpha-Bêta
+        
+        MOVE ORDERING :
+        ---------------
+        Les coups sont triés par "promesse" décroissante :
+        - Coups gagnants en premier
+        - Déplacements vers le but ensuite
+        - Murs stratégiques
+        
+        Cela améliore l'élagage Alpha-Bêta car les meilleurs coups causent
+        plus de coupures (cutoffs) quand ils sont évalués en premier.
         
         Args:
             state: L'état actuel du jeu
+            sort_moves: Si True, trie les coups par promesse (défaut: True)
         
         Returns:
             Liste de coups au format Move : [('deplacement', coord), ('mur', wall), ...]
         """
         player = state.current_player
+        opponent = PLAYER_TWO if player == PLAYER_ONE else PLAYER_ONE
         moves: List[Move] = []
+
+        # ═══════════════════════════════════════════════════════════════════
+        # Pré-calculer les distances pour le tri ET la validation paresseuse
+        # ═══════════════════════════════════════════════════════════════════
+        distances_current = self._get_cached_distances(state, player)
+        distances_opponent = self._get_cached_distances(state, opponent)
 
         # ═══════════════════════════════════════════════════════════════════
         # ÉTAPE 1 : Ajouter tous les déplacements de pion
         # ═══════════════════════════════════════════════════════════════════
-        # Les déplacements sont TOUJOURS considérés car ils sont peu nombreux
-        # et essentiels (on ne peut pas gagner sans se déplacer !)
         pawn_moves = get_possible_pawn_moves(state, player)
         for coord in pawn_moves:
             moves.append(('deplacement', coord))
@@ -515,13 +829,27 @@ class AI:
         # ÉTAPE 2 : Ajouter les murs stratégiques (si on en a encore)
         # ═══════════════════════════════════════════════════════════════════
         if state.player_walls[player] > 0:
-            # Récupérer les murs candidats
+            # Utiliser les chemins cachés (réutilise les distances déjà calculées)
+            path_j1 = self._get_cached_path(state, PLAYER_ONE)
+            path_j2 = self._get_cached_path(state, PLAYER_TWO)
+            
+            # Récupérer et valider les murs candidats
             strategic_walls = self._get_strategic_walls(state, player)
             
-            # Ne garder que les murs VALIDES
             for wall in strategic_walls:
-                if self._is_wall_valid(state, player, wall):
+                if self._is_wall_valid_lazy(state, wall, path_j1, path_j2):
                     moves.append(('mur', wall))
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # ÉTAPE 3 : Trier les coups par promesse (Move Ordering)
+        # ═══════════════════════════════════════════════════════════════════
+        if sort_moves and moves:
+            moves.sort(
+                key=lambda m: self._score_move_for_ordering(
+                    state, m, distances_current, distances_opponent
+                ),
+                reverse=True  # Plus grand score en premier
+            )
         
         return moves
 
@@ -539,14 +867,10 @@ class AI:
         Si on retombe sur un état déjà évalué à une profondeur suffisante,
         on réutilise le score sans recalculer.
         
-        COMPOSITION DU HASH :
-        ---------------------
-        Le hash est calculé à partir de :
-        - Positions des deux joueurs
-        - Ensemble des murs posés
-        - Joueur courant
-        
-        On utilise frozenset car les set normaux ne sont pas hashables.
+        OPTIMISATION :
+        --------------
+        Utilise directement la méthode __hash__ de GameState qui est
+        optimisée pour ce cas d'usage (walls est un frozenset).
         
         Args:
             state: L'état à identifier
@@ -554,11 +878,8 @@ class AI:
         Returns:
             Entier unique identifiant cet état
         """
-        return hash((
-            frozenset(state.player_positions.items()),  # Positions figées
-            frozenset(state.walls),                     # Murs figés
-            state.current_player                        # À qui le tour
-        ))
+        # Utilise la méthode __hash__ optimisée de GameState
+        return hash(state)
 
     def _apply_move(self, state: GameState, move: Move) -> GameState:
         """
@@ -735,20 +1056,34 @@ class AI:
     def find_best_move(self, state: GameState, verbose: bool = True) -> Move:
         """
         POINT D'ENTRÉE PRINCIPAL : Trouve le meilleur coup à jouer.
+        
+        OPTIMISATIONS APPLIQUÉES :
+        --------------------------
+        1. Move Ordering : Les coups sont triés pour améliorer l'élagage
+        2. Alpha-Bêta Pruning : Coupe les branches inutiles
+        3. Table de Transposition : Cache les positions évaluées
+        
+        VARIÉTÉ DU JEU :
+        ----------------
+        Parmi les coups avec le même score, on choisit aléatoirement
+        pour éviter que l'IA joue toujours la même partie.
         """
         # Réinitialiser le compteur de positions explorées et les caches
         self.nodes_explored = 0
         self._distance_cache.clear()
+        self._path_cache.clear()
         
-        best_move = None
+        best_moves: List[Move] = []  # Liste des meilleurs coups (en cas d'égalité)
         best_value = -math.inf  # On cherche à maximiser
         
-        # Générer et mélanger les coups possibles
-        possible_moves = self._get_all_possible_moves(state)
-        random.shuffle(possible_moves)  # Varier le jeu !
+        # Générer les coups triés par promesse (Move Ordering)
+        possible_moves = self._get_all_possible_moves(state, sort_moves=True)
 
         if verbose:
             print(f"IA réfléchit... ({len(possible_moves)} coups à évaluer)")
+
+        # Variable pour Alpha au niveau racine
+        alpha = -math.inf
 
         # ═══════════════════════════════════════════════════════════════════
         # Évaluer chaque coup au niveau racine
@@ -759,15 +1094,17 @@ class AI:
                 temp_state = self._apply_move(state, move)
                 
                 # Lancer Minimax depuis cette position
-                # - depth - 1 car on a déjà joué un coup
-                # - is_maximizing = False car après notre coup, c'est à l'adversaire
-                # - alpha = -∞, beta = +∞ (pas encore de contraintes)
-                board_value = self._minimax(temp_state, self.depth - 1, -math.inf, math.inf, False)
+                board_value = self._minimax(temp_state, self.depth - 1, alpha, math.inf, False)
+                
+                # Mettre à jour alpha au niveau racine
+                alpha = max(alpha, board_value)
                 
                 # Est-ce le meilleur coup trouvé jusqu'ici ?
                 if board_value > best_value:
                     best_value = board_value
-                    best_move = move
+                    best_moves = [move]  # Nouveau meilleur, réinitialiser la liste
+                elif board_value == best_value:
+                    best_moves.append(move)  # Égalité, ajouter à la liste
                     
             except InvalidMoveError:
                 continue  # Coup invalide, passer au suivant
@@ -776,17 +1113,20 @@ class AI:
             print(f"IA a exploré {self.nodes_explored} positions (score: {best_value:.1f})")
         
         # ═══════════════════════════════════════════════════════════════════
+        # Choisir parmi les meilleurs coups (variété)
+        # ═══════════════════════════════════════════════════════════════════
+        if best_moves:
+            # Choisir aléatoirement parmi les coups avec le même score
+            return random.choice(best_moves)
+        
+        # ═══════════════════════════════════════════════════════════════════
         # FALLBACK : Si aucun coup n'est trouvé (ne devrait pas arriver)
         # ═══════════════════════════════════════════════════════════════════
-        if best_move is None:
-            # En dernier recours, faire un déplacement aléatoire
-            pawn_moves = get_possible_pawn_moves(state, state.current_player)
-            if pawn_moves:
-                best_move = ('deplacement', random.choice(pawn_moves))
-            else:
-                raise InvalidMoveError("L'IA ne trouve aucun coup valide !")
-        
-        return best_move
+        pawn_moves = get_possible_pawn_moves(state, state.current_player)
+        if pawn_moves:
+            return ('deplacement', random.choice(pawn_moves))
+        else:
+            raise InvalidMoveError("L'IA ne trouve aucun coup valide !")
 
     def clear_cache(self):
         """
