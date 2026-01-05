@@ -23,11 +23,11 @@ class TestPathfinding:
         """Distance au but depuis la position initiale."""
         game = create_new_game()
         
-        # J1 doit parcourir 8 cases pour atteindre la ligne 8
+        # J1 doit parcourir 8 cases pour atteindre la ligne 0 (haut)
         distance_j1 = _get_shortest_path_length(game, PLAYER_ONE)
         assert distance_j1 == 8
         
-        # J2 doit parcourir 8 cases pour atteindre la ligne 0
+        # J2 doit parcourir 8 cases pour atteindre la ligne 8 (bas)
         distance_j2 = _get_shortest_path_length(game, PLAYER_TWO)
         assert distance_j2 == 8
     
@@ -48,14 +48,14 @@ class TestPathfinding:
     def test_path_near_goal(self):
         """Distance correcte près du but."""
         game = GameState(
-            player_positions={PLAYER_ONE: (7, 4), PLAYER_TWO: (1, 4)},
+            player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
         
         distance_j1 = _get_shortest_path_length(game, PLAYER_ONE)
-        assert distance_j1 == 1  # Une seule case pour gagner
+        assert distance_j1 == 1  # Une seule case pour gagner (ligne 0)
 
 
 class TestAIInitialization:
@@ -93,47 +93,47 @@ class TestEvaluationFunction:
         """Position gagnante = score maximal."""
         ia = AI(PLAYER_ONE, depth=2)
         
-        # J1 a gagné
+        # J1 a gagné (atteint ligne 0)
         winning_state = GameState(
-            player_positions={PLAYER_ONE: (8, 4), PLAYER_TWO: (0, 4)},
+            player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
         
         score = ia._evaluate_state(winning_state)
-        assert score == 10000
+        assert score == 20000  # Score de victoire avec les nouveaux poids
     
     def test_losing_position_low_score(self):
         """Position perdante = score minimal."""
         ia = AI(PLAYER_ONE, depth=2)
         
-        # J2 a gagné (J1 pas à la fin)
+        # J2 a gagné (atteint ligne 8)
         losing_state = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (0, 4)},  # J1 pas à ligne 8
+            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_TWO
         )
         
         score = ia._evaluate_state(losing_state)
-        assert score == -10000
+        assert score == -20000  # Score de défaite avec les nouveaux poids
     
     def test_closer_to_goal_is_better(self):
         """Plus proche du but = meilleur score."""
         ia = AI(PLAYER_ONE, depth=2)
         
-        # J1 à 2 cases du but
+        # J1 à 2 cases du but (ligne 0)
         close_state = GameState(
-            player_positions={PLAYER_ONE: (6, 4), PLAYER_TWO: (2, 4)},
+            player_positions={PLAYER_ONE: (2, 4), PLAYER_TWO: (6, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
         
-        # J1 à 4 cases du but
+        # J1 à 4 cases du but (ligne 0)
         far_state = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (2, 4)},
+            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (6, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
@@ -174,7 +174,7 @@ class TestAIDecisions:
     def test_ai_finds_valid_move(self):
         """L'IA trouve toujours un coup valide."""
         game = create_new_game()
-        game = move_pawn(game, PLAYER_ONE, (1, 4))  # Tour de J2
+        game = move_pawn(game, PLAYER_ONE, (7, 4))  # Tour de J2
         
         ia = AI(PLAYER_TWO, depth=2)
         move = ia.find_best_move(game, verbose=False)
@@ -184,9 +184,9 @@ class TestAIDecisions:
     
     def test_ai_wins_in_one_move(self):
         """L'IA trouve le coup gagnant quand elle peut gagner en 1 coup."""
-        # J2 est à une case de la victoire
+        # J2 est à une case de la victoire (ligne 8)
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (1, 4)},  # J1 loin
+            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (7, 4)},  # J1 loin
             walls=set(),
             player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
             current_player=PLAYER_TWO
@@ -195,15 +195,15 @@ class TestAIDecisions:
         ia = AI(PLAYER_TWO, depth=3, difficulty='facile')  # Profondeur 3 pour voir la victoire
         move = ia.find_best_move(game, verbose=False)
         
-        # L'IA devrait se déplacer vers (0, 4) pour gagner
+        # L'IA devrait se déplacer vers (8, 4) pour gagner
         assert move[0] == 'deplacement'
-        assert move[1] == (0, 4)
+        assert move[1] == (8, 4)
     
     def test_ai_blocks_opponent_win(self):
         """L'IA bloque l'adversaire qui peut gagner au prochain tour."""
-        # J1 est à une case de la victoire, c'est le tour de J2
+        # J1 est à une case de la victoire (ligne 0), c'est le tour de J2
         game = GameState(
-            player_positions={PLAYER_ONE: (7, 4), PLAYER_TWO: (1, 4)},
+            player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
             current_player=PLAYER_TWO
@@ -219,7 +219,7 @@ class TestAIDecisions:
     def test_ai_doesnt_make_invalid_move(self):
         """L'IA ne fait jamais de coup invalide."""
         game = create_new_game()
-        game = move_pawn(game, PLAYER_ONE, (1, 4))
+        game = move_pawn(game, PLAYER_ONE, (7, 4))
         
         ia = AI(PLAYER_TWO, depth=2)
         move = ia.find_best_move(game, verbose=False)
@@ -252,8 +252,8 @@ class TestAIDecisions:
                 else:
                     game = place_wall(game, PLAYER_ONE, move[1])
             else:
-                # J2 avance simple
-                game = move_pawn(game, PLAYER_TWO, (game.player_positions[PLAYER_TWO][0] - 1, 4))
+                # J2 avance simple vers le bas (ligne 8)
+                game = move_pawn(game, PLAYER_TWO, (game.player_positions[PLAYER_TWO][0] + 1, 4))
         
         # J1 doit toujours avoir un chemin vers le but
         distance = _get_shortest_path_length(game, PLAYER_ONE)
@@ -321,7 +321,7 @@ class TestTranspositionTable:
     def test_state_hash_uniqueness(self):
         """Différents états ont des hash différents."""
         game1 = create_new_game()
-        game2 = move_pawn(game1, PLAYER_ONE, (1, 4))
+        game2 = move_pawn(game1, PLAYER_ONE, (7, 4))
         
         ia = AI(PLAYER_ONE, depth=2)
         hash1 = ia._state_hash(game1)
