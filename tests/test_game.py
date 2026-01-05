@@ -40,10 +40,10 @@ class TestPlayMove:
         """Jouer un déplacement de pion."""
         game = QuoridorGame()
         
-        game.play_move(('deplacement', (1, 4)))
+        game.play_move(('deplacement', (7, 4)))
         
         state = game.get_current_state()
-        assert state.player_positions[PLAYER_ONE] == (1, 4)
+        assert state.player_positions[PLAYER_ONE] == (7, 4)
         assert state.current_player == PLAYER_TWO
     
     def test_play_wall_move(self):
@@ -80,22 +80,22 @@ class TestUndo:
         game = QuoridorGame()
         
         # Jouer un coup
-        game.play_move(('deplacement', (1, 4)))
+        game.play_move(('deplacement', (7, 4)))
         assert game.get_current_player() == PLAYER_TWO
         
         # Annuler
         success = game.undo_move()
         assert success is True
         assert game.get_current_player() == PLAYER_ONE
-        assert game.get_current_state().player_positions[PLAYER_ONE] == (0, 4)
+        assert game.get_current_state().player_positions[PLAYER_ONE] == (8, 4)
     
     def test_undo_multiple_moves(self):
         """Annuler plusieurs coups."""
         game = QuoridorGame()
         
         # Jouer 2 coups
-        game.play_move(('deplacement', (1, 4)))
         game.play_move(('deplacement', (7, 4)))
+        game.play_move(('deplacement', (1, 4)))
         
         # Annuler 2 fois
         assert game.undo_move() is True
@@ -103,7 +103,7 @@ class TestUndo:
         
         # Retour à l'état initial
         assert game.get_current_player() == PLAYER_ONE
-        assert game.get_current_state().player_positions[PLAYER_ONE] == (0, 4)
+        assert game.get_current_state().player_positions[PLAYER_ONE] == (8, 4)
     
     def test_undo_empty_history(self):
         """Annuler sans historique retourne False."""
@@ -171,21 +171,21 @@ class TestVictoryConditions:
         """Détecter la victoire du joueur 1."""
         game = QuoridorGame()
         
-        # Forcer J1 à atteindre la ligne 8
-        for _ in range(8):
-            if game.get_current_player() == PLAYER_ONE:
-                game.play_move(('deplacement', (game.get_current_state().player_positions[PLAYER_ONE][0] + 1, 4)))
-            else:
-                # J2 fait un mouvement quelconque
-                try:
-                    game.play_move(('deplacement', (game.get_current_state().player_positions[PLAYER_TWO][0] - 1, 4)))
-                except:
-                    game.play_move(('deplacement', (game.get_current_state().player_positions[PLAYER_TWO][0], 3)))
+        # Forcer J1 à atteindre la ligne 0 (haut)
+        for i in range(7, -1, -1):
+            # Tour J1 : monte d'une ligne
+            game.play_move(('deplacement', (i, 4)))
+            
+            if i == 0:
+                break
+                
+            # Tour J2 : fait un mouvement horizontal pour ne pas gêner
+            game.play_move(('deplacement', (game.get_current_state().player_positions[PLAYER_TWO][0], 3 if game.get_current_state().player_positions[PLAYER_TWO][1] == 4 else 4)))
         
         # Vérifier si J1 a gagné
         is_over, winner = game.is_game_over()
-        if is_over:
-            assert winner == PLAYER_ONE
+        assert is_over is True
+        assert winner == PLAYER_ONE
 
 
 class TestFullGameScenario:
@@ -197,10 +197,10 @@ class TestFullGameScenario:
         
         assert game.get_current_player() == PLAYER_ONE
         
-        game.play_move(('deplacement', (1, 4)))
+        game.play_move(('deplacement', (7, 4)))
         assert game.get_current_player() == PLAYER_TWO
         
-        game.play_move(('deplacement', (7, 4)))
+        game.play_move(('deplacement', (1, 4)))
         assert game.get_current_player() == PLAYER_ONE
     
     def test_mixed_moves_sequence(self):
@@ -208,16 +208,16 @@ class TestFullGameScenario:
         game = QuoridorGame()
         
         # J1 se déplace
-        game.play_move(('deplacement', (1, 4)))
+        game.play_move(('deplacement', (7, 4)))
         
         # J2 place un mur
-        game.play_move(('mur', ('h', 6, 4, 2)))
+        game.play_move(('mur', ('h', 1, 4, 2)))
         
         # J1 place un mur
         game.play_move(('mur', ('v', 2, 3, 2)))
         
         # J2 se déplace
-        game.play_move(('deplacement', (7, 4)))
+        game.play_move(('deplacement', (1, 4)))
         
         state = game.get_current_state()
         assert len(state.walls) == 2
@@ -257,13 +257,13 @@ class TestEdgeCases:
         """Jouer après avoir annulé."""
         game = QuoridorGame()
         
-        game.play_move(('deplacement', (1, 4)))
+        game.play_move(('deplacement', (7, 4)))
         game.undo_move()
         
         # Peut rejouer normalement
-        game.play_move(('deplacement', (0, 3)))
+        game.play_move(('deplacement', (8, 3)))
         
-        assert game.get_current_state().player_positions[PLAYER_ONE] == (0, 3)
+        assert game.get_current_state().player_positions[PLAYER_ONE] == (8, 3)
 
 
 if __name__ == '__main__':

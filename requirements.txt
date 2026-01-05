@@ -6,6 +6,7 @@ colorama>=0.4.6
 # Tests unitaires (Phase 5)
 pytest>=7.4.0
 pytest-cov>=4.1.0
+pytest-timeout>=2.2.0
 
 # Futurs ajouts possibles pour l'interface matérielle (Phase suivante)
 # RPi.GPIO>=0.7.1  # Pour Raspberry Pi (décommenter si nécessaire)

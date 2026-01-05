@@ -24,22 +24,22 @@ class TestBasicMoves:
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
         assert len(moves) == 3
-        assert (1, 4) in moves  # Bas
-        assert (0, 3) in moves  # Gauche
-        assert (0, 5) in moves  # Droite
+        assert (7, 4) in moves  # Haut (vers l'objectif)
+        assert (8, 3) in moves  # Gauche
+        assert (8, 5) in moves  # Droite
     
     def test_move_changes_position(self):
         """Déplacer un pion change sa position."""
         game = create_new_game()
-        new_game = move_pawn(game, PLAYER_ONE, (1, 4))
+        new_game = move_pawn(game, PLAYER_ONE, (7, 4))
         
-        assert new_game.player_positions[PLAYER_ONE] == (1, 4)
+        assert new_game.player_positions[PLAYER_ONE] == (7, 4)
         assert new_game.player_positions[PLAYER_TWO] == game.player_positions[PLAYER_TWO]
     
     def test_move_changes_turn(self):
         """Déplacer un pion change le joueur courant."""
         game = create_new_game()
-        new_game = move_pawn(game, PLAYER_ONE, (1, 4))
+        new_game = move_pawn(game, PLAYER_ONE, (7, 4))
         
         assert game.current_player == PLAYER_ONE
         assert new_game.current_player == PLAYER_TWO
@@ -49,8 +49,8 @@ class TestBasicMoves:
         game = create_new_game()
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
-        # Pas de mouvement vers le haut (hors limites)
-        assert (-1, 4) not in moves
+        # Pas de mouvement vers le bas (hors limites)
+        assert (9, 4) not in moves
     
     def test_invalid_move_raises_error(self):
         """Un mouvement invalide lève une exception."""
@@ -64,7 +64,7 @@ class TestBasicMoves:
         game = create_new_game()
         
         with pytest.raises(InvalidMoveError):
-            move_pawn(game, PLAYER_TWO, (7, 4))  # C'est le tour de J1
+            move_pawn(game, PLAYER_TWO, (1, 4))  # C'est le tour de J1
 
 
 class TestWallBlocking:
@@ -73,22 +73,22 @@ class TestWallBlocking:
     def test_horizontal_wall_blocks_movement(self):
         """Un mur horizontal bloque le passage vertical."""
         game = GameState(
-            player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
-            walls={('h', 0, 4, 2)},  # Mur horizontal en dessous de J1
+            player_positions={PLAYER_ONE: (8, 4), PLAYER_TWO: (0, 4)},
+            walls={('h', 7, 4, 2)},  # Mur horizontal au-dessus de J1
             player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
-        assert (1, 4) not in moves  # Bloqué par le mur
-        assert (0, 3) in moves      # Peut aller à gauche
-        assert (0, 5) in moves      # Peut aller à droite
+        assert (7, 4) not in moves  # Bloqué par le mur
+        assert (8, 3) in moves      # Peut aller à gauche
+        assert (8, 5) in moves      # Peut aller à droite
     
     def test_vertical_wall_blocks_movement(self):
         """Un mur vertical bloque le passage horizontal."""
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},
+            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (0, 4)},
             walls={('v', 4, 4, 2)},  # Mur vertical à droite de J1
             player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
             current_player=PLAYER_ONE

@@ -133,15 +133,16 @@ class TestWallBlocking:
     def test_cannot_block_player_completely(self):
         """Impossible de bloquer complètement le chemin d'un joueur."""
         # Créer une situation où J1 est presque coincé
+        # J1 est en (8, 0), son but est la ligne 0
         game = GameState(
-            player_positions={PLAYER_ONE: (0, 0), PLAYER_TWO: (8, 4)},
-            walls={('v', 0, 1, 2)},  # Mur vertical à droite
+            player_positions={PLAYER_ONE: (8, 0), PLAYER_TWO: (0, 4)},
+            walls={('v', 7, 1, 2)},  # Mur vertical à droite
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 9},
             current_player=PLAYER_TWO
         )
         
-        # Tenter de bloquer la dernière sortie
-        blocking_wall = ('h', 0, 0, 2)
+        # Tenter de bloquer la dernière sortie (au-dessus de J1)
+        blocking_wall = ('h', 7, 0, 2)
         
         with pytest.raises(InvalidMoveError, match="bloque.*chemin"):
             place_wall(game, PLAYER_TWO, blocking_wall)
@@ -149,7 +150,7 @@ class TestWallBlocking:
     def test_wall_must_leave_path_for_both_players(self):
         """Un mur doit laisser un chemin pour les deux joueurs."""
         game = GameState(
-            player_positions={PLAYER_ONE: (1, 1), PLAYER_TWO: (7, 7)},
+            player_positions={PLAYER_ONE: (7, 1), PLAYER_TWO: (1, 7)},
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE

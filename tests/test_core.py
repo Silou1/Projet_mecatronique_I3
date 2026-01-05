@@ -30,18 +30,22 @@ class TestGameStateInitialization:
         """Test des positions initiales des joueurs."""
         game = create_new_game()
         
-        # Joueur 1 en haut au centre
-        assert game.player_positions[PLAYER_ONE] == (0, BOARD_SIZE // 2)
+        # Joueur 1 en bas au centre (ligne 8)
+        pos_j1 = game.player_positions[PLAYER_ONE]
+        expected_j1 = (BOARD_SIZE - 1, BOARD_SIZE // 2)
+        assert pos_j1 == expected_j1, f"J1 devrait être en {expected_j1}, mais est en {pos_j1}"
         
-        # Joueur 2 en bas au centre
-        assert game.player_positions[PLAYER_TWO] == (BOARD_SIZE - 1, BOARD_SIZE // 2)
+        # Joueur 2 en haut au centre (ligne 0)
+        pos_j2 = game.player_positions[PLAYER_TWO]
+        expected_j2 = (0, BOARD_SIZE // 2)
+        assert pos_j2 == expected_j2, f"J2 devrait être en {expected_j2}, mais est en {pos_j2}"
     
     def test_initial_walls(self):
         """Test du nombre initial de murs."""
         game = create_new_game()
         
-        assert game.player_walls[PLAYER_ONE] == MAX_WALLS_PER_PLAYER
-        assert game.player_walls[PLAYER_TWO] == MAX_WALLS_PER_PLAYER
+        assert game.player_walls[PLAYER_ONE] == MAX_WALLS_PER_PLAYER, f"J1 devrait avoir {MAX_WALLS_PER_PLAYER} murs"
+        assert game.player_walls[PLAYER_TWO] == MAX_WALLS_PER_PLAYER, f"J2 devrait avoir {MAX_WALLS_PER_PLAYER} murs"
 
 
 class TestGameOver:
@@ -56,9 +60,9 @@ class TestGameOver:
         assert winner is None
     
     def test_player_one_wins(self):
-        """Joueur 1 gagne en atteignant la ligne 8."""
+        """Joueur 1 gagne en atteignant la ligne 0."""
         game = GameState(
-            player_positions={PLAYER_ONE: (8, 4), PLAYER_TWO: (0, 4)},
+            player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_ONE
@@ -66,13 +70,13 @@ class TestGameOver:
         
         is_over, winner = game.is_game_over()
         
-        assert is_over is True
-        assert winner == PLAYER_ONE
+        assert is_over is True, "La partie devrait être terminée"
+        assert winner == PLAYER_ONE, f"Le gagnant devrait être {PLAYER_ONE}, pas {winner}"
     
     def test_player_two_wins(self):
-        """Joueur 2 gagne en atteignant la ligne 0."""
+        """Joueur 2 gagne en atteignant la ligne 8."""
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (0, 4)},  # J1 pas à la fin
+            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},  # J1 pas à la fin
             walls=set(),
             player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
             current_player=PLAYER_TWO
@@ -80,13 +84,13 @@ class TestGameOver:
         
         is_over, winner = game.is_game_over()
         
-        assert is_over is True
-        assert winner == PLAYER_TWO
+        assert is_over is True, "La partie devrait être terminée"
+        assert winner == PLAYER_TWO, f"Le gagnant devrait être {PLAYER_TWO}, pas {winner}"
     
     def test_game_continues_near_end(self):
         """La partie continue même si un joueur est proche de la fin."""
         game = GameState(
-            player_positions={PLAYER_ONE: (7, 4), PLAYER_TWO: (1, 4)},
+            player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
             walls=set(),
             player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
             current_player=PLAYER_ONE

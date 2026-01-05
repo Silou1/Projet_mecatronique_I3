@@ -134,11 +134,11 @@ class GameState:
         pos_j1 = self.player_positions[PLAYER_ONE]
         pos_j2 = self.player_positions[PLAYER_TWO]
         
-        # Joueur 1 gagne en atteignant la première ligne (ligne 0, en haut)
+        # Joueur 1 gagne en atteignant la première ligne (index 0, affichée '1')
         if pos_j1[0] == 0:
             return True, PLAYER_ONE
         
-        # Joueur 2 gagne en atteignant la dernière ligne (ligne 8, en bas)
+        # Joueur 2 gagne en atteignant la dernière ligne (index 8, affichée '9')
         if pos_j2[0] == BOARD_SIZE - 1:
             return True, PLAYER_TWO
         
@@ -618,8 +618,8 @@ def place_wall(state: GameState, player: str, wall: Wall) -> GameState:
     temp_state = replace(state, walls=temp_walls)
     
     # Définir les objectifs de chaque joueur
-    goal_j1 = lambda pos: pos[0] == 0              # J1 doit atteindre la ligne 0 (haut)
-    goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1  # J2 doit atteindre la ligne 8 (bas)
+    goal_j1 = lambda pos: pos[0] == 0              # J1 doit atteindre le haut (ligne index 0)
+    goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1  # J2 doit atteindre le bas (ligne index 8)
     
     # Vérifier que le joueur 1 peut encore atteindre son objectif
     if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):
@@ -937,11 +937,12 @@ if __name__ == '__main__':
     print("\n--- Phase 2 : Déplacements ---")
     game = create_new_game()
     moves_j1 = get_possible_pawn_moves(game, PLAYER_ONE)
-    assert set(moves_j1) == {(1, 4), (0, 3), (0, 5)}
+    # J1 est en (8, 4), il peut aller en (7, 4), (8, 3), (8, 5)
+    assert set(moves_j1) == {(7, 4), (8, 3), (8, 5)}
     print("✓ Mouvements de base")
     
-    game = move_pawn(game, PLAYER_ONE, (1, 4))
-    assert game.player_positions[PLAYER_ONE] == (1, 4)
+    game = move_pawn(game, PLAYER_ONE, (7, 4))
+    assert game.player_positions[PLAYER_ONE] == (7, 4)
     assert game.current_player == PLAYER_TWO
     print("✓ Déplacement et changement de joueur")
     
@@ -964,24 +965,24 @@ if __name__ == '__main__':
     
     # Test 1: Jouer des coups
     assert partie.get_current_player() == PLAYER_ONE
-    partie.play_move(('deplacement', (1, 4)))
+    partie.play_move(('deplacement', (7, 4)))
     assert partie.get_current_player() == PLAYER_TWO
     print("✓ Jouer un déplacement")
     
-    partie.play_move(('mur', ('h', 6, 4, 2)))
+    partie.play_move(('mur', ('h', 1, 4, 2)))
     assert partie.get_current_player() == PLAYER_ONE
-    assert ('h', 6, 4, 2) in partie.get_current_state().walls
+    assert ('h', 1, 4, 2) in partie.get_current_state().walls
     print("✓ Jouer un mur")
     
     # Test 2: Annuler un coup
     partie.undo_move()
     assert partie.get_current_player() == PLAYER_TWO
-    assert ('h', 6, 4, 2) not in partie.get_current_state().walls
+    assert ('h', 1, 4, 2) not in partie.get_current_state().walls
     print("✓ Annulation de coup")
     
     # Test 3: Coup invalide
     try:
-        partie.play_move(('deplacement', (1, 4)))  # Case occupée
+        partie.play_move(('deplacement', (7, 4)))  # Case occupée
         assert False, "Le coup invalide aurait dû être rejeté"
     except InvalidMoveError:
         assert partie.get_current_player() == PLAYER_TWO
@@ -989,7 +990,7 @@ if __name__ == '__main__':
     
     # Test 4: Vérifier le gagnant
     victory_state = GameState(
-        player_positions={PLAYER_ONE: (8, 4), PLAYER_TWO: (0, 4)},
+        player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
         walls=set(),
         player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
         current_player=PLAYER_ONE

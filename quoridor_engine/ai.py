@@ -56,6 +56,7 @@ from dataclasses import replace
 from .core import (
     GameState, 
     Move, 
+    Coord,
     PLAYER_ONE, 
     PLAYER_TWO, 
     BOARD_SIZE,
@@ -72,72 +73,6 @@ from .core import (
 # =============================================================================
 # FONCTION UTILITAIRE : Calcul du plus court chemin
 # =============================================================================
-
-def _get_shortest_path_length(state: GameState, player: str) -> int:
-    """
-    Calcule la LONGUEUR du plus court chemin pour un joueur vers son objectif.
-    
-    Cette fonction est CRUCIALE pour l'IA car la distance au but est le
-    critère principal de la fonction d'évaluation.
-    
-    ALGORITHME : BFS (Breadth-First Search)
-    ----------------------------------------
-    Le BFS garantit de trouver le plus court chemin car il explore les
-    cases niveau par niveau (distance 1, puis distance 2, etc.).
-    
-    DIFFÉRENCE avec _path_exists de core.py :
-    -----------------------------------------
-    - _path_exists : retourne True/False (existe-t-il un chemin ?)
-    - _get_shortest_path_length : retourne la DISTANCE (combien de coups ?)
-    
-    EXEMPLE :
-    ---------
-    Si le joueur 1 est en (3, 4) et doit atteindre la ligne 0 :
-    - Sans murs : distance = 3 (3→2→1→0)
-    - Avec des murs : distance potentiellement plus grande (détours)
-    
-    Args:
-        state: L'état actuel du jeu (positions + murs)
-        player: Le joueur dont on calcule le chemin ('j1' ou 'j2')
-    
-    Returns:
-        Nombre minimum de déplacements pour atteindre l'objectif
-        Retourne float('inf') si aucun chemin n'existe (ne devrait pas arriver
-        car le jeu garantit toujours un chemin)
-    """
-    start_pos = state.player_positions[player]
-    
-    # Définir l'objectif selon le joueur
-    # J1 doit atteindre la ligne 0 (haut), J2 doit atteindre la ligne 8 (bas)
-    is_goal = (lambda pos: pos[0] == 0) if player == PLAYER_ONE else (lambda pos: pos[0] == BOARD_SIZE - 1)
-
-    # File BFS : chaque élément = (position, distance depuis le départ)
-    q = deque([(start_pos, 0)])
-    visited = {start_pos}
-
-    while q:
-        current_pos, dist = q.popleft()
-        
-        # Si on a atteint l'objectif, retourner la distance
-        if is_goal(current_pos):
-            return dist
-        
-        # Explorer les 4 voisins
-        r, c = current_pos
-        potential_moves = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
-        
-        for move in potential_moves:
-            if (move not in visited and 
-                0 <= move[0] < BOARD_SIZE and 
-                0 <= move[1] < BOARD_SIZE and 
-                not _is_wall_between(state, current_pos, move)):
-                visited.add(move)
-                # Ajouter avec distance + 1
-                q.append((move, dist + 1))
-                
-    # Aucun chemin trouvé (ne devrait jamais arriver dans une partie valide)
-    return float('inf')
-
 
 def _get_all_distances_to_goal(state: GameState, player: str) -> Dict[Tuple[int, int], int]:
     """
@@ -208,51 +143,8 @@ def _get_all_distances_to_goal(state: GameState, player: str) -> Dict[Tuple[int,
     return distances
 
 
-def _get_path_metrics(state: GameState, player: str) -> Tuple[int, int, int]:
-    """
-    Calcule les métriques de chemin pour évaluer la ROBUSTESSE d'une position.
-    
-    CONCEPT DU "CHEMIN DE RÉSERVE" :
-    --------------------------------
-    Un joueur avec un seul chemin viable est FRAGILE : un seul mur peut
-    le ralentir énormément. Un joueur avec plusieurs chemins de longueurs
-    similaires est ROBUSTE : difficile à bloquer efficacement.
-    
-    MÉTRIQUES CALCULÉES :
-    ---------------------
-    - L1 : Longueur du plus court chemin (distance actuelle)
-    - L2 : Longueur du chemin via le DEUXIÈME meilleur voisin
-    - Fragilité : L2 - L1 (écart entre les deux meilleures options)
-    
-    INTERPRÉTATION DE LA FRAGILITÉ :
-    --------------------------------
-    - Fragilité = 0-2 : Position robuste (plusieurs bons chemins)
-    - Fragilité = 3-5 : Position normale
-    - Fragilité > 5 : Position fragile (un seul bon chemin)
-    
-    ALGORITHME :
-    ------------
-    1. Calculer les distances de toutes les cases vers l'objectif
-    2. Regarder les voisins accessibles du joueur
-    3. Trier ces voisins par leur distance à l'objectif
-    4. L1 = distance du meilleur voisin + 1
-    5. L2 = distance du deuxième meilleur voisin + 1 (ou infini si un seul voisin)
-    
-    Args:
-        state: L'état actuel du jeu
-        player: Le joueur à analyser ('j1' ou 'j2')
-    
-    Returns:
-        Tuple (L1, L2, fragilité) où :
-        - L1 = plus court chemin
-        - L2 = chemin de réserve
-        - fragilité = L2 - L1
-    """
-    # Récupérer la matrice des distances vers l'objectif
-    distances = _get_all_distances_to_goal(state, player)
-    
-    # Position actuelle du joueur
-    pos = state.player_positions[player]
+def _compute_metrics_from_distances(state: GameState, pos: Coord, distances: Dict[Coord, int]) -> Tuple[int, int, int]:
+    """Calcule L1, L2 et la fragilité à partir d'un dictionnaire de distances pré-calculé."""
     r, c = pos
     
     # Si le joueur est déjà sur l'objectif
@@ -264,34 +156,24 @@ def _get_path_metrics(state: GameState, player: str) -> Tuple[int, int, int]:
     neighbor_distances = []
     
     for neighbor in neighbors:
-        # Vérifier : dans les limites, pas de mur, case accessible
         if (0 <= neighbor[0] < BOARD_SIZE and
             0 <= neighbor[1] < BOARD_SIZE and
             not _is_wall_between(state, pos, neighbor) and
             neighbor in distances):
             neighbor_distances.append(distances[neighbor])
     
-    # Cas dégénéré : aucun voisin accessible (ne devrait pas arriver)
     if not neighbor_distances:
         return (float('inf'), float('inf'), 0)
     
-    # Trier les distances des voisins (du plus proche au plus loin de l'objectif)
     neighbor_distances.sort()
-    
-    # L1 = distance via le meilleur voisin + 1 (le pas vers ce voisin)
     L1 = neighbor_distances[0] + 1
     
-    # L2 = distance via le deuxième meilleur voisin + 1
-    # Si un seul voisin accessible, L2 = infini (très fragile)
     if len(neighbor_distances) >= 2:
         L2 = neighbor_distances[1] + 1
     else:
-        # Un seul chemin possible : position très fragile
-        L2 = L1 + 10  # Pénalité arbitraire pour position à un seul chemin
+        L2 = L1 + 10
     
-    # Fragilité = écart entre le chemin principal et le chemin de réserve
     fragility = L2 - L1
-    
     return (L1, L2, fragility)
 
 
@@ -364,6 +246,9 @@ class AI:
         # Clé = hash de l'état, Valeur = (profondeur, score)
         self.transposition_table: Dict[int, Tuple[int, float]] = {}
         
+        # Cache pour les distances (BFS) au sein d'une même réflexion
+        self._distance_cache: Dict[Tuple[int, str], Dict[Coord, int]] = {}
+        
         # Compteur pour les statistiques
         self.nodes_explored = 0
         
@@ -379,45 +264,17 @@ class AI:
         
         print(f"IA initialisée pour le joueur {self.player} (niveau: {difficulty}, profondeur: {self.depth})")
 
+    def _get_cached_distances(self, state: GameState, player: str) -> Dict[Coord, int]:
+        """Récupère les distances depuis le cache ou les calcule."""
+        state_hash = self._state_hash(state)
+        cache_key = (state_hash, player)
+        if cache_key not in self._distance_cache:
+            self._distance_cache[cache_key] = _get_all_distances_to_goal(state, player)
+        return self._distance_cache[cache_key]
+
     def _evaluate_state(self, state: GameState) -> float:
         """
         FONCTION D'ÉVALUATION HEURISTIQUE AMÉLIORÉE - Le "cerveau" de l'IA.
-        
-        Cette fonction attribue un SCORE à une position de jeu en utilisant
-        des critères stratégiques avancés incluant la ROBUSTESSE du chemin.
-        
-        CRITÈRES UTILISÉS (par ordre d'importance) :
-        --------------------------------------------
-        
-        1. VICTOIRE/DÉFAITE (poids: 20000)
-           Score absolu si la partie est terminée.
-        
-        2. DISTANCE AU BUT - L1 (poids: 150)
-           Le critère principal : différence de distance entre les joueurs.
-        
-        3. ROBUSTESSE DU CHEMIN - Fragilité (poids: 25)
-           NOUVEAU ! Évalue si le joueur a un "chemin de réserve".
-           Une position avec un seul bon chemin est fragile (facile à bloquer).
-           Une position avec plusieurs chemins similaires est robuste.
-        
-        4. BONUS DE FIN DE PARTIE (poids: 500)
-           Bonus massif si un joueur est à moins de 3 cases du but.
-           La fin de partie est critique : chaque case compte double.
-        
-        5. MURS RESTANTS (poids: 15 + bonus proximité)
-           Avoir des murs est précieux, surtout quand l'adversaire est proche.
-        
-        6. MOBILITÉ (poids: 8)
-           Nombre de déplacements possibles (liberté de mouvement).
-        
-        7. CONTRÔLE CENTRAL (poids: 5)
-           Être au centre offre plus d'options et de flexibilité.
-        
-        Args:
-            state: L'état du jeu à évaluer
-        
-        Returns:
-            Score flottant : positif = favorable à l'IA, négatif = défavorable
         """
         # ═══════════════════════════════════════════════════════════════════
         # CRITÈRE 1 : Vérifier si la partie est déjà terminée
@@ -430,11 +287,15 @@ class AI:
                 return -20000  # DÉFAITE ! Score minimum
         
         # ═══════════════════════════════════════════════════════════════════
-        # CRITÈRE 2 & 3 : Distance et Robustesse (via _get_path_metrics)
+        # CRITÈRE 2 & 3 : Distance et Robustesse
         # ═══════════════════════════════════════════════════════════════════
+        # Utiliser le cache pour les distances
+        distances_ia = self._get_cached_distances(state, self.player)
+        distances_opp = self._get_cached_distances(state, self.opponent)
+        
         # Récupérer les métriques de chemin pour les deux joueurs
-        L1_ia, L2_ia, fragility_ia = _get_path_metrics(state, self.player)
-        L1_opp, L2_opp, fragility_opp = _get_path_metrics(state, self.opponent)
+        L1_ia, _, fragility_ia = _compute_metrics_from_distances(state, state.player_positions[self.player], distances_ia)
+        L1_opp, _, fragility_opp = _compute_metrics_from_distances(state, state.player_positions[self.opponent], distances_opp)
         
         # Cas extrêmes : si un joueur est bloqué (ne devrait pas arriver)
         if L1_ia == float('inf'):
@@ -874,34 +735,10 @@ class AI:
     def find_best_move(self, state: GameState, verbose: bool = True) -> Move:
         """
         POINT D'ENTRÉE PRINCIPAL : Trouve le meilleur coup à jouer.
-        
-        Cette fonction est appelée par le jeu pour obtenir le coup de l'IA.
-        Elle lance la recherche Minimax pour chaque coup possible au niveau
-        racine et retourne celui avec le meilleur score.
-        
-        ALGORITHME :
-        ------------
-        1. Générer tous les coups possibles
-        2. Pour chaque coup :
-           a. Simuler le coup
-           b. Lancer Minimax pour évaluer la position résultante
-           c. Garder le coup avec le meilleur score
-        3. Retourner le meilleur coup trouvé
-        
-        MÉLANGE ALÉATOIRE :
-        -------------------
-        On mélange les coups avant de les évaluer pour que, à score égal,
-        l'IA ne joue pas toujours le même coup. Cela rend le jeu plus varié.
-        
-        Args:
-            state: L'état actuel du jeu
-            verbose: Si True, affiche des informations de progression
-        
-        Returns:
-            Le meilleur coup trouvé au format Move
         """
-        # Réinitialiser le compteur de positions explorées
+        # Réinitialiser le compteur de positions explorées et les caches
         self.nodes_explored = 0
+        self._distance_cache.clear()
         
         best_move = None
         best_value = -math.inf  # On cherche à maximiser

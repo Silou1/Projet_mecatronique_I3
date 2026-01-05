@@ -130,17 +130,17 @@ Vous serez invité à choisir le mode de jeu :
 ```
    a b c d e f g h i
   ━━━━━━━━━━━━━━━━━
-1┃· · · · 1 · · · ·┃
+1┃· · · · 2 · · · ·┃
  ┃                 ┃
 2┃· · · · · · · · ·┃
  ┃                 ┃
 ...
-9┃· · · · 2 · · · ·┃
+9┃· · · · 1 · · · ·┃
   ━━━━━━━━━━━━━━━━━
 
 Murs restants: Joueur 1 [10]   Joueur 2 [10]
 
-Tour du Joueur 1. Entrez votre coup: d e2
+Tour du Joueur 1. Entrez votre coup: d e8
 ```
 
 ---
@@ -157,31 +157,33 @@ from quoridor_engine import QuoridorGame
 # Créer une nouvelle partie
 game = QuoridorGame()
 
-# Jouer un coup (déplacement)
-game.play_move(('pawn', (3, 4)))
+# Jouer un coup (déplacement vers le haut)
+game.play_move(('deplacement', (7, 4)))
 
 # Jouer un mur horizontal
-game.play_move(('wall', ((4, 3), 'h')))
+game.play_move(('mur', ('h', 4, 3, 2)))
 
 # Vérifier si la partie est terminée
-if game.is_game_over():
-    winner = game.get_winner()
+is_over, winner = game.is_game_over()
+if is_over:
     print(f"Le joueur {winner} a gagné !")
 ```
 
 ### Exemple avec l'IA
 
 ```python
-from quoridor_engine import QuoridorGame, get_ai_move
+from quoridor_engine.core import QuoridorGame
+from quoridor_engine.ai import AI
 
 # Créer une partie
 game = QuoridorGame()
 
-# Tour du joueur humain
-game.play_move(('pawn', (3, 4)))
+# Tour du joueur humain (J1 avance vers le haut)
+game.play_move(('deplacement', (7, 4)))
 
-# Tour de l'IA (difficulté normale, profondeur 3)
-ai_move = get_ai_move(game.current_state, difficulty='normal', max_depth=3)
+# Tour de l'IA (difficulé normale)
+ia = AI('j2', difficulty='normal')
+ai_move = ia.find_best_move(game.get_current_state())
 game.play_move(ai_move)
 ```
 
@@ -193,15 +195,15 @@ from quoridor_engine import QuoridorGame
 game = QuoridorGame()
 
 # Jouer plusieurs coups
-game.play_move(('pawn', (3, 4)))
-game.play_move(('pawn', (5, 4)))
-game.play_move(('wall', ((4, 3), 'h')))
+game.play_move(('deplacement', (7, 4)))
+game.play_move(('deplacement', (1, 4)))
+game.play_move(('mur', ('h', 4, 3, 2)))
 
 # Annuler le dernier coup
-game.undo()
+game.undo_move()
 
 # Voir l'historique
-print(f"Nombre de coups joués : {len(game.history)}")
+print(f"Nombre de coups dans l'historique : {len(game._history)}")
 ```
 
 ### Obtenir les coups possibles
@@ -211,27 +213,29 @@ from quoridor_engine import QuoridorGame
 
 game = QuoridorGame()
 
-# Obtenir tous les coups possibles pour le joueur actuel
+# Obtenir tous les coups possibles (déplacements) pour le joueur actuel
 possible_moves = game.get_possible_moves()
 
-print(f"Nombre de coups possibles : {len(possible_moves)}")
-for move_type, move_data in possible_moves[:5]:  # Afficher les 5 premiers
+print(f"Nombre de déplacements possibles : {len(possible_moves)}")
+for move_type, move_data in possible_moves:
     print(f"  - {move_type}: {move_data}")
 ```
 
 ### Vérifier l'état du jeu
 
 ```python
-from quoridor_engine import GameState
+from quoridor_engine import QuoridorGame
+
+game = QuoridorGame()
 
 # Accéder à l'état actuel
-state = game.current_state
+state = game.get_current_state()
 
-print(f"Position joueur 1 : {state.player1_pos}")
-print(f"Position joueur 2 : {state.player2_pos}")
-print(f"Murs restants J1 : {state.player1_walls}")
-print(f"Murs restants J2 : {state.player2_walls}")
-print(f"Tour actuel : Joueur {state.current_player}")
+print(f"Position joueur 1 : {state.player_positions['j1']}")
+print(f"Position joueur 2 : {state.player_positions['j2']}")
+print(f"Murs restants J1 : {state.player_walls['j1']}")
+print(f"Murs restants J2 : {state.player_walls['j2']}")
+print(f"Tour actuel : {state.current_player}")
 ```
 
 ---

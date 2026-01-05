@@ -167,7 +167,7 @@ Un rapport HTML sera généré dans `htmlcov/index.html`
 
 - **Total de tests** : 90
 - **Tests réussis** : 90 (100%)
-- **Temps d'exécution** : ~3,5 minutes (IA incluse)
+- **Temps d'exécution** : ~1 minute (dépend de la vitesse de calcul de l'IA)
 - **Couverture globale** : 82%
 
 ### Détails couverture
@@ -253,7 +253,7 @@ jobs:
 ✅ **Assertions précises** : Messages d'erreur clairs  
 ✅ **Couverture** : Tous les cas nominaux et d'erreur  
 ✅ **Documentation** : Docstrings pour chaque test  
-✅ **Rapidité** : Exécution en moins de 0.1s  
+✅ **Rapidité** : Exécution rapide des tests (hors IA complexe)  
 
 ## Conclusion
 

@@ -13,7 +13,7 @@ from quoridor_engine.core import (
     PLAYER_TWO,
     InvalidMoveError
 )
-from quoridor_engine.ai import AI, _get_shortest_path_length
+from quoridor_engine.ai import AI, _get_all_distances_to_goal
 
 
 class TestPathfinding:
@@ -24,26 +24,26 @@ class TestPathfinding:
         game = create_new_game()
         
         # J1 doit parcourir 8 cases pour atteindre la ligne 0 (haut)
-        distance_j1 = _get_shortest_path_length(game, PLAYER_ONE)
+        distances_j1 = _get_all_distances_to_goal(game, PLAYER_ONE)
+        distance_j1 = distances_j1.get(game.player_positions[PLAYER_ONE])
         assert distance_j1 == 8
         
         # J2 doit parcourir 8 cases pour atteindre la ligne 8 (bas)
-        distance_j2 = _get_shortest_path_length(game, PLAYER_TWO)
+        distances_j2 = _get_all_distances_to_goal(game, PLAYER_TWO)
+        distance_j2 = distances_j2.get(game.player_positions[PLAYER_TWO])
         assert distance_j2 == 8
     
     def test_shortest_path_with_wall(self):
         """Le chemin change avec un mur."""
         game = create_new_game()
         
-        # Distance sans mur
-        distance_before = _get_shortest_path_length(game, PLAYER_ONE)
-        
         # Ajouter un mur qui ne bloque pas complètement
         game = place_wall(game, PLAYER_ONE, ('h', 0, 3, 2))
         
         # La distance peut changer mais doit rester finie
-        distance_after = _get_shortest_path_length(game, PLAYER_TWO)
-        assert distance_after != float('inf')
+        distances_j2 = _get_all_distances_to_goal(game, PLAYER_TWO)
+        distance_j2 = distances_j2.get(game.player_positions[PLAYER_TWO], float('inf'))
+        assert distance_j2 != float('inf')
     
     def test_path_near_goal(self):
         """Distance correcte près du but."""
@@ -54,7 +54,8 @@ class TestPathfinding:
             current_player=PLAYER_ONE
         )
         
-        distance_j1 = _get_shortest_path_length(game, PLAYER_ONE)
+        distances_j1 = _get_all_distances_to_goal(game, PLAYER_ONE)
+        distance_j1 = distances_j1.get(game.player_positions[PLAYER_ONE])
         assert distance_j1 == 1  # Une seule case pour gagner (ligne 0)
 
 
@@ -256,7 +257,8 @@ class TestAIDecisions:
                 game = move_pawn(game, PLAYER_TWO, (game.player_positions[PLAYER_TWO][0] + 1, 4))
         
         # J1 doit toujours avoir un chemin vers le but
-        distance = _get_shortest_path_length(game, PLAYER_ONE)
+        distances = _get_all_distances_to_goal(game, PLAYER_ONE)
+        distance = distances.get(game.player_positions[PLAYER_ONE], float('inf'))
         assert distance != float('inf')
 
 
