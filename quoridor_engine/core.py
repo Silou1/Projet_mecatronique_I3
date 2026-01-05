@@ -16,8 +16,8 @@ Le Quoridor est un jeu de stratégie pour 2 joueurs sur un plateau 9x9.
 Chaque joueur possède un pion et 10 murs.
 
 OBJECTIF :
-- Joueur 1 (j1) : Partir de la ligne 1 et atteindre la ligne 9
-- Joueur 2 (j2) : Partir de la ligne 9 et atteindre la ligne 1
+- Joueur 1 (j1) : Partir de la ligne 9 (bas) et atteindre la ligne 1 (haut)
+- Joueur 2 (j2) : Partir de la ligne 1 (haut) et atteindre la ligne 9 (bas)
 
 À CHAQUE TOUR, un joueur peut :
 - Soit déplacer son pion d'une case (haut, bas, gauche, droite)
@@ -55,8 +55,8 @@ Wall = Tuple[Literal['h', 'v'], int, int, int]
 Move = Tuple[str, Any]
 
 # Identifiants des joueurs
-PLAYER_ONE = 'j1'  # Joueur 1 - commence en haut, doit aller en bas
-PLAYER_TWO = 'j2'  # Joueur 2 - commence en bas, doit aller en haut
+PLAYER_ONE = 'j1'  # Joueur 1 - commence en bas, doit aller en haut
+PLAYER_TWO = 'j2'  # Joueur 2 - commence en haut, doit aller en bas
 
 # Taille du plateau (9x9 cases)
 BOARD_SIZE = 9
@@ -99,7 +99,7 @@ class GameState:
     -----------
     player_positions : Dict[str, Coord]
         Position de chaque joueur sur le plateau.
-        Exemple : {'j1': (0, 4), 'j2': (8, 4)}
+        Exemple : {'j1': (8, 4), 'j2': (0, 4)}
         
     walls : Set[Wall]
         Ensemble des murs posés sur le plateau.
@@ -122,8 +122,8 @@ class GameState:
         Vérifie si la partie est terminée (un joueur a atteint son objectif).
         
         CONDITIONS DE VICTOIRE :
-        - Joueur 1 gagne s'il atteint la ligne 8 (index 8, dernière ligne du plateau)
-        - Joueur 2 gagne s'il atteint la ligne 0 (première ligne du plateau)
+        - Joueur 1 gagne s'il atteint la ligne 0 (première ligne du plateau, en haut)
+        - Joueur 2 gagne s'il atteint la ligne 8 (index 8, dernière ligne du plateau, en bas)
         
         Returns:
             Tuple (partie_terminée, gagnant)
@@ -134,12 +134,12 @@ class GameState:
         pos_j1 = self.player_positions[PLAYER_ONE]
         pos_j2 = self.player_positions[PLAYER_TWO]
         
-        # Joueur 1 gagne en atteignant la dernière ligne (ligne 8)
-        if pos_j1[0] == BOARD_SIZE - 1:
+        # Joueur 1 gagne en atteignant la première ligne (ligne 0, en haut)
+        if pos_j1[0] == 0:
             return True, PLAYER_ONE
         
-        # Joueur 2 gagne en atteignant la première ligne (ligne 0)
-        if pos_j2[0] == 0:
+        # Joueur 2 gagne en atteignant la dernière ligne (ligne 8, en bas)
+        if pos_j2[0] == BOARD_SIZE - 1:
             return True, PLAYER_TWO
         
         # La partie continue
@@ -155,8 +155,8 @@ def create_new_game() -> GameState:
     Crée et retourne un nouvel état de jeu pour le début d'une partie.
     
     CONFIGURATION INITIALE :
-    - Joueur 1 : position (0, 4) = centre de la première ligne (haut)
-    - Joueur 2 : position (8, 4) = centre de la dernière ligne (bas)
+    - Joueur 1 : position (8, 4) = centre de la dernière ligne (bas)
+    - Joueur 2 : position (0, 4) = centre de la première ligne (haut)
     - Aucun mur posé
     - Chaque joueur a 10 murs disponibles
     - C'est au tour du joueur 1
@@ -167,8 +167,8 @@ def create_new_game() -> GameState:
     return GameState(
         player_positions={
             # BOARD_SIZE // 2 = 4 = colonne centrale (e)
-            PLAYER_ONE: (0, BOARD_SIZE // 2),        # Position initiale j1 : (0, 4)
-            PLAYER_TWO: (BOARD_SIZE - 1, BOARD_SIZE // 2)  # Position initiale j2 : (8, 4)
+            PLAYER_ONE: (BOARD_SIZE - 1, BOARD_SIZE // 2),  # Position initiale j1 : (8, 4) en bas
+            PLAYER_TWO: (0, BOARD_SIZE // 2)                # Position initiale j2 : (0, 4) en haut
         },
         walls=set(),  # Aucun mur au début
         player_walls={
@@ -618,8 +618,8 @@ def place_wall(state: GameState, player: str, wall: Wall) -> GameState:
     temp_state = replace(state, walls=temp_walls)
     
     # Définir les objectifs de chaque joueur
-    goal_j1 = lambda pos: pos[0] == BOARD_SIZE - 1  # J1 doit atteindre la ligne 8
-    goal_j2 = lambda pos: pos[0] == 0              # J2 doit atteindre la ligne 0
+    goal_j1 = lambda pos: pos[0] == 0              # J1 doit atteindre la ligne 0 (haut)
+    goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1  # J2 doit atteindre la ligne 8 (bas)
     
     # Vérifier que le joueur 1 peut encore atteindre son objectif
     if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):

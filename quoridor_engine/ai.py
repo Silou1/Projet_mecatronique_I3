@@ -108,8 +108,8 @@ def _get_shortest_path_length(state: GameState, player: str) -> int:
     start_pos = state.player_positions[player]
     
     # Définir l'objectif selon le joueur
-    # J1 doit atteindre la ligne 8 (bas), J2 doit atteindre la ligne 0 (haut)
-    is_goal = (lambda pos: pos[0] == BOARD_SIZE - 1) if player == PLAYER_ONE else (lambda pos: pos[0] == 0)
+    # J1 doit atteindre la ligne 0 (haut), J2 doit atteindre la ligne 8 (bas)
+    is_goal = (lambda pos: pos[0] == 0) if player == PLAYER_ONE else (lambda pos: pos[0] == BOARD_SIZE - 1)
 
     # File BFS : chaque élément = (position, distance depuis le départ)
     q = deque([(start_pos, 0)])
@@ -361,8 +361,8 @@ class AI:
             temp_state = replace(state, walls=temp_walls)
             
             # Étape 3 : Vérifier que les deux joueurs peuvent encore gagner
-            goal_j1 = lambda pos: pos[0] == BOARD_SIZE - 1
-            goal_j2 = lambda pos: pos[0] == 0
+            goal_j1 = lambda pos: pos[0] == 0              # J1 doit atteindre le haut
+            goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1  # J2 doit atteindre le bas
             
             if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):
                 return False  # J1 serait bloqué

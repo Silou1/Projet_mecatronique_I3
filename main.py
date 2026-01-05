@@ -592,20 +592,20 @@ def main():
             print(f"  {Fore.CYAN}Mode : Joueur vs IA{Style.RESET_ALL}")
         
         # Rappel des positions de départ
-        print(f"\n  {Fore.BLUE}Joueur 1{Style.RESET_ALL} (Vous) commence en haut (ligne 1)")
+        print(f"\n  {Fore.BLUE}Joueur 1{Style.RESET_ALL} (Vous) commence en bas (ligne 9)")
         
         if mode == 'pvia':
-            print(f"  {Fore.RED}IA{Style.RESET_ALL} joue en bas (ligne 9)")
+            print(f"  {Fore.RED}IA{Style.RESET_ALL} joue en haut (ligne 1)")
         else:
-            print(f"  {Fore.RED}Joueur 2{Style.RESET_ALL} commence en bas (ligne 9)")
+            print(f"  {Fore.RED}Joueur 2{Style.RESET_ALL} commence en haut (ligne 1)")
         
         # Rappel des objectifs
-        print(f"\n  Objectif : {Fore.BLUE}Joueur 1{Style.RESET_ALL} → atteindre la ligne 9")
+        print(f"\n  Objectif : {Fore.BLUE}Joueur 1{Style.RESET_ALL} → atteindre la ligne 1 (monter)")
         
         if mode == 'pvia':
-            print(f"            {Fore.RED}IA{Style.RESET_ALL} → atteindre la ligne 1")
+            print(f"            {Fore.RED}IA{Style.RESET_ALL} → atteindre la ligne 9 (descendre)")
         else:
-            print(f"            {Fore.RED}Joueur 2{Style.RESET_ALL} → atteindre la ligne 1")
+            print(f"            {Fore.RED}Joueur 2{Style.RESET_ALL} → atteindre la ligne 9 (descendre)")
         
         print(f"\n  Tapez '{Fore.YELLOW}help{Style.RESET_ALL}' à tout moment pour voir les commandes\n")
         input("Appuyez sur Entrée pour commencer...")
