@@ -6,7 +6,7 @@
 [![Codecov](https://codecov.io/gh/Silou1/Projet_mecatronique_I3/branch/main/graph/badge.svg)](https://codecov.io/gh/Silou1/Projet_mecatronique_I3)
 
 > Moteur de jeu Quoridor en Python pur avec Intelligence Artificielle (Minimax + Alpha-Beta) et interface console interactive.
-> 
+>
 > **Projet mécatronique ICAM 2025-2026** - Année 3
 
 ---
@@ -107,7 +107,7 @@ Quoridor est un jeu de stratégie abstrait pour 2 joueurs où chacun doit attein
 ### Démarrer une partie
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 Vous serez invité à choisir le mode de jeu :
@@ -484,7 +484,7 @@ Pour toute question ou suggestion :
 ---
 
 <div align="center">
-  
+
 **⭐ N'oubliez pas de mettre une étoile si ce projet vous plaît ! ⭐**
 
 Made with ❤️ by [@Silou1](https://github.com/Silou1)
