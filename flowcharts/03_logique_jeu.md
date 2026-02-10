@@ -1,27 +1,27 @@
 # 🎲 Logique et Règles du Jeu
 
-Ce diagramme détaille les règles de validation des coups dans le moteur Quoridor (`core.py`).
+Ce diagramme détaille comment le moteur de jeu valide et applique chaque coup selon les règles du Quoridor.
 
 ---
 
-## Flux Général d'un Coup
+## Déroulement d'un coup
 
 ```mermaid
 flowchart TD
-    ENTRY(["play_move(move)"]) --> SAVE["Sauvegarder l'état<br/>dans l'historique"]
-    SAVE --> TYPE{"Type de coup ?"}
+    ENTRY(["Le joueur soumet un coup"]) --> SAVE["Sauvegarder l'état actuel<br/>(pour pouvoir annuler)"]
+    SAVE --> TYPE{"Quel type<br/>de coup ?"}
 
-    TYPE -->|"'deplacement'"| MOVE["move_pawn()<br/>Déplacer le pion"]
-    TYPE -->|"'mur'"| WALL["place_wall()<br/>Placer un mur"]
-    TYPE -->|"Autre"| ERR_TYPE["❌ ValueError<br/>Type inconnu"]
+    TYPE -->|"Déplacement"| MOVE["Vérifier et déplacer<br/>le pion"]
+    TYPE -->|"Mur"| WALL["Vérifier et placer<br/>le mur"]
+    TYPE -->|"Inconnu"| ERR_TYPE["❌ Type de coup<br/>non reconnu"]
 
     MOVE --> SUCCESS
     WALL --> SUCCESS
 
-    SUCCESS{"Coup<br/>valide ?"}
-    SUCCESS -->|Oui| NEXT["Nouvel état créé<br/>Joueur suivant"] --> DONE(["✅ Coup joué"])
-    SUCCESS -->|Non| ROLLBACK["Rollback :<br/>restaurer historique"]
-    ROLLBACK --> ERROR(["❌ InvalidMoveError"])
+    SUCCESS{"Le coup est<br/>valide ?"}
+    SUCCESS -->|Oui| NEXT["Appliquer le coup<br/>Passer au joueur suivant"] --> DONE(["✅ Coup joué"])
+    SUCCESS -->|Non| ROLLBACK["Annuler la sauvegarde<br/>(rien n'a changé)"]
+    ROLLBACK --> ERROR(["❌ Coup refusé<br/>avec explication"])
     ERR_TYPE --> ROLLBACK
 
     style ENTRY fill:#2196F3,color:#fff
@@ -31,19 +31,19 @@ flowchart TD
 
 ---
 
-## Validation du Déplacement de Pion
+## Validation d'un déplacement de pion
 
 ```mermaid
 flowchart TD
-    MOVE_START(["move_pawn(state, player, target)"]) --> TURN{"C'est le tour<br/>du joueur ?"}
-    TURN -->|Non| ERR1(["❌ Pas votre tour"])
-    TURN -->|Oui| POSSIBLE["Calculer les coups possibles<br/>get_possible_pawn_moves()"]
+    MOVE_START(["Le joueur veut<br/>déplacer son pion"]) --> TURN{"C'est bien<br/>son tour ?"}
+    TURN -->|Non| ERR1(["❌ Ce n'est pas<br/>votre tour"])
+    TURN -->|Oui| POSSIBLE["Calculer toutes les cases<br/>où le pion peut aller"]
 
-    POSSIBLE --> CHECK{"Target dans<br/>les coups<br/>possibles ?"}
-    CHECK -->|Non| ERR2(["❌ Déplacement invalide"])
-    CHECK -->|Oui| CREATE["Créer nouvel état<br/>(immutable)"]
-    CREATE --> SWITCH["Changer de joueur<br/>j1 ↔ j2"]
-    SWITCH --> RETURN(["↩ Nouvel état"])
+    POSSIBLE --> CHECK{"La case demandée<br/>est accessible ?"}
+    CHECK -->|Non| ERR2(["❌ Déplacement<br/>impossible"])
+    CHECK -->|Oui| CREATE["Créer le nouvel état<br/>avec le pion déplacé"]
+    CREATE --> SWITCH["Passer au tour<br/>de l'autre joueur"]
+    SWITCH --> RETURN(["✅ Pion déplacé"])
 
     style MOVE_START fill:#2196F3,color:#fff
     style RETURN fill:#4CAF50,color:#fff
@@ -53,28 +53,28 @@ flowchart TD
 
 ---
 
-## Calcul des Déplacements Possibles
+## Comment sont calculées les cases accessibles
 
 ```mermaid
 flowchart TD
-    START(["get_possible_pawn_moves<br/>(state, player)"]) --> POS["Position actuelle du joueur<br/>+ position adversaire"]
+    START(["Quelles cases sont<br/>accessibles pour ce pion ?"]) --> POS["Repérer la position<br/>du pion et de l'adversaire"]
 
-    POS --> DIR["Pour chaque direction :<br/>↑ ↓ ← →"]
-    DIR --> BOUNDS{"Case dans les<br/>limites du<br/>plateau ?"}
-    BOUNDS -->|Non| SKIP["Ignorer"]
-    BOUNDS -->|Oui| WALL_CHECK{"Mur entre<br/>case actuelle<br/>et case cible ?"}
+    POS --> DIR["Examiner chaque direction :<br/>↑ Haut, ↓ Bas, ← Gauche, → Droite"]
+    DIR --> BOUNDS{"La case voisine<br/>est dans le<br/>plateau ?"}
+    BOUNDS -->|Non| SKIP["Ignorer cette<br/>direction"]
+    BOUNDS -->|Oui| WALL_CHECK{"Un mur bloque<br/>le passage ?"}
     WALL_CHECK -->|Oui| SKIP
-    WALL_CHECK -->|Non| OCC{"Case occupée<br/>par adversaire ?"}
+    WALL_CHECK -->|Non| OCC{"L'adversaire<br/>est sur cette<br/>case ?"}
 
-    OCC -->|Non| ADD["✅ Ajouter aux<br/>coups valides"]
+    OCC -->|"Non → Case libre"| ADD["✅ Case accessible"]
 
-    OCC -->|Oui| JUMP_CALC["Calculer position<br/>de saut direct"]
-    JUMP_CALC --> JUMP_OK{"Saut dans<br/>les limites<br/>et sans mur ?"}
-    JUMP_OK -->|Oui| ADD_JUMP["✅ Ajouter saut<br/>par-dessus"]
-    JUMP_OK -->|Non| DIAG["Essayer sauts<br/>diagonaux"]
+    OCC -->|"Oui → Adversaire présent"| JUMP_CALC["Peut-on sauter<br/>par-dessus lui ?"]
+    JUMP_CALC --> JUMP_OK{"Pas de mur<br/>derrière lui<br/>et dans les<br/>limites ?"}
+    JUMP_OK -->|Oui| ADD_JUMP["✅ Saut par-dessus<br/>l'adversaire"]
+    JUMP_OK -->|"Non → Bloqué"| DIAG["Peut-on contourner<br/>en diagonale ?"]
 
-    DIAG --> DIAG_CHECK{"Diagonale<br/>accessible ?<br/>(pas de mur)"}
-    DIAG_CHECK -->|Oui| ADD_DIAG["✅ Ajouter<br/>diagonale"]
+    DIAG --> DIAG_CHECK{"Cases diagonales<br/>accessibles ?<br/>(pas de mur)"}
+    DIAG_CHECK -->|Oui| ADD_DIAG["✅ Saut en<br/>diagonale"]
     DIAG_CHECK -->|Non| SKIP
 
     ADD --> NEXT["Direction suivante"]
@@ -84,7 +84,7 @@ flowchart TD
 
     NEXT --> MORE{"Encore des<br/>directions ?"}
     MORE -->|Oui| DIR
-    MORE -->|Non| RETURN(["↩ Liste des coups possibles"])
+    MORE -->|Non| RETURN(["Retourner la liste<br/>des cases accessibles"])
 
     style START fill:#2196F3,color:#fff
     style RETURN fill:#4CAF50,color:#fff
@@ -95,32 +95,32 @@ flowchart TD
 
 ---
 
-## Validation du Placement de Mur
+## Validation du placement d'un mur
 
 ```mermaid
 flowchart TD
-    WALL_START(["place_wall(state, player, wall)"]) --> W_TURN{"C'est le tour<br/>du joueur ?"}
+    WALL_START(["Le joueur veut<br/>poser un mur"]) --> W_TURN{"C'est bien<br/>son tour ?"}
     W_TURN -->|Non| W_ERR1(["❌ Pas votre tour"])
-    W_TURN -->|Oui| W_WALLS{"Le joueur a<br/>encore des<br/>murs ?"}
-    W_WALLS -->|Non| W_ERR2(["❌ Plus de murs"])
+    W_TURN -->|Oui| W_WALLS{"Il lui reste<br/>des murs ?<br/>(max 10)"}
+    W_WALLS -->|Non| W_ERR2(["❌ Plus de murs<br/>disponibles"])
     W_WALLS -->|Oui| VALIDATE
 
-    VALIDATE["_validate_wall_placement()"] --> V1{"Mur dans les<br/>limites ?<br/>(0 ≤ r,c ≤ 7)"}
+    VALIDATE["Vérifier les règles<br/>de placement"] --> V1{"Le mur est<br/>entièrement dans<br/>le plateau ?"}
     V1 -->|Non| V_ERR1(["❌ Hors limites"])
-    V1 -->|Oui| V2{"Mur identique<br/>existe déjà ?"}
-    V2 -->|Oui| V_ERR2(["❌ Mur existant"])
-    V2 -->|Non| V3{"Chevauchement<br/>avec mur<br/>parallèle ?"}
-    V3 -->|Oui| V_ERR3(["❌ Chevauchement"])
-    V3 -->|Non| V4{"Croisement<br/>avec mur<br/>perpendiculaire ?"}
-    V4 -->|Oui| V_ERR4(["❌ Croisement"])
+    V1 -->|Oui| V2{"Un mur identique<br/>existe déjà ?"}
+    V2 -->|Oui| V_ERR2(["❌ Mur déjà posé<br/>à cet endroit"])
+    V2 -->|Non| V3{"Le mur chevauche<br/>un mur parallèle<br/>existant ?"}
+    V3 -->|Oui| V_ERR3(["❌ Chevauchement<br/>de murs"])
+    V3 -->|Non| V4{"Le mur croise<br/>un mur existant<br/>perpendiculaire ?"}
+    V4 -->|Oui| V_ERR4(["❌ Croisement<br/>de murs"])
     V4 -->|Non| PATH_CHECK
 
-    PATH_CHECK["Créer état temporaire<br/>avec le mur ajouté"] --> BFS1{"BFS : J1 peut<br/>atteindre<br/>ligne 1 ?"}
-    BFS1 -->|Non| P_ERR(["❌ Bloque J1"])
-    BFS1 -->|Oui| BFS2{"BFS : J2 peut<br/>atteindre<br/>ligne 9 ?"}
-    BFS2 -->|Non| P_ERR2(["❌ Bloque J2"])
-    BFS2 -->|Oui| PLACE["✅ Placer le mur<br/>Décrémenter compteur<br/>Changer de joueur"]
-    PLACE --> W_RETURN(["↩ Nouvel état"])
+    PATH_CHECK["Vérifier que les chemins<br/>restent ouverts"] --> BFS1{"Le Joueur 1<br/>peut encore<br/>atteindre son but ?"}
+    BFS1 -->|Non| P_ERR(["❌ Bloque Joueur 1"])
+    BFS1 -->|Oui| BFS2{"Le Joueur 2<br/>peut encore<br/>atteindre son but ?"}
+    BFS2 -->|Non| P_ERR2(["❌ Bloque Joueur 2"])
+    BFS2 -->|Oui| PLACE["✅ Placer le mur<br/>Retirer 1 mur au joueur<br/>Passer au joueur suivant"]
+    PLACE --> W_RETURN(["✅ Mur posé"])
 
     style WALL_START fill:#FF9800,color:#fff
     style W_RETURN fill:#4CAF50,color:#fff
@@ -136,22 +136,24 @@ flowchart TD
 
 ---
 
-## Vérification de Chemin (BFS)
+## Recherche de chemin (un joueur peut-il encore gagner ?)
+
+Cette vérification est cruciale : un mur ne peut **jamais** enfermer complètement un joueur.
 
 ```mermaid
 flowchart TD
-    BFS_START(["_path_exists(state, start, is_goal)"]) --> INIT["File d'attente = start<br/>Visités = start"]
+    BFS_START(["Un chemin existe-t-il<br/>vers l'objectif ?"]) --> INIT["Partir de la position<br/>actuelle du joueur"]
 
-    INIT --> EMPTY{"File<br/>vide ?"}
-    EMPTY -->|Oui| NO_PATH(["↩ False<br/>Aucun chemin"])
-    EMPTY -->|Non| DEQUEUE["Retirer la première<br/>case de la file"]
+    INIT --> EMPTY{"Encore des<br/>cases à<br/>explorer ?"}
+    EMPTY -->|"Non → aucune case restante"| NO_PATH(["❌ Aucun chemin<br/>Le mur est interdit"])
+    EMPTY -->|Oui| DEQUEUE["Prendre la prochaine<br/>case à examiner"]
 
-    DEQUEUE --> GOAL{"Est-ce<br/>l'objectif ?"}
-    GOAL -->|Oui| FOUND(["↩ True<br/>Chemin trouvé ✅"])
-    GOAL -->|Non| EXPLORE["Explorer les 4 voisins<br/>↑ ↓ ← →"]
+    DEQUEUE --> GOAL{"Cette case est<br/>sur la ligne<br/>d'arrivée ?"}
+    GOAL -->|Oui| FOUND(["✅ Chemin trouvé<br/>Le mur est autorisé"])
+    GOAL -->|Non| EXPLORE["Examiner les 4 voisins<br/>↑ ↓ ← →"]
 
-    EXPLORE --> NEIGHBOR{"Voisin valide ?<br/>• Dans les limites<br/>• Pas visité<br/>• Pas de mur"}
-    NEIGHBOR -->|Oui| ENQUEUE["Ajouter à la file<br/>+ marquer visité"]
+    EXPLORE --> NEIGHBOR{"Le voisin est<br/>accessible ?<br/>• Dans le plateau<br/>• Pas déjà visité<br/>• Pas de mur"}
+    NEIGHBOR -->|Oui| ENQUEUE["Ajouter à la file<br/>d'exploration"]
     NEIGHBOR -->|Non| NEXT_N["Voisin suivant"]
     ENQUEUE --> NEXT_N
     NEXT_N --> MORE_N{"Encore des<br/>voisins ?"}
@@ -165,4 +167,4 @@ flowchart TD
 
 ---
 
-> **Principe clé :** Chaque coup crée un **nouvel état immuable** (pattern fonctionnel). L'état original n'est jamais modifié, ce qui permet l'historique et la fonction undo.
+> **Principe clé :** Chaque coup crée un **nouvel état du jeu** sans modifier le précédent. Cela permet d'annuler facilement un coup et à l'IA de simuler des parties futures sans risque.

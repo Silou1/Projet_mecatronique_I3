@@ -1,33 +1,33 @@
 # 🤖 Logique de l'Intelligence Artificielle
 
-Ce diagramme détaille le fonctionnement de l'IA du Quoridor, basée sur l'algorithme **Minimax avec élagage Alpha-Bêta**.
+Ce diagramme détaille comment l'IA du Quoridor réfléchit et choisit son coup. Elle utilise l'algorithme **Minimax avec élagage Alpha-Bêta**.
 
 ---
 
-## Vue d'Ensemble de l'IA
+## Comment l'IA choisit son coup
 
 ```mermaid
 flowchart TD
-    ENTRY(["find_best_move(state)"]) --> RESET["Réinitialiser caches<br/>et compteurs"]
-    RESET --> GEN["Générer tous les coups possibles<br/>_get_all_possible_moves()"]
-    GEN --> SORT["Trier par promesse<br/>(Move Ordering)"]
+    ENTRY(["C'est au tour de l'IA"]) --> RESET["Préparer la réflexion<br/>(vider la mémoire)"]
+    RESET --> GEN["Lister tous les coups<br/>possibles (déplacements + murs)"]
+    GEN --> SORT["Trier les coups :<br/>les plus prometteurs en premier"]
 
-    SORT --> LOOP["Pour chaque coup"]
-    LOOP --> SIM["Simuler le coup<br/>_apply_move()"]
-    SIM --> MINIMAX["Appel Minimax<br/>_minimax(state, depth-1,<br/>α, +∞, False)"]
+    SORT --> LOOP["Prendre un coup"]
+    LOOP --> SIM["Imaginer le jeu<br/>après ce coup"]
+    SIM --> MINIMAX["Simuler les tours suivants<br/>pour prédire le résultat"]
 
-    MINIMAX --> COMPARE{"score > <br/>meilleur ?"}
-    COMPARE -->|Oui| NEW_BEST["Nouveau meilleur coup<br/>best_moves = coup"]
-    COMPARE -->|"Égal"| ADD["Ajouter aux<br/>meilleurs coups"]
-    COMPARE -->|Non| NEXT
+    MINIMAX --> COMPARE{"Ce coup est<br/>meilleur que<br/>les précédents ?"}
+    COMPARE -->|"Oui"| NEW_BEST["Retenir ce coup<br/>comme le meilleur"]
+    COMPARE -->|"Aussi bon"| ADD["L'ajouter à la liste<br/>des meilleurs"]
+    COMPARE -->|"Non"| NEXT
 
-    NEW_BEST --> NEXT["Coup suivant"]
+    NEW_BEST --> NEXT["Passer au<br/>coup suivant"]
     ADD --> NEXT
-    NEXT --> MORE{"Encore des<br/>coups ?"}
+    NEXT --> MORE{"Encore des<br/>coups à<br/>évaluer ?"}
     MORE -->|Oui| LOOP
     MORE -->|Non| CHOOSE
 
-    CHOOSE["🎲 Choix aléatoire parmi<br/>les meilleurs coups<br/>(variété de jeu)"] --> RETURN(["Retourner le meilleur coup"])
+    CHOOSE["🎲 Choisir aléatoirement<br/>parmi les meilleurs coups<br/>(pour varier le jeu)"] --> RETURN(["Jouer le coup choisi"])
 
     style ENTRY fill:#E91E63,color:#fff
     style RETURN fill:#4CAF50,color:#fff
@@ -36,51 +36,49 @@ flowchart TD
 
 ---
 
-## Algorithme Minimax avec Alpha-Bêta
+## Simulation des tours futurs (Minimax)
+
+L'IA imagine les coups futurs en alternant entre **son point de vue** (maximiser son avantage) et celui de **l'adversaire** (minimiser l'avantage de l'IA).
 
 ```mermaid
 flowchart TD
-    START(["_minimax(state, depth, α, β, is_max)"]) --> NODES["nodes_explored += 1"]
+    START(["Simuler les tours futurs"]) --> NODES["Compter les positions explorées"]
 
-    NODES --> CACHE{"État dans la<br/>table de<br/>transposition ?"}
-    CACHE -->|"Oui (depth ≥ actuelle)"| CACHE_HIT(["↩ Retourner<br/>score caché"])
-    CACHE -->|Non| LEAF
+    NODES --> CACHE{"Position déjà<br/>analysée<br/>en mémoire ?"}
+    CACHE -->|"Oui"| CACHE_HIT(["↩ Réutiliser le<br/>résultat mémorisé"])
+    CACHE -->|"Non"| LEAF
 
-    LEAF{"Feuille ?<br/>(depth = 0 ou<br/>partie finie)"}
-    LEAF -->|Oui| EVAL["Évaluer position<br/>_evaluate_state()"]
-    EVAL --> STORE_EVAL["Stocker dans cache"] --> RETURN_EVAL(["↩ Retourner score"])
+    LEAF{"Fin de la<br/>simulation ?<br/>(profondeur max<br/>ou victoire)"}
+    LEAF -->|Oui| EVAL["Évaluer la position :<br/>qui a l'avantage ?"]
+    EVAL --> STORE_EVAL["Mémoriser le résultat"] --> RETURN_EVAL(["↩ Retourner le score"])
 
-    LEAF -->|Non| GEN_MOVES["Générer les coups<br/>_get_all_possible_moves()"]
+    LEAF -->|Non| GEN_MOVES["Lister les coups possibles"]
 
-    GEN_MOVES --> IS_MAX{"is_maximizing ?"}
+    GEN_MOVES --> IS_MAX{"Qui joue<br/>dans cette<br/>simulation ?"}
 
     %% --- Branche MAX ---
-    IS_MAX -->|"Oui (tour IA)"| MAX_INIT["max_eval = -∞"]
-    MAX_INIT --> MAX_LOOP["Pour chaque coup"]
+    IS_MAX -->|"L'IA"| MAX_LOOP["Pour chaque coup possible"]
     MAX_LOOP --> MAX_SIM["Simuler le coup"]
-    MAX_SIM --> MAX_REC["Appel récursif<br/>minimax(..., False)"]
-    MAX_REC --> MAX_UPDATE["max_eval = max(max_eval, score)<br/>α = max(α, score)"]
-    MAX_UPDATE --> MAX_PRUNE{"β ≤ α ?"}
-    MAX_PRUNE -->|"Oui ✂️"| MAX_CUT["ÉLAGAGE !<br/>Couper la branche"]
-    MAX_CUT --> MAX_STORE
-    MAX_PRUNE -->|Non| MAX_NEXT{"Coup suivant ?"}
+    MAX_SIM --> MAX_REC["Simuler le tour suivant<br/>(point de vue adversaire)"]
+    MAX_REC --> MAX_UPDATE["Retenir le meilleur score"]
+    MAX_UPDATE --> MAX_PRUNE{"Peut-on ignorer<br/>le reste des coups ?<br/>(élagage)"}
+    MAX_PRUNE -->|"Oui ✂️"| MAX_CUT["Couper : l'adversaire<br/>ne choisira jamais<br/>cette branche"]
+    MAX_CUT --> MAX_RETURN
+    MAX_PRUNE -->|"Non"| MAX_NEXT{"Coup suivant ?"}
     MAX_NEXT -->|Oui| MAX_LOOP
-    MAX_NEXT -->|Non| MAX_STORE["Stocker dans cache"]
-    MAX_STORE --> MAX_RETURN(["↩ Retourner max_eval"])
+    MAX_NEXT -->|Non| MAX_RETURN(["↩ Retourner le<br/>meilleur score (IA)"])
 
     %% --- Branche MIN ---
-    IS_MAX -->|"Non (tour adversaire)"| MIN_INIT["min_eval = +∞"]
-    MIN_INIT --> MIN_LOOP["Pour chaque coup"]
+    IS_MAX -->|"L'Adversaire"| MIN_LOOP["Pour chaque coup possible"]
     MIN_LOOP --> MIN_SIM["Simuler le coup"]
-    MIN_SIM --> MIN_REC["Appel récursif<br/>minimax(..., True)"]
-    MIN_REC --> MIN_UPDATE["min_eval = min(min_eval, score)<br/>β = min(β, score)"]
-    MIN_UPDATE --> MIN_PRUNE{"β ≤ α ?"}
-    MIN_PRUNE -->|"Oui ✂️"| MIN_CUT["ÉLAGAGE !<br/>Couper la branche"]
-    MIN_CUT --> MIN_STORE
-    MIN_PRUNE -->|Non| MIN_NEXT{"Coup suivant ?"}
+    MIN_SIM --> MIN_REC["Simuler le tour suivant<br/>(point de vue IA)"]
+    MIN_REC --> MIN_UPDATE["Retenir le pire score<br/>(du point de vue de l'IA)"]
+    MIN_UPDATE --> MIN_PRUNE{"Peut-on ignorer<br/>le reste des coups ?<br/>(élagage)"}
+    MIN_PRUNE -->|"Oui ✂️"| MIN_CUT["Couper : l'IA<br/>ne choisira jamais<br/>cette branche"]
+    MIN_CUT --> MIN_RETURN
+    MIN_PRUNE -->|"Non"| MIN_NEXT{"Coup suivant ?"}
     MIN_NEXT -->|Oui| MIN_LOOP
-    MIN_NEXT -->|Non| MIN_STORE["Stocker dans cache"]
-    MIN_STORE --> MIN_RETURN(["↩ Retourner min_eval"])
+    MIN_NEXT -->|Non| MIN_RETURN(["↩ Retourner le<br/>pire score (adversaire)"])
 
     style START fill:#9C27B0,color:#fff
     style MAX_CUT fill:#f44336,color:#fff
@@ -90,35 +88,37 @@ flowchart TD
 
 ---
 
-## Fonction d'Évaluation Heuristique
+## Comment l'IA évalue une position
+
+Quand l'IA ne peut pas simuler plus loin, elle donne un **score** à la position. Ce score reflète à quel point la situation est favorable.
 
 ```mermaid
 flowchart TD
-    EVAL_START(["_evaluate_state(state)"]) --> GAME_OVER{"Partie<br/>terminée ?"}
+    EVAL_START(["Évaluer la position actuelle"]) --> GAME_OVER{"Quelqu'un<br/>a gagné ?"}
 
-    GAME_OVER -->|"IA gagne"| WIN(["↩ +1000"])
-    GAME_OVER -->|"IA perd"| LOSE(["↩ -1000"])
-    GAME_OVER -->|"En cours"| CALC
+    GAME_OVER -->|"L'IA gagne"| WIN(["↩ Score très élevé<br/>(victoire !)"])
+    GAME_OVER -->|"L'IA perd"| LOSE(["↩ Score très bas<br/>(défaite)"])
+    GAME_OVER -->|"Partie en cours"| CALC
 
-    CALC --> BFS_IA["BFS Inversé<br/>distances IA → but"]
-    CALC --> BFS_ADV["BFS Inversé<br/>distances Adversaire → but"]
+    CALC --> BFS_IA["Calculer la distance<br/>de l'IA à son objectif"]
+    CALC --> BFS_ADV["Calculer la distance<br/>de l'adversaire à son objectif"]
 
     BFS_IA --> METRICS
     BFS_ADV --> METRICS
 
-    METRICS["Calcul des métriques"] --> CRITERIA
+    METRICS["Combiner les critères"] --> CRITERIA
 
-    CRITERIA --> C1["📏 Distance L1<br/>dist_adversaire - dist_IA<br/>(× poids fort)"]
-    CRITERIA --> C2["🛡️ Robustesse<br/>Nb de chemins<br/>alternatifs"]
-    CRITERIA --> C3["🧱 Murs restants<br/>Bonus si l'adversaire<br/>approche du but"]
-    CRITERIA --> C4["🚶 Mobilité<br/>Nb de déplacements<br/>immédiats possibles"]
+    CRITERIA --> C1["📏 <b>Distance</b><br/>L'IA est-elle plus proche<br/>du but que l'adversaire ?"]
+    CRITERIA --> C2["🛡️ <b>Sécurité</b><br/>L'IA a-t-elle plusieurs<br/>chemins alternatifs ?"]
+    CRITERIA --> C3["🧱 <b>Murs restants</b><br/>L'IA peut-elle encore<br/>bloquer l'adversaire ?"]
+    CRITERIA --> C4["🚶 <b>Mobilité</b><br/>L'IA a-t-elle beaucoup<br/>de cases accessibles ?"]
 
     C1 --> COMBINE
     C2 --> COMBINE
     C3 --> COMBINE
     C4 --> COMBINE
 
-    COMBINE["Score = Σ (critère × poids)"] --> RETURN_SCORE(["↩ Retourner score"])
+    COMBINE["Calculer le score final<br/>= somme pondérée des critères"] --> RETURN_SCORE(["↩ Retourner le score"])
 
     style EVAL_START fill:#FF5722,color:#fff
     style WIN fill:#4CAF50,color:#fff
@@ -127,17 +127,17 @@ flowchart TD
 
 ---
 
-## Optimisations de l'IA
+## Astuces d'optimisation de l'IA
 
 ```mermaid
 flowchart LR
-    subgraph "🚀 Optimisations"
+    subgraph "🚀 Comment l'IA accélère sa réflexion"
         direction TB
-        OPT1["<b>Move Ordering</b><br/>Trier les coups par score<br/>pour élaguer plus tôt"]
-        OPT2["<b>Table de Transposition</b><br/>Cache des états déjà<br/>évalués (hash → score)"]
-        OPT3["<b>Lazy Wall Validation</b><br/>Vérifier si le mur coupe<br/>le chemin courant d'abord"]
-        OPT4["<b>BFS Inversé</b><br/>Calculer toutes les distances<br/>en un seul parcours"]
-        OPT5["<b>Murs Stratégiques</b><br/>Ne considérer que ~20 murs<br/>proches des chemins"]
+        OPT1["<b>Tri des coups</b><br/>Évaluer les coups prometteurs<br/>en premier pour couper plus vite"]
+        OPT2["<b>Mémoire des positions</b><br/>Ne jamais recalculer une<br/>position déjà analysée"]
+        OPT3["<b>Validation rapide des murs</b><br/>Vérifier d'abord si le mur<br/>gêne un chemin existant"]
+        OPT4["<b>Calcul de distances en bloc</b><br/>Calculer toutes les distances<br/>en un seul parcours du plateau"]
+        OPT5["<b>Sélection de murs malins</b><br/>Ne considérer que les murs<br/>proches des chemins des joueurs"]
     end
 
     OPT1 --- OPT2 --- OPT3 --- OPT4 --- OPT5
@@ -151,4 +151,4 @@ flowchart LR
 
 ---
 
-> **Complexité :** Sans Alpha-Bêta → O(b^d). Avec Alpha-Bêta → O(b^(d/2)). Profondeur typique : 2 à 5 selon la difficulté.
+> **En résumé :** L'IA imagine les prochains coups à l'avance, suppose que l'adversaire joue au mieux, et choisit le coup qui lui donne le plus d'avantage. Plus la difficulté est élevée, plus elle anticipe de coups (2 à 5 coups d'avance).

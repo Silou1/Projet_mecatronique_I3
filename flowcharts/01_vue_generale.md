@@ -9,18 +9,18 @@ Ce diagramme présente le flux principal du programme Quoridor, de son lancement
 ```mermaid
 graph LR
     subgraph Interface
-        MAIN["main.py<br/>(Interface Console)"]
+        MAIN["Interface Console<br/>(Affichage + Saisie)"]
     end
 
     subgraph Moteur
-        CORE["core.py<br/>(Logique du Jeu)"]
-        AI_MOD["ai.py<br/>(Intelligence Artificielle)"]
+        CORE["Moteur de Jeu<br/>(Règles + État)"]
+        AI_MOD["Intelligence Artificielle<br/>(Stratégie + Décision)"]
     end
 
-    USER["👤 Utilisateur"] <-->|Commandes / Affichage| MAIN
-    MAIN -->|play_move, get_state| CORE
-    MAIN -->|find_best_move| AI_MOD
-    AI_MOD -->|move_pawn, place_wall<br/>get_possible_moves| CORE
+    USER["👤 Joueur"] <-->|Commandes / Affichage| MAIN
+    MAIN -->|Transmettre les coups<br/>Récupérer l'état| CORE
+    MAIN -->|Demander le meilleur coup| AI_MOD
+    AI_MOD -->|Simuler des coups<br/>Vérifier les règles| CORE
 ```
 
 ---
@@ -29,51 +29,51 @@ graph LR
 
 ```mermaid
 flowchart TD
-    START(["▶ Lancement<br/>python main.py"]) --> MODE
+    START(["▶ Lancement du jeu"]) --> MODE
 
-    MODE{"Sélection du<br/>mode de jeu"}
-    MODE -->|"1"| PVP["Mode Joueur vs Joueur"]
-    MODE -->|"2"| PVIA["Mode Joueur vs IA"]
-    PVIA --> DIFF{"Sélection<br/>difficulté"}
-    DIFF -->|"1"| EASY["Facile (profondeur 2)"]
-    DIFF -->|"2"| NORMAL["Normal (profondeur 4)"]
-    DIFF -->|"3"| HARD["Difficile (profondeur 5)"]
+    MODE{"Choix du mode<br/>de jeu"}
+    MODE -->|"1"| PVP["Joueur vs Joueur"]
+    MODE -->|"2"| PVIA["Joueur vs IA"]
+    PVIA --> DIFF{"Choix de la<br/>difficulté"}
+    DIFF -->|"Facile"| EASY["IA rapide, peu stratégique"]
+    DIFF -->|"Normal"| NORMAL["IA équilibrée"]
+    DIFF -->|"Difficile"| HARD["IA lente mais redoutable"]
     EASY --> INIT
     NORMAL --> INIT
     HARD --> INIT
     PVP --> INIT
 
-    INIT["Initialisation<br/>QuoridorGame()"] --> WELCOME["Écran de bienvenue<br/>+ règles"]
+    INIT["Créer une nouvelle partie<br/>Plateau vierge, pions au centre"] --> WELCOME["Afficher les règles<br/>et les objectifs"]
     WELCOME --> LOOP
 
     LOOP{"La partie<br/>est-elle<br/>terminée ?"}
-    LOOP -->|Non| DISPLAY["Afficher le plateau<br/>display_board()"]
+    LOOP -->|Non| DISPLAY["Afficher le plateau<br/>avec pions et murs"]
     LOOP -->|Oui| END_GAME
 
-    DISPLAY --> WHO{"Qui joue ?"}
-    WHO -->|"Tour IA<br/>(mode PvIA + J2)"| AI_TURN
-    WHO -->|"Tour Humain"| HUMAN_TURN
+    DISPLAY --> WHO{"À qui<br/>le tour ?"}
+    WHO -->|"Tour de l'IA"| AI_TURN
+    WHO -->|"Tour du Joueur"| HUMAN_TURN
 
     %% --- Tour IA ---
-    AI_TURN["🤖 L'IA réfléchit...<br/>find_best_move()"] --> AI_PLAY["Jouer le coup IA<br/>play_move()"]
-    AI_PLAY --> AI_DISPLAY["Afficher le coup IA<br/>+ temps de réflexion"]
+    AI_TURN["🤖 L'IA analyse la situation<br/>et choisit le meilleur coup"] --> AI_PLAY["Appliquer le coup de l'IA"]
+    AI_PLAY --> AI_DISPLAY["Afficher quel coup<br/>l'IA a joué"]
     AI_DISPLAY --> LOOP
 
     %% --- Tour Humain ---
-    HUMAN_TURN["Saisie commande<br/>prompt_for_move()"] --> PARSE{"Type de<br/>commande ?"}
+    HUMAN_TURN["Attendre la commande<br/>du joueur"] --> PARSE{"Que veut faire<br/>le joueur ?"}
 
-    PARSE -->|"d case"| MOVE_CMD["Déplacement<br/>('deplacement', coord)"]
-    PARSE -->|"m h/v case"| WALL_CMD["Placement mur<br/>('mur', wall)"]
-    PARSE -->|"undo"| UNDO_CMD["Annuler<br/>undo_move()"]
-    PARSE -->|"moves / ?"| SHOW_MOVES["Afficher coups<br/>possibles"]
-    PARSE -->|"help / h"| HELP["Afficher aide"]
-    PARSE -->|"quit / q"| QUIT_CONFIRM{"Confirmer<br/>quitter ?"}
+    PARSE -->|"Déplacer<br/>son pion"| MOVE_CMD["Déplacer vers<br/>la case indiquée"]
+    PARSE -->|"Poser<br/>un mur"| WALL_CMD["Placer un mur<br/>à l'endroit choisi"]
+    PARSE -->|"Annuler"| UNDO_CMD["Revenir au<br/>coup précédent"]
+    PARSE -->|"Voir les<br/>coups possibles"| SHOW_MOVES["Afficher les cases<br/>accessibles"]
+    PARSE -->|"Aide"| HELP["Afficher les<br/>commandes"]
+    PARSE -->|"Quitter"| QUIT_CONFIRM{"Confirmer<br/>l'abandon ?"}
 
     MOVE_CMD --> TRY_PLAY
     WALL_CMD --> TRY_PLAY
-    TRY_PLAY["play_move()"] --> VALID{"Coup<br/>valide ?"}
+    TRY_PLAY["Vérifier et appliquer<br/>le coup"] --> VALID{"Le coup respecte<br/>les règles ?"}
     VALID -->|Oui| LOOP
-    VALID -->|Non| ERROR["❌ Afficher erreur<br/>InvalidMoveError"] --> LOOP
+    VALID -->|Non| ERROR["❌ Afficher pourquoi<br/>le coup est invalide"] --> LOOP
 
     UNDO_CMD --> LOOP
     SHOW_MOVES --> HUMAN_TURN
@@ -82,7 +82,7 @@ flowchart TD
     QUIT_CONFIRM -->|Non| HUMAN_TURN
 
     %% --- Fin de partie ---
-    END_GAME["🎉 Afficher le gagnant<br/>get_winner()"] --> END_SCREEN(["Fin du programme"])
+    END_GAME["🎉 Annoncer le gagnant"] --> END_SCREEN(["Fin du programme"])
 
     %% --- Styles ---
     style START fill:#4CAF50,color:#fff
@@ -94,4 +94,4 @@ flowchart TD
 
 ---
 
-> **Légende :** Le flux principal alterne entre l'affichage du plateau et la gestion des tours (humain ou IA) jusqu'à la victoire d'un joueur.
+> **Légende :** Le programme alterne entre l'affichage du plateau et la gestion des tours (joueur humain ou IA) jusqu'à ce qu'un joueur atteigne le côté opposé du plateau.

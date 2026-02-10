@@ -1,31 +1,33 @@
 # 🖥️ Gestion et Affichage du Plateau
 
-Ce diagramme explique comment l'état du jeu est structuré, stocké, et affiché dans le terminal.
+Ce diagramme explique comment l'état du jeu est structuré, stocké et affiché dans le terminal.
 
 ---
 
-## Structure de Données : GameState
+## Structure de l'État du Jeu
+
+Toutes les informations d'une partie sont regroupées dans un **état de jeu** immuable (non modifiable une fois créé).
 
 ```mermaid
 flowchart TD
-    GS(["GameState<br/>(immuable)"]) --> POS["player_positions<br/>{'j1': (8,4), 'j2': (0,4)}"]
-    GS --> WALLS["walls<br/>frozenset de murs posés<br/>ex: ('h', 3, 4, 2)"]
-    GS --> PW["player_walls<br/>{'j1': 10, 'j2': 10}<br/>murs restants"]
-    GS --> CP["current_player<br/>'j1' ou 'j2'"]
+    GS(["État du Jeu<br/>(immuable)"]) --> POS["Position des pions<br/>Joueur 1 : case de départ en bas<br/>Joueur 2 : case de départ en haut"]
+    GS --> WALLS["Murs posés<br/>Liste de tous les murs<br/>présents sur le plateau"]
+    GS --> PW["Murs restants<br/>Chaque joueur commence<br/>avec 10 murs"]
+    GS --> CP["Tour actuel<br/>Quel joueur doit jouer"]
 
     subgraph "Représentation d'un Mur"
-        WALL_DEF["(orientation, ligne, colonne, longueur)"]
-        WALL_H["'h' → Horizontal ━━━"]
-        WALL_V["'v' → Vertical ┃"]
+        WALL_DEF["Chaque mur est défini par :<br/>orientation + position"]
+        WALL_H["Horizontal ━━━<br/>bloque les déplacements verticaux"]
+        WALL_V["Vertical ┃<br/>bloque les déplacements horizontaux"]
         WALL_DEF --> WALL_H
         WALL_DEF --> WALL_V
     end
 
     WALLS -.-> WALL_DEF
 
-    subgraph "Coordonnées"
-        COORD_DEF["(ligne, colonne)<br/>0-indexé"]
-        COORD_EX["(0,0) = a1 coin haut-gauche<br/>(4,4) = e5 centre<br/>(8,8) = i9 coin bas-droite"]
+    subgraph "Système de Coordonnées"
+        COORD_DEF["Chaque case a une<br/>position (ligne, colonne)"]
+        COORD_EX["Exemples :<br/>a1 = coin haut-gauche<br/>e5 = centre du plateau<br/>i9 = coin bas-droite"]
         COORD_DEF --> COORD_EX
     end
 
@@ -40,27 +42,29 @@ flowchart TD
 
 ---
 
-## Gestion de l'Historique (Undo)
+## Gestion de l'Historique (Annuler un coup)
+
+Le jeu conserve un historique de tous les états précédents, ce qui permet d'annuler des coups.
 
 ```mermaid
 flowchart LR
-    subgraph "QuoridorGame"
-        HISTORY["_history : List"]
-        CURRENT["_current_state"]
+    subgraph "Mémoire du Jeu"
+        HISTORY["Historique<br/>(pile d'états passés)"]
+        CURRENT["État actuel"]
     end
 
-    subgraph "play_move()"
+    subgraph "Quand on joue un coup"
         direction TB
-        SAVE["1. Sauvegarder état<br/>actuel dans _history"]
-        PLAY["2. Créer nouvel état<br/>(immuable)"]
-        UPDATE["3. _current_state =<br/>nouvel état"]
+        SAVE["1. Sauvegarder l'état<br/>actuel dans l'historique"]
+        PLAY["2. Créer un nouvel état<br/>avec le coup appliqué"]
+        UPDATE["3. Le nouvel état<br/>devient l'état actuel"]
         SAVE --> PLAY --> UPDATE
     end
 
-    subgraph "undo_move()"
+    subgraph "Quand on annule"
         direction TB
-        POP["1. Récupérer dernier<br/>état de _history"]
-        RESTORE["2. _current_state =<br/>état précédent"]
+        POP["1. Récupérer le dernier<br/>état de l'historique"]
+        RESTORE["2. Cet état redevient<br/>l'état actuel"]
         POP --> RESTORE
     end
 
@@ -70,81 +74,85 @@ flowchart LR
 
 ---
 
-## Conversion Coordonnées
+## Conversion des Coordonnées
+
+Le joueur utilise une notation intuitive (type échecs), que le programme convertit en coordonnées internes.
 
 ```mermaid
 flowchart LR
-    subgraph "Notation Utilisateur"
-        USER_N["'e5'<br/>lettre + chiffre"]
+    subgraph "Ce que tape le joueur"
+        USER_N["'e5'<br/>lettre (colonne) + chiffre (ligne)"]
     end
 
-    subgraph "_parse_coord()"
-        PARSE_COL["col = ord('e') - ord('a') = 4"]
-        PARSE_ROW["row = 5 - 1 = 4"]
+    subgraph "Conversion → Interne"
+        PARSE_COL["Colonne : e → 5ème colonne"]
+        PARSE_ROW["Ligne : 5 → 5ème ligne"]
     end
 
-    subgraph "Coordonnées Internes"
-        INTERNAL["(4, 4)<br/>(ligne, colonne)"]
+    subgraph "Ce que le programme utilise"
+        INTERNAL["(4, 4)<br/>indices à partir de 0"]
     end
 
-    subgraph "_coord_to_notation()"
-        BACK_COL["chr(ord('a') + 4) = 'e'"]
-        BACK_ROW["4 + 1 = 5"]
+    subgraph "Conversion → Affichage"
+        BACK_COL["5ème colonne → e"]
+        BACK_ROW["5ème ligne → 5"]
     end
 
-    USER_N -->|"_parse_coord()"| PARSE_COL
+    USER_N -->|"Saisie joueur"| PARSE_COL
     PARSE_COL --> INTERNAL
     PARSE_ROW --> INTERNAL
-    INTERNAL -->|"_coord_to_notation()"| BACK_COL
+    INTERNAL -->|"Affichage"| BACK_COL
     BACK_COL --> USER_N
     BACK_ROW --> USER_N
 ```
 
 ---
 
-## Processus d'Affichage du Plateau
+## Comment le Plateau est Affiché
+
+Le plateau de 9×9 cases est converti en une grille de 17×17 caractères pour pouvoir dessiner les murs entre les cases.
 
 ```mermaid
 flowchart TD
-    START(["display_board(game)"]) --> STATE["Récupérer l'état<br/>game.get_current_state()"]
+    START(["Afficher le plateau"]) --> STATE["Récupérer l'état<br/>actuel du jeu"]
 
     STATE --> STEP1
 
-    subgraph "Étape 1 : Grille Vide"
-        STEP1["Créer grille 17×17<br/>(9 cases × 2 - 1)"]
+    subgraph "Étape 1 : Créer la grille vide"
+        STEP1["Grille de 17×17 espaces<br/>(9 cases × 2 - 1 = 17)"]
     end
 
     STEP1 --> STEP2
 
-    subgraph "Étape 2 : Cases"
-        STEP2["Placer '·' sur chaque case<br/>position (r×2, c×2)"]
+    subgraph "Étape 2 : Placer les cases"
+        STEP2["Dessiner '·' pour<br/>chaque case du plateau"]
     end
 
     STEP2 --> STEP3
 
-    subgraph "Étape 3 : Murs"
-        STEP3{"Pour chaque mur<br/>dans state.walls"}
-        STEP3 --> H_WALL["Horizontal :<br/>3× '━' sur ligne impaire"]
-        STEP3 --> V_WALL["Vertical :<br/>3× '┃' sur colonne impaire"]
+    subgraph "Étape 3 : Dessiner les murs"
+        STEP3{"Pour chaque<br/>mur posé"}
+        STEP3 --> H_WALL["Mur horizontal → '━━━'<br/>sur une ligne entre deux rangées"]
+        STEP3 --> V_WALL["Mur vertical → '┃' × 3<br/>sur une colonne entre deux colonnes"]
     end
 
     H_WALL --> STEP4
     V_WALL --> STEP4
 
-    subgraph "Étape 4 : Pions"
-        STEP4["Placer '1' (bleu) en J1<br/>Placer '2' (rouge) en J2"]
+    subgraph "Étape 4 : Placer les pions"
+        STEP4["Joueur 1 → '1' en bleu<br/>Joueur 2 → '2' en rouge"]
     end
 
     STEP4 --> STEP5
 
-    subgraph "Étape 5 : Rendu"
-        STEP5["Effacer l'écran<br/>clear_screen()"]
-        STEP5 --> HEADER["Titre + en-tête colonnes<br/>a b c d e f g h i"]
-        HEADER --> ROWS["Afficher chaque ligne :<br/>• Paire → numéro + cases<br/>• Impaire → espaces murs"]
-        ROWS --> INFO["Murs restants + aide"]
+    subgraph "Étape 5 : Afficher le résultat"
+        STEP5["Effacer l'écran"]
+        STEP5 --> HEADER["Dessiner le titre du jeu<br/>+ légende des colonnes (a-i)"]
+        HEADER --> ROWS["Afficher ligne par ligne :<br/>• Lignes avec cases (numérotées 1-9)<br/>• Lignes avec murs (entre les cases)"]
+        ROWS --> INFO["Afficher les murs restants<br/>de chaque joueur"]
     end
 
-    INFO --> DONE(["✅ Affichage terminé"])
+    INFO --> DONE(["✅ Plateau affiché"])
 
     style START fill:#2196F3,color:#fff
     style DONE fill:#4CAF50,color:#fff
@@ -152,34 +160,36 @@ flowchart TD
 
 ---
 
-## Correspondance Grille 9×9 → Grille 17×17
+## Pourquoi 17×17 au lieu de 9×9 ?
 
 ```mermaid
 flowchart LR
-    subgraph "Plateau logique 9×9"
-        L1["Case (0,0)"]
-        L2["Case (0,1)"]
-        L3["Case (1,0)"]
+    subgraph "Plateau logique (9×9)"
+        L1["Case A"]
+        L2["Case B (à droite)"]
+        L3["Case C (en dessous)"]
     end
 
-    subgraph "Grille d'affichage 17×17"
-        G1["Position (0,0) → '·'"]
-        G2["Position (0,2) → '·'"]
-        G3["Position (2,0) → '·'"]
-        G12["Position (0,1) → mur vertical ?"]
-        G13["Position (1,0) → mur horizontal ?"]
+    subgraph "Grille d'affichage (17×17)"
+        G1["Position 0 → Case A"]
+        G12["Position 1 → Espace mur ?"]
+        G2["Position 2 → Case B"]
+        G13["Position 3 → Espace mur ?"]
+        G3["Position 4 → Case C"]
     end
 
-    L1 -->|"r×2, c×2"| G1
-    L2 -->|"r×2, c×2"| G2
-    L3 -->|"r×2, c×2"| G3
-    L1 -.->|"entre cases"| G12
-    L1 -.->|"entre cases"| G13
+    L1 -->|"× 2"| G1
+    L2 -->|"× 2"| G2
+    L3 -->|"× 2"| G3
+    L1 -.->|"entre les cases"| G12
+    L1 -.->|"entre les cases"| G13
 
     style G12 fill:#FFA726,color:#fff
     style G13 fill:#FFA726,color:#fff
 ```
 
+> Les positions **paires** contiennent les cases, les positions **impaires** sont réservées aux murs. C'est ce qui permet d'afficher les murs entre les cases.
+
 ---
 
-> **Principe clé :** La grille 17×17 intercale les cases (positions paires) et les espaces pour murs (positions impaires), permettant un rendu ASCII élégant avec murs visibles.
+> **Principe clé :** La grille 17×17 intercale les cases et les espaces pour murs, permettant un rendu ASCII élégant où chaque mur est visible entre les cases qu'il bloque.
