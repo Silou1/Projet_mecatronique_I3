@@ -101,7 +101,7 @@ flowchart TD
 flowchart TD
     WALL_START(["Le joueur veut<br/>poser un mur"]) --> W_TURN{"C'est bien<br/>son tour ?"}
     W_TURN -->|Non| W_ERR1(["❌ Pas votre tour"])
-    W_TURN -->|Oui| W_WALLS{"Il lui reste<br/>des murs ?<br/>(max 10)"}
+    W_TURN -->|Oui| W_WALLS{"Il lui reste<br/>des murs ?<br/>(max 6)"}
     W_WALLS -->|Non| W_ERR2(["❌ Plus de murs<br/>disponibles"])
     W_WALLS -->|Oui| VALIDATE
 

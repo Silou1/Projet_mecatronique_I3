@@ -12,12 +12,12 @@ Ce fichier contient toute la logique du jeu Quoridor :
 
 QUORIDOR - RÈGLES DU JEU :
 --------------------------
-Le Quoridor est un jeu de stratégie pour 2 joueurs sur un plateau 9x9.
-Chaque joueur possède un pion et 10 murs.
+Le Quoridor est un jeu de stratégie pour 2 joueurs sur un plateau 6x6.
+Chaque joueur possède un pion et 6 murs.
 
 OBJECTIF :
-- Joueur 1 (j1) : Partir de la ligne 9 (bas) et atteindre la ligne 1 (haut)
-- Joueur 2 (j2) : Partir de la ligne 1 (haut) et atteindre la ligne 9 (bas)
+- Joueur 1 (j1) : Partir de la ligne 6 (bas) et atteindre la ligne 1 (haut)
+- Joueur 2 (j2) : Partir de la ligne 1 (haut) et atteindre la ligne 6 (bas)
 
 À CHAQUE TOUR, un joueur peut :
 - Soit déplacer son pion d'une case (haut, bas, gauche, droite)
@@ -36,8 +36,8 @@ from collections import deque
 # =============================================================================
 
 # Type pour représenter une coordonnée sur le plateau (ligne, colonne)
-# Exemple : (0, 4) = ligne 0 (première ligne), colonne 4 (milieu)
-# Le plateau va de (0,0) en haut à gauche à (8,8) en bas à droite
+# Exemple : (0, 3) = ligne 0 (première ligne), colonne 3 (milieu)
+# Le plateau va de (0,0) en haut à gauche à (5,5) en bas à droite
 Coord = Tuple[int, int]
 
 # Type pour représenter un mur
@@ -58,11 +58,11 @@ Move = Tuple[str, Any]
 PLAYER_ONE = 'j1'  # Joueur 1 - commence en bas, doit aller en haut
 PLAYER_TWO = 'j2'  # Joueur 2 - commence en haut, doit aller en bas
 
-# Taille du plateau (9x9 cases)
-BOARD_SIZE = 9
+# Taille du plateau (6x6 cases)
+BOARD_SIZE = 6
 
 # Nombre de murs disponibles par joueur au début de la partie
-MAX_WALLS_PER_PLAYER = 10
+MAX_WALLS_PER_PLAYER = 6
 
 # =============================================================================
 # EXCEPTIONS PERSONNALISÉES
@@ -99,7 +99,7 @@ class GameState:
     -----------
     player_positions : Dict[str, Coord]
         Position de chaque joueur sur le plateau.
-        Exemple : {'j1': (8, 4), 'j2': (0, 4)}
+        Exemple : {'j1': (5, 3), 'j2': (0, 3)}
         
     walls : FrozenSet[Wall]
         Ensemble immuable des murs posés sur le plateau.
@@ -107,7 +107,7 @@ class GameState:
         
     player_walls : Dict[str, int]
         Nombre de murs restants pour chaque joueur.
-        Exemple : {'j1': 8, 'j2': 10} = j1 a utilisé 2 murs, j2 n'en a utilisé aucun
+        Exemple : {'j1': 4, 'j2': 6} = j1 a utilisé 2 murs, j2 n'en a utilisé aucun
         
     current_player : str
         Le joueur dont c'est le tour ('j1' ou 'j2').
@@ -147,7 +147,7 @@ class GameState:
         
         CONDITIONS DE VICTOIRE :
         - Joueur 1 gagne s'il atteint la ligne 0 (première ligne du plateau, en haut)
-        - Joueur 2 gagne s'il atteint la ligne 8 (index 8, dernière ligne du plateau, en bas)
+        - Joueur 2 gagne s'il atteint la ligne 5 (index 5, dernière ligne du plateau, en bas)
         
         Returns:
             Tuple (partie_terminée, gagnant)
@@ -162,7 +162,7 @@ class GameState:
         if pos_j1[0] == 0:
             return True, PLAYER_ONE
         
-        # Joueur 2 gagne en atteignant la dernière ligne (index 8, affichée '9')
+        # Joueur 2 gagne en atteignant la dernière ligne (index 5, affichée '6')
         if pos_j2[0] == BOARD_SIZE - 1:
             return True, PLAYER_TWO
         
@@ -179,10 +179,10 @@ def create_new_game() -> GameState:
     Crée et retourne un nouvel état de jeu pour le début d'une partie.
     
     CONFIGURATION INITIALE :
-    - Joueur 1 : position (8, 4) = centre de la dernière ligne (bas)
-    - Joueur 2 : position (0, 4) = centre de la première ligne (haut)
+    - Joueur 1 : position (5, 3) = centre de la dernière ligne (bas)
+    - Joueur 2 : position (0, 3) = centre de la première ligne (haut)
     - Aucun mur posé
-    - Chaque joueur a 10 murs disponibles
+    - Chaque joueur a 6 murs disponibles
     - C'est au tour du joueur 1
     
     Returns:
@@ -190,14 +190,14 @@ def create_new_game() -> GameState:
     """
     return GameState(
         player_positions={
-            # BOARD_SIZE // 2 = 4 = colonne centrale (e)
-            PLAYER_ONE: (BOARD_SIZE - 1, BOARD_SIZE // 2),  # Position initiale j1 : (8, 4) en bas
-            PLAYER_TWO: (0, BOARD_SIZE // 2)                # Position initiale j2 : (0, 4) en haut
+            # BOARD_SIZE // 2 = 3 = colonne centrale (d)
+            PLAYER_ONE: (BOARD_SIZE - 1, BOARD_SIZE // 2),  # Position initiale j1 : (5, 3) en bas
+            PLAYER_TWO: (0, BOARD_SIZE // 2)                # Position initiale j2 : (0, 3) en haut
         },
         walls=frozenset(),  # Aucun mur au début (frozenset pour être hashable)
         player_walls={
-            PLAYER_ONE: MAX_WALLS_PER_PLAYER,  # 10 murs pour j1
-            PLAYER_TWO: MAX_WALLS_PER_PLAYER   # 10 murs pour j2
+            PLAYER_ONE: MAX_WALLS_PER_PLAYER,  # 6 murs pour j1
+            PLAYER_TWO: MAX_WALLS_PER_PLAYER   # 6 murs pour j2
         },
         current_player=PLAYER_ONE  # Le joueur 1 commence
     )
@@ -553,7 +553,7 @@ def _validate_wall_placement(state: GameState, wall: Wall) -> None:
     # RÈGLE 1 : Vérifier que le mur est dans les limites du plateau
     # ═══════════════════════════════════════════════════════════════════════
     # Comme un mur a une longueur de 2, il ne peut pas commencer sur la
-    # dernière ligne ou colonne (indices 0 à 7 seulement, pas 8)
+    # dernière ligne ou colonne (indices 0 à 4 seulement, pas 5)
     if not (0 <= r < BOARD_SIZE - 1 and 0 <= c < BOARD_SIZE - 1):
         raise InvalidMoveError("Le mur est en dehors des limites de placement.")
 
@@ -643,7 +643,7 @@ def place_wall(state: GameState, player: str, wall: Wall) -> GameState:
     
     # Définir les objectifs de chaque joueur
     goal_j1 = lambda pos: pos[0] == 0              # J1 doit atteindre le haut (ligne index 0)
-    goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1  # J2 doit atteindre le bas (ligne index 8)
+    goal_j2 = lambda pos: pos[0] == BOARD_SIZE - 1  # J2 doit atteindre le bas (ligne index 5)
     
     # Vérifier que le joueur 1 peut encore atteindre son objectif
     if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):
@@ -781,7 +781,7 @@ class QuoridorGame:
         Crée un état de jeu initial avec :
         - Les deux pions au centre de leur ligne respective
         - Aucun mur posé
-        - 10 murs disponibles par joueur
+        - 6 murs disponibles par joueur
         - C'est au tour du joueur 1
         """
         # Historique vide au départ (aucun coup joué)
@@ -961,22 +961,22 @@ if __name__ == '__main__':
     print("\n--- Phase 2 : Déplacements ---")
     game = create_new_game()
     moves_j1 = get_possible_pawn_moves(game, PLAYER_ONE)
-    # J1 est en (8, 4), il peut aller en (7, 4), (8, 3), (8, 5)
-    assert set(moves_j1) == {(7, 4), (8, 3), (8, 5)}
+    # J1 est en (5, 3), il peut aller en (4, 3), (5, 2), (5, 4)
+    assert set(moves_j1) == {(4, 3), (5, 2), (5, 4)}
     print("✓ Mouvements de base")
     
-    game = move_pawn(game, PLAYER_ONE, (7, 4))
-    assert game.player_positions[PLAYER_ONE] == (7, 4)
+    game = move_pawn(game, PLAYER_ONE, (4, 3))
+    assert game.player_positions[PLAYER_ONE] == (4, 3)
     assert game.current_player == PLAYER_TWO
     print("✓ Déplacement et changement de joueur")
     
     # Tests de la Phase 3
     print("\n--- Phase 3 : Murs ---")
     game = create_new_game()
-    wall = ('h', 1, 4, 2)
+    wall = ('h', 1, 3, 2)
     game = place_wall(game, PLAYER_ONE, wall)
     assert wall in game.walls
-    assert game.player_walls[PLAYER_ONE] == 9
+    assert game.player_walls[PLAYER_ONE] == 5
     print("✓ Placement de mur")
     
     wall_test = interpret_double_click((2, 3), (2, 4))
@@ -989,24 +989,24 @@ if __name__ == '__main__':
     
     # Test 1: Jouer des coups
     assert partie.get_current_player() == PLAYER_ONE
-    partie.play_move(('deplacement', (7, 4)))
+    partie.play_move(('deplacement', (4, 3)))
     assert partie.get_current_player() == PLAYER_TWO
     print("✓ Jouer un déplacement")
     
-    partie.play_move(('mur', ('h', 1, 4, 2)))
+    partie.play_move(('mur', ('h', 1, 3, 2)))
     assert partie.get_current_player() == PLAYER_ONE
-    assert ('h', 1, 4, 2) in partie.get_current_state().walls
+    assert ('h', 1, 3, 2) in partie.get_current_state().walls
     print("✓ Jouer un mur")
     
     # Test 2: Annuler un coup
     partie.undo_move()
     assert partie.get_current_player() == PLAYER_TWO
-    assert ('h', 1, 4, 2) not in partie.get_current_state().walls
+    assert ('h', 1, 3, 2) not in partie.get_current_state().walls
     print("✓ Annulation de coup")
     
     # Test 3: Coup invalide
     try:
-        partie.play_move(('deplacement', (7, 4)))  # Case occupée
+        partie.play_move(('deplacement', (4, 3)))  # Case occupée
         assert False, "Le coup invalide aurait dû être rejeté"
     except InvalidMoveError:
         assert partie.get_current_player() == PLAYER_TWO
@@ -1014,9 +1014,9 @@ if __name__ == '__main__':
     
     # Test 4: Vérifier le gagnant
     victory_state = GameState(
-        player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
+        player_positions={PLAYER_ONE: (0, 3), PLAYER_TWO: (5, 3)},
         walls=frozenset(),
-        player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+        player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
         current_player=PLAYER_ONE
     )
     partie._current_state = victory_state

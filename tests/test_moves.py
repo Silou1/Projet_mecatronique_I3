@@ -24,22 +24,22 @@ class TestBasicMoves:
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
         assert len(moves) == 3
-        assert (7, 4) in moves  # Haut (vers l'objectif)
-        assert (8, 3) in moves  # Gauche
-        assert (8, 5) in moves  # Droite
+        assert (4, 3) in moves  # Haut (vers l'objectif)
+        assert (5, 2) in moves  # Gauche
+        assert (5, 4) in moves  # Droite
     
     def test_move_changes_position(self):
         """Déplacer un pion change sa position."""
         game = create_new_game()
-        new_game = move_pawn(game, PLAYER_ONE, (7, 4))
+        new_game = move_pawn(game, PLAYER_ONE, (4, 3))
         
-        assert new_game.player_positions[PLAYER_ONE] == (7, 4)
+        assert new_game.player_positions[PLAYER_ONE] == (4, 3)
         assert new_game.player_positions[PLAYER_TWO] == game.player_positions[PLAYER_TWO]
     
     def test_move_changes_turn(self):
         """Déplacer un pion change le joueur courant."""
         game = create_new_game()
-        new_game = move_pawn(game, PLAYER_ONE, (7, 4))
+        new_game = move_pawn(game, PLAYER_ONE, (4, 3))
         
         assert game.current_player == PLAYER_ONE
         assert new_game.current_player == PLAYER_TWO
@@ -50,7 +50,7 @@ class TestBasicMoves:
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
         # Pas de mouvement vers le bas (hors limites)
-        assert (9, 4) not in moves
+        assert (6, 3) not in moves
     
     def test_invalid_move_raises_error(self):
         """Un mouvement invalide lève une exception."""
@@ -73,31 +73,31 @@ class TestWallBlocking:
     def test_horizontal_wall_blocks_movement(self):
         """Un mur horizontal bloque le passage vertical."""
         game = GameState(
-            player_positions={PLAYER_ONE: (8, 4), PLAYER_TWO: (0, 4)},
-            walls=frozenset({('h', 7, 4, 2)}),  # Mur horizontal au-dessus de J1
-            player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
+            player_positions={PLAYER_ONE: (5, 3), PLAYER_TWO: (0, 3)},
+            walls=frozenset({('h', 4, 3, 2)}),  # Mur horizontal au-dessus de J1
+            player_walls={PLAYER_ONE: 5, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
-        assert (7, 4) not in moves  # Bloqué par le mur
-        assert (8, 3) in moves      # Peut aller à gauche
-        assert (8, 5) in moves      # Peut aller à droite
+        assert (4, 3) not in moves  # Bloqué par le mur
+        assert (5, 2) in moves      # Peut aller à gauche
+        assert (5, 4) in moves      # Peut aller à droite
     
     def test_vertical_wall_blocks_movement(self):
         """Un mur vertical bloque le passage horizontal."""
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (0, 4)},
-            walls=frozenset({('v', 4, 4, 2)}),  # Mur vertical à droite de J1
-            player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
+            player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (0, 3)},
+            walls=frozenset({('v', 2, 3, 2)}),  # Mur vertical à droite de J1
+            player_walls={PLAYER_ONE: 5, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
-        assert (4, 5) not in moves  # Bloqué par le mur
-        assert (4, 3) in moves      # Peut aller à gauche
+        assert (2, 4) not in moves  # Bloqué par le mur
+        assert (2, 2) in moves      # Peut aller à gauche
 
 
 class TestJumps:
@@ -106,59 +106,59 @@ class TestJumps:
     def test_simple_jump(self):
         """Saut simple par-dessus l'adversaire."""
         game = GameState(
-            player_positions={PLAYER_ONE: (3, 4), PLAYER_TWO: (4, 4)},
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (2, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
-        assert (5, 4) in moves  # Saut simple vers le bas
-        assert (4, 4) not in moves  # Ne peut pas occuper la case de l'adversaire
+        assert (3, 3) in moves  # Saut simple vers le bas
+        assert (2, 3) not in moves  # Ne peut pas occuper la case de l'adversaire
     
     def test_diagonal_jump_when_blocked(self):
         """Saut diagonal si le saut simple est bloqué."""
         game = GameState(
-            player_positions={PLAYER_ONE: (3, 4), PLAYER_TWO: (4, 4)},
-            walls=frozenset({('h', 4, 4, 2)}),  # Mur derrière J2
-            player_walls={PLAYER_ONE: 9, PLAYER_TWO: 10},
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (2, 3)},
+            walls=frozenset({('h', 2, 3, 2)}),  # Mur derrière J2
+            player_walls={PLAYER_ONE: 5, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
-        assert (5, 4) not in moves  # Saut simple bloqué
-        assert (4, 3) in moves      # Saut diagonal gauche
-        assert (4, 5) in moves      # Saut diagonal droite
+        assert (3, 3) not in moves  # Saut simple bloqué
+        assert (2, 2) in moves      # Saut diagonal gauche
+        assert (2, 4) in moves      # Saut diagonal droite
     
     def test_horizontal_face_off(self):
         """Face-à-face horizontal."""
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 3), PLAYER_TWO: (4, 4)},
+            player_positions={PLAYER_ONE: (2, 2), PLAYER_TWO: (2, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
-        assert (4, 5) in moves  # Saut simple horizontal
+        assert (2, 4) in moves  # Saut simple horizontal
     
     def test_jump_at_board_edge(self):
         """Saut diagonal quand l'adversaire est au bord."""
         game = GameState(
-            player_positions={PLAYER_ONE: (7, 4), PLAYER_TWO: (8, 4)},
+            player_positions={PLAYER_ONE: (4, 3), PLAYER_TWO: (5, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
         # Saut simple impossible (hors limites), donc sauts diagonaux
-        assert (8, 3) in moves  # Diagonal gauche
-        assert (8, 5) in moves  # Diagonal droite
+        assert (5, 2) in moves  # Diagonal gauche
+        assert (5, 4) in moves  # Diagonal droite
 
 
 class TestComplexScenarios:
@@ -167,30 +167,30 @@ class TestComplexScenarios:
     def test_surrounded_by_walls(self):
         """Pion avec des murs autour (mais pas complètement bloqué)."""
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},
+            player_positions={PLAYER_ONE: (2, 2), PLAYER_TWO: (5, 3)},
             walls=frozenset({
-                ('h', 3, 4, 2),  # Mur horizontal au-dessus
-                ('h', 4, 4, 2),  # Mur horizontal en dessous
+                ('h', 1, 2, 2),  # Mur horizontal au-dessus
+                ('h', 2, 2, 2),  # Mur horizontal en dessous
             }),
-            player_walls={PLAYER_ONE: 8, PLAYER_TWO: 8},
+            player_walls={PLAYER_ONE: 4, PLAYER_TWO: 4},
             current_player=PLAYER_ONE
         )
         
         moves = get_possible_pawn_moves(game, PLAYER_ONE)
         
         # Peut encore aller à gauche et à droite
-        assert (4, 3) in moves  # Gauche
-        assert (4, 5) in moves  # Droite
+        assert (2, 1) in moves  # Gauche
+        assert (2, 3) in moves  # Droite
         # Mais pas haut ou bas (bloqués par les murs)
-        assert (3, 4) not in moves
-        assert (5, 4) not in moves
+        assert (1, 2) not in moves
+        assert (3, 2) not in moves
     
     def test_corner_position(self):
         """Mouvements depuis un coin."""
         game = GameState(
-            player_positions={PLAYER_ONE: (0, 0), PLAYER_TWO: (8, 8)},
+            player_positions={PLAYER_ONE: (0, 0), PLAYER_TWO: (5, 5)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         

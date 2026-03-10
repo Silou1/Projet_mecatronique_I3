@@ -23,22 +23,22 @@ class TestPathfinding:
         """Distance au but depuis la position initiale."""
         game = create_new_game()
         
-        # J1 doit parcourir 8 cases pour atteindre la ligne 0 (haut)
+        # J1 doit parcourir 5 cases pour atteindre la ligne 0 (haut)
         distances_j1 = _get_all_distances_to_goal(game, PLAYER_ONE)
         distance_j1 = distances_j1.get(game.player_positions[PLAYER_ONE])
-        assert distance_j1 == 8
+        assert distance_j1 == 5
         
-        # J2 doit parcourir 8 cases pour atteindre la ligne 8 (bas)
+        # J2 doit parcourir 5 cases pour atteindre la ligne 5 (bas)
         distances_j2 = _get_all_distances_to_goal(game, PLAYER_TWO)
         distance_j2 = distances_j2.get(game.player_positions[PLAYER_TWO])
-        assert distance_j2 == 8
+        assert distance_j2 == 5
     
     def test_shortest_path_with_wall(self):
         """Le chemin change avec un mur."""
         game = create_new_game()
         
         # Ajouter un mur qui ne bloque pas complètement
-        game = place_wall(game, PLAYER_ONE, ('h', 0, 3, 2))
+        game = place_wall(game, PLAYER_ONE, ('h', 0, 2, 2))
         
         # La distance peut changer mais doit rester finie
         distances_j2 = _get_all_distances_to_goal(game, PLAYER_TWO)
@@ -48,9 +48,9 @@ class TestPathfinding:
     def test_path_near_goal(self):
         """Distance correcte près du but."""
         game = GameState(
-            player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (4, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
@@ -96,9 +96,9 @@ class TestEvaluationFunction:
         
         # J1 a gagné (atteint ligne 0)
         winning_state = GameState(
-            player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
+            player_positions={PLAYER_ONE: (0, 3), PLAYER_TWO: (5, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
@@ -109,11 +109,11 @@ class TestEvaluationFunction:
         """Position perdante = score minimal."""
         ia = AI(PLAYER_ONE, depth=2)
         
-        # J2 a gagné (atteint ligne 8)
+        # J2 a gagné (atteint ligne 5)
         losing_state = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},
+            player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (5, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_TWO
         )
         
@@ -124,19 +124,19 @@ class TestEvaluationFunction:
         """Plus proche du but = meilleur score."""
         ia = AI(PLAYER_ONE, depth=2)
         
-        # J1 à 2 cases du but (ligne 0)
+        # J1 à 1 case du but (ligne 0)
         close_state = GameState(
-            player_positions={PLAYER_ONE: (2, 4), PLAYER_TWO: (6, 4)},
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (4, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
-        # J1 à 4 cases du but (ligne 0)
+        # J1 à 3 cases du but (ligne 0)
         far_state = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (6, 4)},
+            player_positions={PLAYER_ONE: (3, 3), PLAYER_TWO: (4, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
@@ -150,16 +150,16 @@ class TestEvaluationFunction:
         ia = AI(PLAYER_ONE, depth=2)
         
         state_more_walls = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (4, 4)},
+            player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (3, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 8, PLAYER_TWO: 5},  # J1 a 3 murs de plus
+            player_walls={PLAYER_ONE: 5, PLAYER_TWO: 2},  # J1 a 3 murs de plus
             current_player=PLAYER_ONE
         )
         
         state_equal_walls = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (4, 4)},
+            player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (3, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 7, PLAYER_TWO: 7},
+            player_walls={PLAYER_ONE: 4, PLAYER_TWO: 4},
             current_player=PLAYER_ONE
         )
         
@@ -175,7 +175,7 @@ class TestAIDecisions:
     def test_ai_finds_valid_move(self):
         """L'IA trouve toujours un coup valide."""
         game = create_new_game()
-        game = move_pawn(game, PLAYER_ONE, (7, 4))  # Tour de J2
+        game = move_pawn(game, PLAYER_ONE, (4, 3))  # Tour de J2
         
         ia = AI(PLAYER_TWO, depth=2)
         move = ia.find_best_move(game, verbose=False)
@@ -185,28 +185,28 @@ class TestAIDecisions:
     
     def test_ai_wins_in_one_move(self):
         """L'IA trouve le coup gagnant quand elle peut gagner en 1 coup."""
-        # J2 est à une case de la victoire (ligne 8)
+        # J2 est à une case de la victoire (ligne 5)
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (7, 4)},  # J1 loin
+            player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (4, 3)},  # J1 loin
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
+            player_walls={PLAYER_ONE: 3, PLAYER_TWO: 3},
             current_player=PLAYER_TWO
         )
         
         ia = AI(PLAYER_TWO, depth=3, difficulty='facile')  # Profondeur 3 pour voir la victoire
         move = ia.find_best_move(game, verbose=False)
         
-        # L'IA devrait se déplacer vers (8, 4) pour gagner
+        # L'IA devrait se déplacer vers (5, 3) pour gagner
         assert move[0] == 'deplacement'
-        assert move[1] == (8, 4)
+        assert move[1] == (5, 3)
     
     def test_ai_blocks_opponent_win(self):
         """L'IA bloque l'adversaire qui peut gagner au prochain tour."""
         # J1 est à une case de la victoire (ligne 0), c'est le tour de J2
         game = GameState(
-            player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (4, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
+            player_walls={PLAYER_ONE: 3, PLAYER_TWO: 3},
             current_player=PLAYER_TWO
         )
         
@@ -220,7 +220,7 @@ class TestAIDecisions:
     def test_ai_doesnt_make_invalid_move(self):
         """L'IA ne fait jamais de coup invalide."""
         game = create_new_game()
-        game = move_pawn(game, PLAYER_ONE, (7, 4))
+        game = move_pawn(game, PLAYER_ONE, (4, 3))
         
         ia = AI(PLAYER_TWO, depth=2)
         move = ia.find_best_move(game, verbose=False)
@@ -239,12 +239,15 @@ class TestAIDecisions:
     
     def test_ai_doesnt_block_itself(self):
         """L'IA ne se bloque jamais complètement elle-même."""
+        from quoridor_engine.core import get_possible_pawn_moves
         game = create_new_game()
         
         ia = AI(PLAYER_ONE, depth=2)
         
         # Jouer plusieurs coups
         for _ in range(5):
+            if game.is_game_over()[0]:
+                break
             if game.current_player == PLAYER_ONE:
                 move = ia.find_best_move(game, verbose=False)
                 
@@ -253,8 +256,12 @@ class TestAIDecisions:
                 else:
                     game = place_wall(game, PLAYER_ONE, move[1])
             else:
-                # J2 avance simple vers le bas (ligne 8)
-                game = move_pawn(game, PLAYER_TWO, (game.player_positions[PLAYER_TWO][0] + 1, 4))
+                # J2 choisit le premier déplacement disponible vers le bas
+                moves = get_possible_pawn_moves(game, PLAYER_TWO)
+                # Préférer avancer vers le bas (augmenter la ligne)
+                moves_down = [m for m in moves if m[0] > game.player_positions[PLAYER_TWO][0]]
+                target = moves_down[0] if moves_down else moves[0]
+                game = move_pawn(game, PLAYER_TWO, target)
         
         # J1 doit toujours avoir un chemin vers le but
         distances = _get_all_distances_to_goal(game, PLAYER_ONE)
@@ -323,7 +330,7 @@ class TestTranspositionTable:
     def test_state_hash_uniqueness(self):
         """Différents états ont des hash différents."""
         game1 = create_new_game()
-        game2 = move_pawn(game1, PLAYER_ONE, (7, 4))
+        game2 = move_pawn(game1, PLAYER_ONE, (4, 3))
         
         ia = AI(PLAYER_ONE, depth=2)
         hash1 = ia._state_hash(game1)
@@ -372,9 +379,9 @@ class TestEdgeCases:
     def test_ai_with_no_walls_left(self):
         """L'IA fonctionne sans murs restants."""
         game = GameState(
-            player_positions={PLAYER_ONE: (2, 4), PLAYER_TWO: (6, 4)},
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (4, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 0},  # J2 n'a plus de murs
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 0},  # J2 n'a plus de murs
             current_player=PLAYER_TWO
         )
         
@@ -387,7 +394,7 @@ class TestEdgeCases:
     def test_ai_near_end_game(self):
         """L'IA fonctionne en fin de partie."""
         game = GameState(
-            player_positions={PLAYER_ONE: (6, 4), PLAYER_TWO: (2, 4)},
+            player_positions={PLAYER_ONE: (4, 3), PLAYER_TWO: (1, 3)},
             walls=frozenset(),
             player_walls={PLAYER_ONE: 2, PLAYER_TWO: 2},
             current_player=PLAYER_ONE

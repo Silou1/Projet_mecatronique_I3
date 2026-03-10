@@ -21,12 +21,12 @@ class TestWallPlacement:
     def test_place_valid_wall(self):
         """Placer un mur valide."""
         game = create_new_game()
-        wall = ('h', 1, 4, 2)
+        wall = ('h', 1, 3, 2)
         
         new_game = place_wall(game, PLAYER_ONE, wall)
         
         assert wall in new_game.walls
-        assert new_game.player_walls[PLAYER_ONE] == 9
+        assert new_game.player_walls[PLAYER_ONE] == 5
         assert new_game.current_player == PLAYER_TWO
     
     def test_place_horizontal_wall(self):
@@ -50,12 +50,12 @@ class TestWallPlacement:
     def test_wall_count_decreases(self):
         """Le nombre de murs diminue après placement."""
         game = create_new_game()
-        wall = ('h', 1, 4, 2)
+        wall = ('h', 1, 3, 2)
         
         new_game = place_wall(game, PLAYER_ONE, wall)
         
-        assert new_game.player_walls[PLAYER_ONE] == 9
-        assert new_game.player_walls[PLAYER_TWO] == 10
+        assert new_game.player_walls[PLAYER_ONE] == 5
+        assert new_game.player_walls[PLAYER_TWO] == 6
 
 
 class TestWallValidation:
@@ -67,16 +67,16 @@ class TestWallValidation:
         
         # Mur trop haut
         with pytest.raises(InvalidMoveError, match="limites"):
-            place_wall(game, PLAYER_ONE, ('h', -1, 4, 2))
+            place_wall(game, PLAYER_ONE, ('h', -1, 3, 2))
         
-        # Mur trop bas
+        # Mur trop bas (indice >= BOARD_SIZE - 1 = 5)
         with pytest.raises(InvalidMoveError, match="limites"):
-            place_wall(game, PLAYER_ONE, ('h', 8, 4, 2))
+            place_wall(game, PLAYER_ONE, ('h', 5, 3, 2))
     
     def test_cannot_place_duplicate_wall(self):
         """Impossible de placer deux fois le même mur."""
         game = create_new_game()
-        wall = ('h', 1, 4, 2)
+        wall = ('h', 1, 3, 2)
         
         game = place_wall(game, PLAYER_ONE, wall)
         
@@ -110,21 +110,21 @@ class TestWallValidation:
     def test_cannot_place_without_walls_left(self):
         """Impossible de placer un mur si on n'en a plus."""
         game = GameState(
-            player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
+            player_positions={PLAYER_ONE: (0, 3), PLAYER_TWO: (5, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 0, PLAYER_TWO: 10},  # Plus de murs pour J1
+            player_walls={PLAYER_ONE: 0, PLAYER_TWO: 6},  # Plus de murs pour J1
             current_player=PLAYER_ONE
         )
         
         with pytest.raises(InvalidMoveError, match="plus de murs"):
-            place_wall(game, PLAYER_ONE, ('h', 1, 4, 2))
+            place_wall(game, PLAYER_ONE, ('h', 1, 3, 2))
     
     def test_wrong_player_turn(self):
         """Impossible de placer un mur hors de son tour."""
         game = create_new_game()
         
         with pytest.raises(InvalidMoveError):
-            place_wall(game, PLAYER_TWO, ('h', 6, 4, 2))
+            place_wall(game, PLAYER_TWO, ('h', 3, 3, 2))
 
 
 class TestWallBlocking:
@@ -133,16 +133,16 @@ class TestWallBlocking:
     def test_cannot_block_player_completely(self):
         """Impossible de bloquer complètement le chemin d'un joueur."""
         # Créer une situation où J1 est presque coincé
-        # J1 est en (8, 0), son but est la ligne 0
+        # J1 est en (5, 0), son but est la ligne 0
         game = GameState(
-            player_positions={PLAYER_ONE: (8, 0), PLAYER_TWO: (0, 4)},
-            walls=frozenset({('v', 7, 1, 2)}),  # Mur vertical à droite
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 9},
+            player_positions={PLAYER_ONE: (5, 0), PLAYER_TWO: (0, 3)},
+            walls=frozenset({('v', 4, 1, 2)}),  # Mur vertical à droite
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 5},
             current_player=PLAYER_TWO
         )
         
         # Tenter de bloquer la dernière sortie (au-dessus de J1)
-        blocking_wall = ('h', 7, 0, 2)
+        blocking_wall = ('h', 4, 0, 2)
         
         with pytest.raises(InvalidMoveError, match="bloque.*chemin"):
             place_wall(game, PLAYER_TWO, blocking_wall)
@@ -150,14 +150,14 @@ class TestWallBlocking:
     def test_wall_must_leave_path_for_both_players(self):
         """Un mur doit laisser un chemin pour les deux joueurs."""
         game = GameState(
-            player_positions={PLAYER_ONE: (7, 1), PLAYER_TWO: (1, 7)},
+            player_positions={PLAYER_ONE: (4, 1), PLAYER_TWO: (1, 4)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
         # Un mur qui ne bloque personne devrait passer
-        valid_wall = ('h', 4, 4, 2)
+        valid_wall = ('h', 2, 2, 2)
         new_game = place_wall(game, PLAYER_ONE, valid_wall)
         
         assert valid_wall in new_game.walls
@@ -220,22 +220,22 @@ class TestWallStrategies:
         
         # J1 place un mur
         game = place_wall(game, PLAYER_ONE, ('h', 1, 2, 2))
-        assert game.player_walls[PLAYER_ONE] == 9
+        assert game.player_walls[PLAYER_ONE] == 5
         
         # J2 place un mur
-        game = place_wall(game, PLAYER_TWO, ('v', 6, 5, 2))
-        assert game.player_walls[PLAYER_TWO] == 9
+        game = place_wall(game, PLAYER_TWO, ('v', 3, 4, 2))
+        assert game.player_walls[PLAYER_TWO] == 5
         
         # J1 place un autre mur
-        game = place_wall(game, PLAYER_ONE, ('h', 3, 4, 2))
-        assert game.player_walls[PLAYER_ONE] == 8
+        game = place_wall(game, PLAYER_ONE, ('h', 3, 1, 2))
+        assert game.player_walls[PLAYER_ONE] == 4
     
     def test_wall_affects_pathfinding(self):
         """Un mur change les chemins disponibles."""
         game = create_new_game()
         
         # Placer un mur qui pourrait affecter le chemin
-        wall = ('h', 0, 4, 2)
+        wall = ('h', 0, 3, 2)
         game = place_wall(game, PLAYER_ONE, wall)
         
         # Le mur doit être présent

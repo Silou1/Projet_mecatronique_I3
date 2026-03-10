@@ -95,10 +95,10 @@ def _get_all_distances_to_goal(state: GameState, player: str) -> Dict[Tuple[int,
     EXEMPLE pour J1 (objectif = ligne 0) :
     --------------------------------------
     Distances résultantes (sans murs) :
-        0 0 0 0 0 0 0 0 0   ← Ligne objectif (distance 0)
-        1 1 1 1 1 1 1 1 1
-        2 2 2 2 2 2 2 2 2
-        3 3 3 3 3 3 3 3 3
+        0 0 0 0 0 0   ← Ligne objectif (distance 0)
+        1 1 1 1 1 1
+        2 2 2 2 2 2
+        3 3 3 3 3 3
         ...
     
     Args:
@@ -112,7 +112,7 @@ def _get_all_distances_to_goal(state: GameState, player: str) -> Dict[Tuple[int,
     distances: Dict[Tuple[int, int], int] = {}
     
     # Déterminer la ligne d'objectif selon le joueur
-    # J1 veut atteindre la ligne 0, J2 veut atteindre la ligne 8
+    # J1 veut atteindre la ligne 0, J2 veut atteindre la ligne 5
     goal_row = 0 if player == PLAYER_ONE else BOARD_SIZE - 1
     
     # File BFS : initialiser avec toutes les cases de la ligne d'objectif
@@ -537,9 +537,9 @@ class AI:
         my_pos = state.player_positions[self.player]
         opp_pos = state.player_positions[self.opponent]
         
-        # Distance au centre (colonne 4)
-        my_center_dist = abs(my_pos[1] - 4)
-        opp_center_dist = abs(opp_pos[1] - 4)
+        # Distance au centre (colonne centrale)
+        my_center_dist = abs(my_pos[1] - BOARD_SIZE // 2)
+        opp_center_dist = abs(opp_pos[1] - BOARD_SIZE // 2)
         
         # Bonus pour être au centre, malus pour l'adversaire au centre
         score -= 5 * my_center_dist
@@ -720,7 +720,7 @@ class AI:
         
         PROBLÈME :
         ----------
-        Il y a potentiellement ~128 positions de murs possibles sur le plateau.
+        Il y a potentiellement ~50 positions de murs possibles sur le plateau.
         Tester tous ces murs à chaque niveau de Minimax serait trop lent.
         
         SOLUTION : HEURISTIQUE DE SÉLECTION

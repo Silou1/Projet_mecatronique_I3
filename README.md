@@ -33,8 +33,8 @@ Ce projet consiste à développer un **moteur de jeu Quoridor** complet et modul
 Quoridor est un jeu de stratégie abstrait pour 2 joueurs où chacun doit atteindre le côté opposé du plateau tout en plaçant des murs pour ralentir l'adversaire.
 
 **Règles principales :**
-- Plateau de 9×9 cases
-- Chaque joueur a 10 murs à placer
+- Plateau de 6×6 cases
+- Chaque joueur a 6 murs à placer
 - Un mur fait 2 cases de long
 - Interdiction de bloquer complètement un joueur
 
@@ -431,7 +431,7 @@ pytest -v
 **Problème :** `ValueError: Le joueur n'a plus de murs`
 
 **Solution :**
-- Vérifiez que vous n'avez pas déjà placé vos 10 murs
+- Vérifiez que vous n'avez pas déjà placé vos 6 murs
 - Utilisez la commande `moves` pour voir vos options disponibles
 
 #### 6. Erreur de chemin bloqué

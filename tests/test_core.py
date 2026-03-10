@@ -30,7 +30,7 @@ class TestGameStateInitialization:
         """Test des positions initiales des joueurs."""
         game = create_new_game()
         
-        # Joueur 1 en bas au centre (ligne 8)
+        # Joueur 1 en bas au centre (ligne 5)
         pos_j1 = game.player_positions[PLAYER_ONE]
         expected_j1 = (BOARD_SIZE - 1, BOARD_SIZE // 2)
         assert pos_j1 == expected_j1, f"J1 devrait être en {expected_j1}, mais est en {pos_j1}"
@@ -62,9 +62,9 @@ class TestGameOver:
     def test_player_one_wins(self):
         """Joueur 1 gagne en atteignant la ligne 0."""
         game = GameState(
-            player_positions={PLAYER_ONE: (0, 4), PLAYER_TWO: (8, 4)},
+            player_positions={PLAYER_ONE: (0, 3), PLAYER_TWO: (5, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
         
@@ -74,11 +74,11 @@ class TestGameOver:
         assert winner == PLAYER_ONE, f"Le gagnant devrait être {PLAYER_ONE}, pas {winner}"
     
     def test_player_two_wins(self):
-        """Joueur 2 gagne en atteignant la ligne 8."""
+        """Joueur 2 gagne en atteignant la ligne 5."""
         game = GameState(
-            player_positions={PLAYER_ONE: (4, 4), PLAYER_TWO: (8, 4)},  # J1 pas à la fin
+            player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (5, 3)},  # J1 pas à la fin
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 10, PLAYER_TWO: 10},
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_TWO
         )
         
@@ -90,9 +90,9 @@ class TestGameOver:
     def test_game_continues_near_end(self):
         """La partie continue même si un joueur est proche de la fin."""
         game = GameState(
-            player_positions={PLAYER_ONE: (1, 4), PLAYER_TWO: (7, 4)},
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (4, 3)},
             walls=frozenset(),
-            player_walls={PLAYER_ONE: 5, PLAYER_TWO: 5},
+            player_walls={PLAYER_ONE: 3, PLAYER_TWO: 3},
             current_player=PLAYER_ONE
         )
         
@@ -131,12 +131,12 @@ class TestConstants:
     """Tests des constantes du jeu."""
     
     def test_board_size(self):
-        """Le plateau doit faire 9x9."""
-        assert BOARD_SIZE == 9
+        """Le plateau doit faire 6x6."""
+        assert BOARD_SIZE == 6
     
     def test_max_walls(self):
-        """Chaque joueur doit avoir 10 murs."""
-        assert MAX_WALLS_PER_PLAYER == 10
+        """Chaque joueur doit avoir 6 murs."""
+        assert MAX_WALLS_PER_PLAYER == 6
     
     def test_player_constants(self):
         """Vérification des identifiants de joueurs."""

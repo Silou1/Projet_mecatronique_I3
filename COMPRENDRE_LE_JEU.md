@@ -28,8 +28,8 @@ C'est le cœur du jeu. Il gère :
 
 Gère l'interaction avec l'utilisateur via la console :
 
-* Affichage d'un plateau 9x9 textuel (converti en grille 17x17 pour afficher les murs).
-* Saisie des commandes en notation type "échecs" (ex: `d e5`, `m h e3`).
+* Affichage d'un plateau 6x6 textuel (converti en grille 11x11 pour afficher les murs).
+* Saisie des commandes en notation type "échecs" (ex: `d d3`, `m h c2`).
 * Boucle de jeu principale et gestion des modes (PvP ou PvIA).
 
 ---

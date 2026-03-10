@@ -36,9 +36,9 @@ COMMANDES DISPONIBLES :
 NOTATION DES CASES :
 --------------------
 On utilise la notation "échecs" : lettre (colonne) + chiffre (ligne)
-- Colonnes : a à i (gauche à droite)
-- Lignes : 1 à 9 (haut en bas)
-Exemple : 'e5' = colonne centrale, ligne du milieu
+- Colonnes : a à f (gauche à droite)
+- Lignes : 1 à 6 (haut en bas)
+Exemple : 'd3' = colonne centrale, ligne du milieu
 """
 
 import os
@@ -104,19 +104,19 @@ def _parse_coord(s: str) -> Optional[Tuple[int, int]]:
     
     SYSTÈME DE NOTATION :
     ---------------------
-    - Première lettre (a-i) → colonne (0-8)
-    - Chiffre (1-9) → ligne (0-8)
+    - Première lettre (a-f) → colonne (0-5)
+    - Chiffre (1-6) → ligne (0-5)
     
     EXEMPLES :
     ----------
     'a1' → (0, 0)  = coin haut-gauche
-    'e5' → (4, 4)  = centre du plateau
-    'i9' → (8, 8)  = coin bas-droite
+    'd3' → (2, 3)  = centre du plateau
+    'f6' → (5, 5)  = coin bas-droite
     
     CALCUL :
     --------
-    - Colonne : ord('e') - ord('a') = 101 - 97 = 4
-    - Ligne : int('5') - 1 = 4  (car on indexe à partir de 0)
+    - Colonne : ord('d') - ord('a') = 100 - 97 = 3
+    - Ligne : int('3') - 1 = 2  (car on indexe à partir de 0)
     
     Args:
         s: Chaîne de caractères en notation échecs (ex: 'e5')
@@ -198,7 +198,7 @@ def display_board(game: QuoridorGame, ai_mode: bool = False):
     
     TECHNIQUE D'AFFICHAGE :
     -----------------------
-    Le plateau de jeu 9x9 est affiché sur une grille 17x17 caractères.
+    Le plateau de jeu 6x6 est affiché sur une grille 11x11 caractères.
     Pourquoi ? Car on doit afficher les cases ET les espaces entre elles (pour les murs).
     
     Correspondance :
@@ -229,7 +229,7 @@ def display_board(game: QuoridorGame, ai_mode: bool = False):
     # ═══════════════════════════════════════════════════════════════════════
     # ÉTAPE 1 : Créer une grille de caractères vide
     # ═══════════════════════════════════════════════════════════════════════
-    # Taille : 9 cases * 2 - 1 = 17 caractères par dimension
+    # Taille : 6 cases * 2 - 1 = 11 caractères par dimension
     grid_size = BOARD_SIZE * 2 - 1
     grid = [[' ' for _ in range(grid_size)] for _ in range(grid_size)]
 
@@ -284,8 +284,8 @@ def display_board(game: QuoridorGame, ai_mode: bool = False):
     print(f"{Fore.GREEN}   🎮  QUORIDOR - Partie en cours  🎮{Style.RESET_ALL}")
     print(f"{Fore.GREEN}{'=' * 40}{Style.RESET_ALL}\n")
     
-    # Légende des colonnes (a à i)
-    print("   a b c d e f g h i")
+    # Légende des colonnes (a à f)
+    print("   a b c d e f")
     print("  " + "━" * (grid_size))
     
     # Afficher chaque ligne de la grille
@@ -407,15 +407,15 @@ def prompt_for_move(game: QuoridorGame) -> Optional[Move]:
         move_type_str, move_data_str = parts[0], parts[1:]
         
         # ───────────────────────────────────────────────────────────────────
-        # COMMANDE : DÉPLACEMENT ('d <case>')
-        # Exemple : 'd e5' → se déplacer vers la case e5
+        #     COMMANDE : DÉPLACEMENT ('d <case>')
+        # Exemple : 'd d3' → se déplacer vers la case d3
         # ───────────────────────────────────────────────────────────────────
         if move_type_str == 'd' and len(move_data_str) == 1:
             coord = _parse_coord(move_data_str[0])
             if coord:
                 return ('deplacement', coord)
             else:
-                print(f"{Fore.RED}Coordonnée invalide: '{move_data_str[0]}'. Utilisez 'a1' à 'i9'.{Style.RESET_ALL}")
+                print(f"{Fore.RED}Coordonnée invalide: '{move_data_str[0]}'. Utilisez 'a1' à 'f6'.{Style.RESET_ALL}")
         
         # ───────────────────────────────────────────────────────────────────
         # COMMANDE : MUR ('m <h|v> <case>')
@@ -592,7 +592,7 @@ def main():
             print(f"  {Fore.CYAN}Mode : Joueur vs IA{Style.RESET_ALL}")
         
         # Rappel des positions de départ
-        print(f"\n  {Fore.BLUE}Joueur 1{Style.RESET_ALL} (Vous) commence en bas (ligne 9)")
+        print(f"\n  {Fore.BLUE}Joueur 1{Style.RESET_ALL} (Vous) commence en bas (ligne 6)")
         
         if mode == 'pvia':
             print(f"  {Fore.RED}IA{Style.RESET_ALL} joue en haut (ligne 1)")
@@ -603,9 +603,9 @@ def main():
         print(f"\n  Objectif : {Fore.BLUE}Joueur 1{Style.RESET_ALL} → atteindre la ligne 1 (monter)")
         
         if mode == 'pvia':
-            print(f"            {Fore.RED}IA{Style.RESET_ALL} → atteindre la ligne 9 (descendre)")
+            print(f"            {Fore.RED}IA{Style.RESET_ALL} → atteindre la ligne 6 (descendre)")
         else:
-            print(f"            {Fore.RED}Joueur 2{Style.RESET_ALL} → atteindre la ligne 9 (descendre)")
+            print(f"            {Fore.RED}Joueur 2{Style.RESET_ALL} → atteindre la ligne 6 (descendre)")
         
         print(f"\n  Tapez '{Fore.YELLOW}help{Style.RESET_ALL}' à tout moment pour voir les commandes\n")
         input("Appuyez sur Entrée pour commencer...")

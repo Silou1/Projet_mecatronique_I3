@@ -12,7 +12,7 @@ Toutes les informations d'une partie sont regroupées dans un **état de jeu** i
 flowchart TD
     GS(["État du Jeu<br/>(immuable)"]) --> POS["Position des pions<br/>Joueur 1 : case de départ en bas<br/>Joueur 2 : case de départ en haut"]
     GS --> WALLS["Murs posés<br/>Liste de tous les murs<br/>présents sur le plateau"]
-    GS --> PW["Murs restants<br/>Chaque joueur commence<br/>avec 10 murs"]
+    GS --> PW["Murs restants<br/>Chaque joueur commence<br/>avec 6 murs"]
     GS --> CP["Tour actuel<br/>Quel joueur doit jouer"]
 
     subgraph "Représentation d'un Mur"
@@ -27,7 +27,7 @@ flowchart TD
 
     subgraph "Système de Coordonnées"
         COORD_DEF["Chaque case a une<br/>position (ligne, colonne)"]
-        COORD_EX["Exemples :<br/>a1 = coin haut-gauche<br/>e5 = centre du plateau<br/>i9 = coin bas-droite"]
+        COORD_EX["Exemples :<br/>a1 = coin haut-gauche<br/>d3 = centre du plateau<br/>f6 = coin bas-droite"]
         COORD_DEF --> COORD_EX
     end
 
@@ -110,7 +110,7 @@ flowchart LR
 
 ## Comment le Plateau est Affiché
 
-Le plateau de 9×9 cases est converti en une grille de 17×17 caractères pour pouvoir dessiner les murs entre les cases.
+Le plateau de 6×6 cases est converti en une grille de 11×11 caractères pour pouvoir dessiner les murs entre les cases.
 
 ```mermaid
 flowchart TD
@@ -119,7 +119,7 @@ flowchart TD
     STATE --> STEP1
 
     subgraph "Étape 1 : Créer la grille vide"
-        STEP1["Grille de 17×17 espaces<br/>(9 cases × 2 - 1 = 17)"]
+        STEP1["Grille de 11×11 espaces<br/>(6 cases × 2 - 1 = 11)"]
     end
 
     STEP1 --> STEP2
@@ -147,8 +147,8 @@ flowchart TD
 
     subgraph "Étape 5 : Afficher le résultat"
         STEP5["Effacer l'écran"]
-        STEP5 --> HEADER["Dessiner le titre du jeu<br/>+ légende des colonnes (a-i)"]
-        HEADER --> ROWS["Afficher ligne par ligne :<br/>• Lignes avec cases (numérotées 1-9)<br/>• Lignes avec murs (entre les cases)"]
+        STEP5 -->         HEADER["Dessiner le titre du jeu<br/>+ légende des colonnes (a-f)"]
+        HEADER --> ROWS["Afficher ligne par ligne :<br/>• Lignes avec cases (numérotées 1-6)<br/>• Lignes avec murs (entre les cases)"]
         ROWS --> INFO["Afficher les murs restants<br/>de chaque joueur"]
     end
 
@@ -160,17 +160,17 @@ flowchart TD
 
 ---
 
-## Pourquoi 17×17 au lieu de 9×9 ?
+## Pourquoi 11×11 au lieu de 6×6 ?
 
 ```mermaid
 flowchart LR
-    subgraph "Plateau logique (9×9)"
+    subgraph "Plateau logique (6×6)"
         L1["Case A"]
         L2["Case B (à droite)"]
         L3["Case C (en dessous)"]
     end
 
-    subgraph "Grille d'affichage (17×17)"
+    subgraph "Grille d'affichage (11×11)"
         G1["Position 0 → Case A"]
         G12["Position 1 → Espace mur ?"]
         G2["Position 2 → Case B"]
@@ -192,4 +192,4 @@ flowchart LR
 
 ---
 
-> **Principe clé :** La grille 17×17 intercale les cases et les espaces pour murs, permettant un rendu ASCII élégant où chaque mur est visible entre les cases qu'il bloque.
+> **Principe clé :** La grille 11×11 intercale les cases et les espaces pour murs, permettant un rendu ASCII élégant où chaque mur est visible entre les cases qu'il bloque.
