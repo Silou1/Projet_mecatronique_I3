@@ -118,8 +118,8 @@ Vous serez invité à choisir le mode de jeu :
 
 | Commande | Description | Exemple |
 |----------|-------------|---------|
-| `d <case>` | Déplacer votre pion | `d e5` |
-| `m <h\|v> <case>` | Placer un mur horizontal (h) ou vertical (v) | `m h e3` |
+| `d <case>` | Déplacer votre pion | `d d3` |
+| `m <h\|v> <case>` | Placer un mur horizontal (h) ou vertical (v) | `m h c2` |
 | `undo` | Annuler le dernier coup | `undo` |
 | `moves` ou `?` | Afficher les coups possibles | `moves` |
 | `help` ou `h` | Afficher l'aide | `help` |
@@ -128,19 +128,24 @@ Vous serez invité à choisir le mode de jeu :
 ### Exemple de partie
 
 ```
-   a b c d e f g h i
-  ━━━━━━━━━━━━━━━━━
-1┃· · · · 2 · · · ·┃
- ┃                 ┃
-2┃· · · · · · · · ·┃
- ┃                 ┃
-...
-9┃· · · · 1 · · · ·┃
-  ━━━━━━━━━━━━━━━━━
+   a b c d e f
+  ━━━━━━━━━━━
+1┃· · · 2 · ·┃
+ ┃           ┃
+2┃· · · · · ·┃
+ ┃           ┃
+3┃· · · · · ·┃
+ ┃           ┃
+4┃· · · · · ·┃
+ ┃           ┃
+5┃· · · · · ·┃
+ ┃           ┃
+6┃· · · 1 · ·┃
+  ━━━━━━━━━━━
 
-Murs restants: Joueur 1 [10]   Joueur 2 [10]
+Murs restants: Joueur 1 [6]   Joueur 2 [6]
 
-Tour du Joueur 1. Entrez votre coup: d e8
+Tour du Joueur 1. Entrez votre coup: d d5
 ```
 
 ---
@@ -158,7 +163,7 @@ from quoridor_engine import QuoridorGame
 game = QuoridorGame()
 
 # Jouer un coup (déplacement vers le haut)
-game.play_move(('deplacement', (7, 4)))
+game.play_move(('deplacement', (4, 3)))
 
 # Jouer un mur horizontal
 game.play_move(('mur', ('h', 4, 3, 2)))
@@ -179,7 +184,7 @@ from quoridor_engine.ai import AI
 game = QuoridorGame()
 
 # Tour du joueur humain (J1 avance vers le haut)
-game.play_move(('deplacement', (7, 4)))
+game.play_move(('deplacement', (4, 3)))
 
 # Tour de l'IA (difficulé normale)
 ia = AI('j2', difficulty='normal')
@@ -195,8 +200,8 @@ from quoridor_engine import QuoridorGame
 game = QuoridorGame()
 
 # Jouer plusieurs coups
-game.play_move(('deplacement', (7, 4)))
-game.play_move(('deplacement', (1, 4)))
+game.play_move(('deplacement', (4, 3)))
+game.play_move(('deplacement', (1, 3)))
 game.play_move(('mur', ('h', 4, 3, 2)))
 
 # Annuler le dernier coup
@@ -260,7 +265,7 @@ print(f"Tour actuel : {state.current_player}")
     ├── test_walls.py          # Tests des murs
     ├── test_game.py           # Tests de partie complète
     ├── test_ai.py             # Tests de l'Intelligence Artificielle
-    └── README_TESTS.md        # Documentation des tests
+    └── README.md              # Documentation des tests
 ```
 
 ### Principes de conception
@@ -307,7 +312,7 @@ pytest tests/test_core.py tests/test_moves.py tests/test_walls.py
 - **Tests complets** : règles, déplacements, murs, victoire, IA, performance
 - **Temps d'exécution** : ~3,5 minutes
 
-📖 Voir [tests/README_TESTS.md](tests/README_TESTS.md) pour plus de détails
+📖 Voir [tests/README.md](tests/README.md) pour plus de détails
 
 ---
 
