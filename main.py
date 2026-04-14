@@ -53,7 +53,7 @@ from quoridor_engine.core import (
     InvalidMoveError,  # Exception pour les coups invalides
     PLAYER_ONE,        # Identifiant du joueur 1 ('j1')
     PLAYER_TWO,        # Identifiant du joueur 2 ('j2')
-    BOARD_SIZE,        # Taille du plateau (9)
+    BOARD_SIZE,        # Taille du plateau (6)
     Move               # Type pour représenter un coup
 )
 from quoridor_engine.ai import AI  # Intelligence Artificielle

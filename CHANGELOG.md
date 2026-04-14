@@ -8,16 +8,17 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Non publié]
 
 ### Ajouté
+- Audit complet du PCB v2 (electronique/AUDIT_PCB_V2.md)
+- Guide de modifications PCB pour EasyEDA (Word, envoye a Jean)
+- Diagrammes Mermaid pour l'architecture (flowcharts/)
+- Documentation du jeu et de l'IA (COMPRENDRE_LE_JEU.md)
 - Configuration CI/CD avec GitHub Actions
-- Support de Python 3.10 à 3.12
-- Cache des dépendances pip dans le workflow CI/CD
-- Badges dynamiques pour les tests et la couverture de code
-- Documentation complète du projet (README, CONTRIBUTING, tests)
 
 ### Modifié
-- Correction des URLs du repository
-- Amélioration de la structure de la documentation
-- Nettoyage du formatage de la note de projet
+- Passage du plateau de 9x9 a 6x6 (2 joueurs, 6 murs chacun)
+- 90 tests unitaires, 82% de couverture
+- Correction commentaire main.py (taille plateau 9 → 6)
+- Nettoyage des fichiers electronique obsoletes (ancien audit v1)
 
 ## [1.0.0] - 2025-10-20
 
@@ -41,8 +42,8 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
   - Commandes intuitives et aide interactive
 
 - 🧪 **Tests Unitaires**
-  - 65 tests unitaires complets
-  - 75% de couverture du moteur principal (core.py)
+  - 90 tests unitaires complets
+  - 82% de couverture du moteur principal (core.py)
   - Tests pour toutes les règles du jeu
   - Tests de l'IA et des cas limites
 
@@ -53,9 +54,8 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
   - Note de projet pour l'équipe
 
 ### En cours de développement
-- 🔌 Interface matérielle (Raspberry Pi 5)
-- 🎨 Interface graphique (Pygame/Tkinter)
-- 📊 Statistiques de jeu
+- 🔌 Interface materielle ESP32-WROOM + Raspberry Pi (PCB en cours)
+- 📡 Communication UART ESP32 <-> RPi
 
 ---
 
