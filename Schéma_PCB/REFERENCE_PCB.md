@@ -3,6 +3,11 @@
 Genere a partir de la netlist `Sheet_1_2026-03-31.net` et du schema `Schematic_mecatronique_2026-03-31.pdf`.
 PCB concu sur EasyEDA par jeanrdc (2026-02-16).
 
+> **ERRATUM (2026-04-14)** : Le schema EasyEDA importe un composant ESP32-WROVER-Dev, mais
+> le module reel utilise par l'equipe est un **ESP32-WROOM**. Consequence principale :
+> GPIO16 et GPIO17 sont **disponibles** (pas de PSRAM). Voir `electronique/AUDIT_PCB.md`
+> pour l'audit complet et `electronique/PIN_MAPPING_VERIFIE.md` pour le mapping corrige.
+
 ---
 
 ## Architecture materielle

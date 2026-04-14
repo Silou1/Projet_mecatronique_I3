@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "easyeda-pro": {
+      "command": "node",
+      "args": ["/Users/silouanechaumais/.easyeda-mcp/dist/mcp-server/index.js"]
+    }
+  }
+}

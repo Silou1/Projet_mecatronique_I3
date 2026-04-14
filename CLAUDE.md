@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Quoridor board game engine in Python (ICAM mechatronics project, Year 3). 6x6 board, 2 players, 6 walls each. Dual-processor architecture:
 - **Raspberry Pi 3/4** : runs the AI and game engine (Python)
-- **ESP32-WROVER-Dev** (Freenove v1.6) : controls all hardware via Arduino C++ (motors, LEDs, buttons, servo)
+- **ESP32-WROOM** (Freenove) : controls all hardware via Arduino C++ (motors, LEDs, buttons, servo). Note: PCB schematic incorrectly references WROVER; actual module is WROOM (no PSRAM, GPIO16/17 available)
 - Communication: UART TX/RX (serial, direct cable)
-- PCB designed on EasyEDA by jeanrdc -- see `Schéma_PCB/REFERENCE_PCB.md` for full pin mapping and known issues
+- PCB designed on EasyEDA by jeanrdc -- see `electronique/AUDIT_PCB.md` for full audit and `electronique/PIN_MAPPING_VERIFIE.md` for verified pin mapping
 
 ## Commands
 
