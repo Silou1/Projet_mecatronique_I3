@@ -1,4 +1,5 @@
 #include "MotionControl.h"
+#include "esp_task_wdt.h"
 #include "freertos/task.h"
 
 namespace {
@@ -7,13 +8,18 @@ namespace {
   TaskHandle_t  _taskHandle   = nullptr;
 
   void motionTask(void* arg) {
+    esp_task_wdt_add(NULL);                  // enregistre cette tache au watchdog
     MotionControl::Command cmd;
     for (;;) {
-      if (xQueueReceive(_commandQueue, &cmd, portMAX_DELAY) == pdTRUE) {
+      esp_task_wdt_reset();
+      if (xQueueReceive(_commandQueue, &cmd, pdMS_TO_TICKS(500)) == pdTRUE) {
         Serial.print("[MotionControl] exec command kind=");
         Serial.println((int)cmd.kind);
-        // simulation : 1 s d'attente puis DONE
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        // simulation decoupee pour ne pas depasser le watchdog
+        for (int i = 0; i < 10; ++i) {
+          esp_task_wdt_reset();
+          vTaskDelay(pdMS_TO_TICKS(100));
+        }
         MotionControl::Result res = { MotionControl::ResultKind::DONE };
         xQueueSend(_resultQueue, &res, 0);
       }
