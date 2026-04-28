@@ -59,3 +59,7 @@ env/
 *.tmp
 .temp/
 
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
