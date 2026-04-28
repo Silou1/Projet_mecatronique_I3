@@ -4,20 +4,32 @@
 
 **Goal:** Produire un firmware ESP32 minimal qui compile, flashe, boote, exécute la FSM globale complète (BOOT → WAITING_RPI → DEMO/CONNECTED → BUTTON_INTENT_PENDING → EXECUTING → ERROR), avec watchdog actif et tâche FreeRTOS moteurs branchée mais simulée. Les modules métier (scan boutons réel, driver WS2812B, moteurs A4988, protocole UART final) sont des stubs vérifiables qui seront remplacés dans les Plans 2-7.
 
-**Architecture:** Sketch Arduino unique `arduino_quoridor.ino` orchestrant 6 modules (`ButtonMatrix`, `LedDriver`, `LedAnimator`, `MotionControl`, `UartLink`, `GameController`). Le `GameController` est l'unique propriétaire de la FSM. La loop principale (Core 1) appelle séquentiellement `UartLink.poll()`, `ButtonMatrix.poll()`, `GameController.tick()`, `LedAnimator.tick()`. La tâche FreeRTOS sur Core 0 héberge `MotionControl` et communique par 2 queues. UART en mode protocole texte simplifié (HELLO/ACK/KEEP/CMD/ERR) — sera remplacé par le vrai protocole binaire dans le Plan 3.
+**Architecture:** Projet PlatformIO unique (`firmware/`) avec sketch principal `src/main.cpp` orchestrant 6 modules (`ButtonMatrix`, `LedDriver`, `LedAnimator`, `MotionControl`, `UartLink`, `GameController`). Le `GameController` est l'unique propriétaire de la FSM. La loop principale (Core 1) appelle séquentiellement `UartLink.poll()`, `ButtonMatrix.poll()`, `GameController.tick()`, `LedAnimator.tick()`. La tâche FreeRTOS sur Core 0 héberge `MotionControl` et communique par 2 queues. UART en mode protocole texte simplifié (HELLO/ACK/KEEP/CMD/ERR) — sera remplacé par le vrai protocole binaire dans le Plan 3.
 
 **Tech Stack:**
-- Arduino IDE (cible "ESP32 Dev Module", Espressif ESP32 board package ≥ 2.0)
+- **PlatformIO Core** (CLI `pio`) — installé dans `~/.platformio/penv/bin/pio`. Extension Cursor optionnelle pour confort UI
+- Configuration : `firmware/platformio.ini` ciblant board `esp32dev` (compatible ESP32-WROOM Freenove), framework Arduino
 - ESP32-WROOM (Freenove)
 - Bibliothèques système : `esp_task_wdt.h`, `freertos/FreeRTOS.h`, `freertos/queue.h`, `freertos/task.h`, `HardwareSerial.h`
-- Aucune bibliothèque externe pour ce plan (FastLED, MCP23017 etc. arrivent dans les plans suivants)
-- Test = procédure manuelle via Serial monitor à 115200 bauds (l'Arduino IDE n'a pas de framework de test embarqué — on valide chaque transition d'état en envoyant des commandes texte et observant la sortie série)
+- Aucune bibliothèque externe (FastLED, MCP23017 etc. arrivent dans les plans suivants)
+- Test = procédure manuelle via Serial monitor à 115200 bauds (`pio device monitor` depuis `firmware/`) — on valide chaque transition d'état en envoyant des commandes texte et observant la sortie série
+
+**Commandes PlatformIO clés (toutes lancées depuis `firmware/`)** :
+```bash
+pio run                    # compile (sans flash)
+pio run -t upload          # compile + flash sur ESP32 connecte via USB
+pio device monitor         # ouvre le serial monitor (Ctrl+C pour quitter)
+pio run -t upload -t monitor  # flash + ouvre monitor immediatement
+pio device list            # liste les ports serie disponibles
+```
 
 ---
 
 ## Notes de contexte importantes
 
-**Convention de test :** comme on est en embarqué Arduino sans framework de tests unitaires, chaque tâche se termine par une **procédure de test manuelle** : flasher, ouvrir Serial monitor, exécuter une séquence d'inputs et vérifier la sortie attendue. Les commits se font après vérification manuelle, pas après "passage de test automatique".
+**Convention de test :** comme on est en embarqué sans framework de tests unitaires natif, chaque tâche se termine par une **procédure de test manuelle** : compiler avec `pio run`, flasher avec `pio run -t upload`, ouvrir Serial monitor avec `pio device monitor`, exécuter une séquence d'inputs et vérifier la sortie attendue. Les commits se font après vérification manuelle.
+
+**Si pas d'ESP32 disponible au moment de l'exécution :** on s'arrête à `pio run` (compilation seule). Les étapes "flash + test" sont reportées dans `firmware/TESTS_PENDING.md` (créé en Task 9).
 
 **Protocole texte temporaire (Plan 1 uniquement) :** chaque trame est une ligne ASCII terminée par `\n`. Format : `<TYPE> <args séparés par espaces>`. Exemples :
 
@@ -46,37 +58,40 @@
 
 ```
 firmware/
-└── arduino_quoridor/
-    ├── arduino_quoridor.ino     // setup() + loop() + lancement tâche moteurs
-    ├── Pins.h                   // mapping centralisé des pins PCB v2
+├── platformio.ini               // configuration PlatformIO (deja cree en setup)
+└── src/
+    ├── main.cpp                 // setup() + loop() + lancement tache moteurs
+    ├── Pins.h                   // mapping centralise des pins PCB v2
     ├── ButtonMatrix.h           // API publique (stub plan 1)
     ├── ButtonMatrix.cpp         // stub : poll() vide, hasIntent() false
     ├── LedDriver.h              // API publique (stub plan 1)
     ├── LedDriver.cpp            // stub : init/setPixel/show debug par Serial
     ├── LedAnimator.h            // API publique (stub plan 1)
-    ├── LedAnimator.cpp          // stub : enregistre l'animation demandée, tick() vide
-    ├── MotionControl.h          // API + types Command, Result, queues exposées
-    ├── MotionControl.cpp        // tâche FreeRTOS Core 0, simule un déplacement (delay 1 s)
+    ├── LedAnimator.cpp          // stub : enregistre l'animation demandee, tick() vide
+    ├── MotionControl.h          // API + types Command, Result, queues exposees
+    ├── MotionControl.cpp        // tache FreeRTOS Core 0, simule un deplacement (delay 1 s)
     ├── UartLink.h               // API publique : init, poll, sendLine, tryReadLine
     ├── UartLink.cpp             // protocole texte ligne par ligne
     ├── GameController.h         // API + enum State
-    └── GameController.cpp       // FSM complète, orchestration des modules
+    └── GameController.cpp       // FSM complete, orchestration des modules
 ```
 
 ---
 
 ## Tâches
 
-### Task 1 : Setup projet Arduino + sketch vide qui compile
+### Task 1 : Sketch principal vide qui compile + Pins.h
 
 **Files:**
-- Create: `firmware/arduino_quoridor/arduino_quoridor.ino`
-- Create: `firmware/arduino_quoridor/Pins.h`
+- Create: `firmware/src/main.cpp`
+- Create: `firmware/src/Pins.h`
+
+**Pré-requis :** `firmware/platformio.ini` existe déjà (créé en phase de setup avant le plan). PlatformIO Core est dans `~/.platformio/penv/bin/pio` et le PATH a été configuré dans `~/.zshrc`. Pour utiliser `pio` dans le shell courant : `source ~/.zshrc` ou utiliser le chemin complet `~/.platformio/penv/bin/pio`.
 
 - [ ] **Step 1.1: Créer l'arborescence et `Pins.h`**
 
 ```cpp
-// firmware/arduino_quoridor/Pins.h
+// firmware/src/Pins.h
 #ifndef PINS_H
 #define PINS_H
 
@@ -113,7 +128,7 @@ constexpr uint8_t MCP23017_ADDR = 0x20;
 - [ ] **Step 1.2: Créer le sketch principal vide**
 
 ```cpp
-// firmware/arduino_quoridor/arduino_quoridor.ino
+// firmware/src/main.cpp
 #include <Arduino.h>
 #include "Pins.h"
 
@@ -129,22 +144,37 @@ void loop() {
 }
 ```
 
-- [ ] **Step 1.3: Compiler dans Arduino IDE**
-
-Ouvrir `firmware/arduino_quoridor/arduino_quoridor.ino` dans l'IDE Arduino. Sélectionner Outils → Type de carte → "ESP32 Dev Module". Compiler (Ctrl+R / Cmd+R).
-Expected: compilation OK, aucune erreur.
-
-- [ ] **Step 1.4: Flasher l'ESP32 (si carte branchée) ou skipper**
-
-Si pas de carte sous la main : skipper le flash, on testera tout à la fin du plan.
-Si carte branchée : sélectionner le bon port série, téléverser. Ouvrir Serial monitor à 115200 bauds.
-Expected (si flashé): `BOOT_START` apparaît dans le moniteur, LED bleue intégrée éteinte.
-
-- [ ] **Step 1.5: Commit**
+- [ ] **Step 1.3: Compiler avec PlatformIO**
 
 ```bash
-git add firmware/arduino_quoridor/arduino_quoridor.ino firmware/arduino_quoridor/Pins.h
-git commit -m "feat(firmware): squelette sketch + mapping pins PCB v2"
+cd firmware && pio run
+```
+Expected: compilation OK, aucune erreur. Le binaire est généré dans `firmware/.pio/build/esp32dev/firmware.bin`. Le dossier `.pio/` ne doit PAS être commité (ajouté au `.gitignore` ci-dessous).
+
+- [ ] **Step 1.4: Ajouter `.pio/` au `.gitignore` racine du repo**
+
+Vérifier que la racine du repo a un `.gitignore`. Y ajouter ces lignes :
+
+```
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+```
+
+- [ ] **Step 1.5: Flasher l'ESP32 (si carte branchée) ou skipper**
+
+Si pas de carte sous la main : skipper, on testera tout à la fin du plan.
+Si carte branchée :
+```bash
+cd firmware && pio run -t upload && pio device monitor
+```
+Expected (si flashé): `BOOT_START` apparaît dans le moniteur. Quitter le monitor avec Ctrl+C.
+
+- [ ] **Step 1.6: Commit**
+
+```bash
+git add firmware/platformio.ini firmware/src/main.cpp firmware/src/Pins.h .gitignore
+git commit -m "feat(firmware): squelette PlatformIO + sketch + mapping pins PCB v2"
 ```
 
 ---
@@ -152,19 +182,19 @@ git commit -m "feat(firmware): squelette sketch + mapping pins PCB v2"
 ### Task 2 : Headers minimaux des 6 modules + linkage compile-only
 
 **Files:**
-- Create: `firmware/arduino_quoridor/ButtonMatrix.h`
-- Create: `firmware/arduino_quoridor/ButtonMatrix.cpp`
-- Create: `firmware/arduino_quoridor/LedDriver.h`
-- Create: `firmware/arduino_quoridor/LedDriver.cpp`
-- Create: `firmware/arduino_quoridor/LedAnimator.h`
-- Create: `firmware/arduino_quoridor/LedAnimator.cpp`
-- Create: `firmware/arduino_quoridor/MotionControl.h`
-- Create: `firmware/arduino_quoridor/MotionControl.cpp`
-- Create: `firmware/arduino_quoridor/UartLink.h`
-- Create: `firmware/arduino_quoridor/UartLink.cpp`
-- Create: `firmware/arduino_quoridor/GameController.h`
-- Create: `firmware/arduino_quoridor/GameController.cpp`
-- Modify: `firmware/arduino_quoridor/arduino_quoridor.ino`
+- Create: `firmware/src/ButtonMatrix.h`
+- Create: `firmware/src/ButtonMatrix.cpp`
+- Create: `firmware/src/LedDriver.h`
+- Create: `firmware/src/LedDriver.cpp`
+- Create: `firmware/src/LedAnimator.h`
+- Create: `firmware/src/LedAnimator.cpp`
+- Create: `firmware/src/MotionControl.h`
+- Create: `firmware/src/MotionControl.cpp`
+- Create: `firmware/src/UartLink.h`
+- Create: `firmware/src/UartLink.cpp`
+- Create: `firmware/src/GameController.h`
+- Create: `firmware/src/GameController.cpp`
+- Modify: `firmware/src/main.cpp`
 
 L'objectif est d'avoir tous les headers en place avec leurs API publiques, et des `.cpp` minimaux (juste `Serial.println` au démarrage de chaque init). Le sketch principal initialise tous les modules dans `setup()`. Aucune logique métier encore.
 
@@ -602,7 +632,7 @@ SETUP_DONE
 - [ ] **Step 2.10: Commit**
 
 ```bash
-git add firmware/arduino_quoridor/
+git add firmware/src/
 git commit -m "feat(firmware): headers et stubs des 6 modules + integration sketch"
 ```
 
@@ -611,7 +641,7 @@ git commit -m "feat(firmware): headers et stubs des 6 modules + integration sket
 ### Task 3 : FSM — état BOOT + transition vers WAITING_RPI
 
 **Files:**
-- Modify: `firmware/arduino_quoridor/GameController.cpp`
+- Modify: `firmware/src/GameController.cpp`
 
 L'état BOOT exécute les self-tests (LedDriver, MotionControl) puis lance le homing. Tout étant en stub pour ce plan, les self-tests retournent OK et BOOT transitionne immédiatement vers WAITING_RPI. On ajoute une petite temporisation pour observer la trace au Serial.
 
@@ -717,7 +747,7 @@ SETUP_DONE
 - [ ] **Step 3.4: Commit**
 
 ```bash
-git add firmware/arduino_quoridor/GameController.cpp
+git add firmware/src/GameController.cpp
 git commit -m "feat(firmware): FSM etat BOOT avec self-tests et homing"
 ```
 
@@ -726,7 +756,7 @@ git commit -m "feat(firmware): FSM etat BOOT avec self-tests et homing"
 ### Task 4 : États WAITING_RPI / DEMO / CONNECTED + transitions
 
 **Files:**
-- Modify: `firmware/arduino_quoridor/GameController.cpp`
+- Modify: `firmware/src/GameController.cpp`
 
 WAITING_RPI envoie `HELLO` toutes les 200 ms et attend `HELLO_ACK` pendant 3 s. Si reçu → CONNECTED. Sinon → DEMO (terminal).
 
@@ -812,7 +842,7 @@ Expected: transition `-> state 3` (CONNECTED), plus de `HELLO`, LED debug ne cli
 - [ ] **Step 4.5: Commit**
 
 ```bash
-git add firmware/arduino_quoridor/GameController.cpp
+git add firmware/src/GameController.cpp
 git commit -m "feat(firmware): FSM etats WAITING_RPI et DEMO"
 ```
 
@@ -821,7 +851,7 @@ git commit -m "feat(firmware): FSM etats WAITING_RPI et DEMO"
 ### Task 5 : CONNECTED — surveillance KEEPALIVE + bascule ERROR_STATE
 
 **Files:**
-- Modify: `firmware/arduino_quoridor/GameController.cpp`
+- Modify: `firmware/src/GameController.cpp`
 
 Une fois en CONNECTED, on surveille la réception de `KEEP` (toléré aussi par d'autres trames qui réinitialisent le timer). 3 s sans aucune trame entrante → bascule ERROR_STATE avec code `ERR_UART_LOST`.
 
@@ -938,7 +968,7 @@ Expected: `[GameController] RESET requested` puis nouveau `BOOT_START` (l'ESP32 
 - [ ] **Step 5.6: Commit**
 
 ```bash
-git add firmware/arduino_quoridor/GameController.cpp
+git add firmware/src/GameController.cpp
 git commit -m "feat(firmware): surveillance KEEPALIVE + transition ERROR + RESET"
 ```
 
@@ -947,7 +977,7 @@ git commit -m "feat(firmware): surveillance KEEPALIVE + transition ERROR + RESET
 ### Task 6 : BUTTON_INTENT_PENDING — émission intention + ACK/NACK/timeout + escalade
 
 **Files:**
-- Modify: `firmware/arduino_quoridor/GameController.cpp`
+- Modify: `firmware/src/GameController.cpp`
 
 Un clic bouton (simulé via `BTN <r> <c>` reçu sur UART qui appelle `ButtonMatrix::injectMoveIntent`) déclenche l'émission d'une intention `MOVE_REQ`/`WALL_REQ` et la transition vers BUTTON_INTENT_PENDING. Là on attend `ACK`, `NACK` ou un timeout 500 ms. 3 timeouts consécutifs → ERROR.
 
@@ -1095,7 +1125,7 @@ Expected au 3e timeout : `ENTER ERROR code=UART_LOST`.
 - [ ] **Step 6.7: Commit**
 
 ```bash
-git add firmware/arduino_quoridor/GameController.cpp
+git add firmware/src/GameController.cpp
 git commit -m "feat(firmware): FSM BUTTON_INTENT_PENDING avec ACK/NACK/timeout + escalade"
 ```
 
@@ -1104,7 +1134,7 @@ git commit -m "feat(firmware): FSM BUTTON_INTENT_PENDING avec ACK/NACK/timeout +
 ### Task 7 : EXECUTING — orchestration MotionControl + sortie DONE
 
 **Files:**
-- Modify: `firmware/arduino_quoridor/GameController.cpp`
+- Modify: `firmware/src/GameController.cpp`
 
 Quand on entre en EXECUTING (depuis ACK ou depuis une commande `CMD ...`), on poste une commande sur la queue MotionControl et on attend le résultat. Pendant ce temps, le scan boutons est gelé (en plan 1, ButtonMatrix est de toute façon stub, donc rien à geler ; on consigne juste l'intention de geler — la mécanique réelle sera ajoutée au plan 4). Sur DONE → envoie `DONE` au RPi → retour CONNECTED. Sur erreur moteur → ERROR.
 
@@ -1222,7 +1252,7 @@ Expected: pareil mais sans passage par BUTTON_INTENT_PENDING.
 - [ ] **Step 7.5: Commit**
 
 ```bash
-git add firmware/arduino_quoridor/GameController.cpp
+git add firmware/src/GameController.cpp
 git commit -m "feat(firmware): FSM EXECUTING avec orchestration MotionControl"
 ```
 
@@ -1231,8 +1261,8 @@ git commit -m "feat(firmware): FSM EXECUTING avec orchestration MotionControl"
 ### Task 8 : Watchdog ESP32 sur les deux cœurs
 
 **Files:**
-- Modify: `firmware/arduino_quoridor/arduino_quoridor.ino`
-- Modify: `firmware/arduino_quoridor/MotionControl.cpp`
+- Modify: `firmware/src/main.cpp`
+- Modify: `firmware/src/MotionControl.cpp`
 
 Activation du watchdog avec timeout 5 s. La loop principale (Core 1) et la tâche moteurs (Core 0) sont enregistrées et doivent appeler `esp_task_wdt_reset()` à chaque itération. Si une tâche freeze > 5 s, l'ESP32 reboote → BOOT propre.
 
@@ -1326,7 +1356,7 @@ Expected: au bout de ~5 s, l'ESP32 reboote spontanément, on revoit `BOOT_START`
 - [ ] **Step 8.6: Commit**
 
 ```bash
-git add firmware/arduino_quoridor/arduino_quoridor.ino firmware/arduino_quoridor/MotionControl.cpp
+git add firmware/src/main.cpp firmware/src/MotionControl.cpp
 git commit -m "feat(firmware): watchdog ESP32 sur loop principale et tache moteurs"
 ```
 
@@ -1392,7 +1422,7 @@ Cocher chaque état et chaque transition listés dans `2026-04-28-firmware-esp32
 
 - [ ] **Step 9.9: Si carte non disponible : noter l'item bloquant**
 
-Créer un fichier `firmware/arduino_quoridor/TESTS_PENDING.md` avec la liste des scénarios non joués (à faire dès réception PCB) :
+Créer un fichier `firmware/src/TESTS_PENDING.md` avec la liste des scénarios non joués (à faire dès réception PCB) :
 
 ```markdown
 # Tests d'intégration en attente de hardware
@@ -1412,7 +1442,7 @@ git commit --allow-empty -m "test(firmware): plan 1 valide en bout-en-bout sur c
 
 Si tests reportés :
 ```bash
-git add firmware/arduino_quoridor/TESTS_PENDING.md
+git add firmware/src/TESTS_PENDING.md
 git commit -m "test(firmware): plan 1 compile, tests cible reportes (carte indisponible)"
 ```
 
@@ -1439,4 +1469,4 @@ git commit -m "test(firmware): plan 1 compile, tests cible reportes (carte indis
 
 ## Notes pour la reprise
 
-Si tu reprends ce plan dans une session future, le point d'entrée est `firmware/arduino_quoridor/arduino_quoridor.ino`. La FSM est entièrement dans `GameController.cpp`. Le protocole texte temporaire est documenté en haut de ce fichier de plan dans la section "Notes de contexte importantes". Les commandes UART simulant le RPi pour les tests sont les mêmes qui seront remplacées au plan 3 par le vrai protocole binaire.
+Si tu reprends ce plan dans une session future, le point d'entrée est `firmware/src/main.cpp`. La FSM est entièrement dans `GameController.cpp`. Le protocole texte temporaire est documenté en haut de ce fichier de plan dans la section "Notes de contexte importantes". Les commandes UART simulant le RPi pour les tests sont les mêmes qui seront remplacées au plan 3 par le vrai protocole binaire.

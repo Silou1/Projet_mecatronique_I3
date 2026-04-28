@@ -59,3 +59,8 @@ env/
 *.tmp
 .temp/
 
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+firmware/compile_commands.json
+

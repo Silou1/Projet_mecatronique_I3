@@ -1,0 +1,25 @@
+# Configuration clangd pour le LSP de Cursor / VSCode
+#
+# Le compilateur xtensa-esp32 utilise des flags inconnus de clangd standard.
+# Sans cette config, l'IDE affiche des erreurs cosmetiques sur des flags
+# que le compilateur PlatformIO traite parfaitement.
+#
+# Le compile_commands.json est genere par : pio run -t compiledb
+
+CompileFlags:
+  Remove:
+    - -mlongcalls
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+    - -mtext-section-literals
+    - -mfix-esp32-psram-cache-issue
+    - -mfix-esp32-psram-cache-strategy=memw
+  Add:
+    - -ferror-limit=0
+    - -Wno-unknown-attributes
+    - -Wno-macro-redefined
+
+Diagnostics:
+  Suppress:
+    - drv_unknown_argument
+    - drv_unknown_argument_with_suggestion
