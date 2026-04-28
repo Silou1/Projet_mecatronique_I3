@@ -41,7 +41,7 @@ Le PCB étant figé, le firmware doit s'adapter aux contraintes existantes (UART
 - Le timing temps-réel local (push WS2812B, pulses moteurs A4988, debounce boutons) ne peut pas être déporté via UART à 115200 bauds — donc l'ESP32 doit avoir de l'intelligence locale, peu importe le découpage choisi.
 - Une approche stateless (ESP32 = simple pont GPIO) inonderait l'UART (~1000 trames/s pour animer 36 LEDs à 30 fps) et ferait dépendre les animations de la latence série.
 - Une approche full autonome (ESP32 embarque le moteur de jeu) duplique le code Python sans gain.
-- Le moyen niveau permet en bonus le **mode démo** (animations autonomes au boot si RPi absent) et la **séparation des responsabilités** dans une équipe à 6.
+- Le moyen niveau permet en bonus le **mode démo** (animations autonomes au boot si RPi absent) et une **séparation propre des responsabilités** entre cerveau (RPi) et exécutant (ESP32), utile pour le debug et les tests modulaires.
 
 ### 2.2 Modèle d'exécution
 
