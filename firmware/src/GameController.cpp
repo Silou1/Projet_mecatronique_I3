@@ -1,5 +1,6 @@
 #include "GameController.h"
 #include "LedDriver.h"
+#include "LedAnimator.h"
 #include "MotionControl.h"
 #include "UartLink.h"
 
@@ -11,11 +12,31 @@ namespace {
   static constexpr unsigned long HELLO_PERIOD_MS  = 200;
   static constexpr unsigned long HELLO_TIMEOUT_MS = 3000;
 
+  unsigned long _lastUartActivityMs = 0;
+  static constexpr unsigned long UART_TIMEOUT_MS = 3000;
+
   void enterState(GameController::State s) {
     _state = s;
     _stateEnteredMs = millis();
     Serial.print("[GameController] -> state ");
     Serial.println((int)s);
+  }
+
+  void resetUartActivity() {
+    _lastUartActivityMs = millis();
+  }
+
+  void enterError(const char* code) {
+    Serial.print("[GameController] ENTER ERROR code=");
+    Serial.println(code);
+    // actions de securite (stubs en plan 1)
+    // - moteurs : on pose un fanion en memoire (le vrai stop sera fait au plan 7)
+    // - servo : idem
+    LedAnimator::play(LedAnimator::Pattern::ERROR_PATTERN);
+    String msg = "ERR ";
+    msg += code;
+    UartLink::sendLine(msg);
+    enterState(GameController::State::ERROR_STATE);
   }
 
   void tickBoot() {
@@ -65,6 +86,7 @@ namespace {
     String line;
     if (UartLink::tryReadLine(line)) {
       if (line == "HELLO_ACK") {
+        resetUartActivity();
         enterState(GameController::State::CONNECTED);
         return;
       }
@@ -78,7 +100,6 @@ namespace {
 
   void tickDemo() {
     // drainer les lignes UART entrantes pour ne pas saturer le buffer interne
-    // (DEMO ne traite aucune trame, mais on consomme pour liberer UartLink)
     String drained;
     while (UartLink::tryReadLine(drained)) {
       // ignore : DEMO est terminal jusqu'au reset
@@ -93,7 +114,35 @@ namespace {
   }
 
   void tickConnected() {
-    // sera completee Task 5 + 6
+    // surveillance KEEPALIVE
+    if (millis() - _lastUartActivityMs >= UART_TIMEOUT_MS) {
+      enterError("UART_LOST");
+      return;
+    }
+    // lecture trames entrantes
+    String line;
+    if (UartLink::tryReadLine(line)) {
+      resetUartActivity();
+      if (line == "KEEP") {
+        // rien a faire, juste reset l'activite (deja fait)
+      } else {
+        // autres trames seront traitees Task 6
+        Serial.print("[GameController] CONNECTED rx unhandled: ");
+        Serial.println(line);
+      }
+    }
+  }
+
+  void tickError() {
+    // attente CMD_RESET ou reset materiel
+    String line;
+    if (UartLink::tryReadLine(line)) {
+      if (line == "RESET") {
+        Serial.println("[GameController] RESET requested");
+        delay(100);
+        ESP.restart();
+      }
+    }
   }
 }
 
@@ -104,10 +153,11 @@ void GameController::init() {
 
 void GameController::tick() {
   switch (_state) {
-    case State::BOOT:        tickBoot();        break;
-    case State::WAITING_RPI: tickWaitingRpi();  break;
-    case State::DEMO:        tickDemo();        break;
-    case State::CONNECTED:   tickConnected();   break;
+    case State::BOOT:         tickBoot();         break;
+    case State::WAITING_RPI:  tickWaitingRpi();   break;
+    case State::DEMO:         tickDemo();         break;
+    case State::CONNECTED:    tickConnected();    break;
+    case State::ERROR_STATE:  tickError();        break;
     default: break;
   }
 }
