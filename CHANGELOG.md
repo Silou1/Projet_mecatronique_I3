@@ -8,10 +8,10 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Non publié]
 
 ### Ajouté
-- Audit complet du PCB v2 (electronique/AUDIT_PCB_V2.md)
+- Audit complet du PCB v2 (hardware/AUDIT_PCB_V2.md)
 - Guide de modifications PCB pour EasyEDA (Word, envoye a Jean)
-- Diagrammes Mermaid pour l'architecture (flowcharts/)
-- Documentation du jeu et de l'IA (COMPRENDRE_LE_JEU.md)
+- Diagrammes Mermaid pour l'architecture (docs/flowcharts/)
+- Documentation du jeu et de l'IA (docs/comprendre_le_jeu.md)
 - Configuration CI/CD avec GitHub Actions
 
 ### Modifié
@@ -19,6 +19,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - 90 tests unitaires, 82% de couverture
 - Correction commentaire main.py (taille plateau 9 → 6)
 - Nettoyage des fichiers electronique obsoletes (ancien audit v1)
+- Reorganisation du repo : regroupement docs/ et hardware/, suppression des dossiers Schema_PCB/ et electronique/
 
 ## [1.0.0] - 2025-10-20
 

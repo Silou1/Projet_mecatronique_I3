@@ -8,7 +8,8 @@ Quoridor board game engine in Python (ICAM mechatronics project, Year 3). 6x6 bo
 - **Raspberry Pi 3/4** : runs the AI and game engine (Python)
 - **ESP32-WROOM** (Freenove) : controls all hardware via Arduino C++ (motors, LEDs, buttons, servo). Note: PCB schematic incorrectly references WROVER; actual module is WROOM (no PSRAM, GPIO16/17 available)
 - Communication: UART TX/RX (serial, direct cable)
-- PCB designed on EasyEDA by jeanrdc -- see `electronique/AUDIT_PCB.md` for full audit and `electronique/PIN_MAPPING_VERIFIE.md` for verified pin mapping
+- PCB designed on EasyEDA by jeanrdc, ordered 2026-04-28. See [hardware/README.md](hardware/README.md) for the entry point, [hardware/AUDIT_PCB_V2.md](hardware/AUDIT_PCB_V2.md) for the detailed audit, and [hardware/PCB_PCB_mecatronique_2026-04-28.json](hardware/PCB_PCB_mecatronique_2026-04-28.json) for the EasyEDA source. Anomalies flagged in the audit have been validated by Jean against the official ESP32 datasheet; final physical checks happen at first power-up (capacitor polarity, GPIO0 boot behavior, GPIO of pin 27 for LED data). UART2 (GPIO16/17) is NOT available -- consumed by the button matrix; RPi link uses UART0 (shared with USB)
+- **ESP32 datasheet questions** : query the dedicated NotebookLM `ESP32 Development Board Pinout Reference Map` (id `7d0bccd1-df3f-456d-99a0-1192766043ba`) via the `notebooklm-mcp` MCP -- it is the source of truth for GPIO, peripherals, strapping pins, ADC, RTC, PWM. Do NOT rely on third-party board pinouts (Freenove DevKitC) which may diverge from the SoC datasheet.
 
 ## Commands
 
