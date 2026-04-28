@@ -1,11 +1,15 @@
 #include "GameController.h"
 #include "LedDriver.h"
 #include "MotionControl.h"
-// UartLink.h sera inclus en Task 4 quand on emettra HELLO depuis WAITING_RPI
+#include "UartLink.h"
 
 namespace {
   GameController::State _state = GameController::State::BOOT;
   unsigned long _stateEnteredMs = 0;
+
+  unsigned long _lastHelloMs = 0;
+  static constexpr unsigned long HELLO_PERIOD_MS  = 200;
+  static constexpr unsigned long HELLO_TIMEOUT_MS = 3000;
 
   void enterState(GameController::State s) {
     _state = s;
@@ -50,6 +54,47 @@ namespace {
     Serial.println("[GameController] BOOT_FAILED homing_timeout");
     enterState(GameController::State::ERROR_STATE);
   }
+
+  void tickWaitingRpi() {
+    // emission HELLO periodique
+    if (millis() - _lastHelloMs >= HELLO_PERIOD_MS) {
+      UartLink::sendLine("HELLO");
+      _lastHelloMs = millis();
+    }
+    // ACK recu ?
+    String line;
+    if (UartLink::tryReadLine(line)) {
+      if (line == "HELLO_ACK") {
+        enterState(GameController::State::CONNECTED);
+        return;
+      }
+      // autres lignes ignorees en WAITING_RPI
+    }
+    // timeout total ?
+    if (millis() - _stateEnteredMs >= HELLO_TIMEOUT_MS) {
+      enterState(GameController::State::DEMO);
+    }
+  }
+
+  void tickDemo() {
+    // drainer les lignes UART entrantes pour ne pas saturer le buffer interne
+    // (DEMO ne traite aucune trame, mais on consomme pour liberer UartLink)
+    String drained;
+    while (UartLink::tryReadLine(drained)) {
+      // ignore : DEMO est terminal jusqu'au reset
+    }
+    // emission tick de vie toutes les 500 ms
+    static unsigned long _lastDemoMs = 0;
+    if (millis() - _lastDemoMs >= 500) {
+      Serial.println("[GameController] DEMO tick");
+      digitalWrite(2, !digitalRead(2));   // toggle LED debug
+      _lastDemoMs = millis();
+    }
+  }
+
+  void tickConnected() {
+    // sera completee Task 5 + 6
+  }
 }
 
 void GameController::init() {
@@ -59,11 +104,11 @@ void GameController::init() {
 
 void GameController::tick() {
   switch (_state) {
-    case State::BOOT:
-      tickBoot();
-      break;
-    default:
-      break;
+    case State::BOOT:        tickBoot();        break;
+    case State::WAITING_RPI: tickWaitingRpi();  break;
+    case State::DEMO:        tickDemo();        break;
+    case State::CONNECTED:   tickConnected();   break;
+    default: break;
   }
 }
 
