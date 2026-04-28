@@ -20,6 +20,8 @@ namespace {
   static constexpr uint8_t MAX_CONSECUTIVE_TIMEOUTS = 3;
   static constexpr unsigned long INTENT_ACK_TIMEOUT_MS = 500;
 
+  bool _waitingMotion = false;
+
   void enterState(GameController::State s) {
     _state = s;
     _stateEnteredMs = millis();
@@ -59,6 +61,16 @@ namespace {
     UartLink::sendLine(msg);
     LedAnimator::play(LedAnimator::Pattern::PENDING_FLASH);
     enterState(GameController::State::BUTTON_INTENT_PENDING);
+  }
+
+  void enterExecutingWithCommand(const MotionControl::Command& cmd) {
+    if (!MotionControl::postCommand(cmd)) {
+      enterError("MOTION_QUEUE_FULL");
+      return;
+    }
+    _waitingMotion = true;
+    LedAnimator::play(LedAnimator::Pattern::EXECUTING_SPINNER);
+    enterState(GameController::State::EXECUTING);
   }
 
   void tickBoot() {
@@ -116,7 +128,7 @@ namespace {
   void tickDemo() {
     String drained;
     while (UartLink::tryReadLine(drained)) {
-      // ignore : DEMO est terminal
+      // ignore
     }
     static unsigned long _lastDemoMs = 0;
     if (millis() - _lastDemoMs >= 500) {
@@ -127,33 +139,34 @@ namespace {
   }
 
   void tickConnected() {
-    // surveillance KEEPALIVE
     if (millis() - _lastUartActivityMs >= UART_TIMEOUT_MS) {
       enterError("UART_LOST");
       return;
     }
-    // lecture trames entrantes
     String line;
     if (UartLink::tryReadLine(line)) {
       resetUartActivity();
       if (line == "KEEP") {
         // rien
       } else if (line.startsWith("BTN ")) {
-        // simulation d'un clic -- sera retire au plan 4 quand ButtonMatrix sera reel
         int sp1 = line.indexOf(' ', 4);
         int row = line.substring(4, sp1).toInt();
         int col = line.substring(sp1 + 1).toInt();
         ButtonMatrix::injectMoveIntent((uint8_t)row, (uint8_t)col);
+      } else if (line.startsWith("CMD MOVE ")) {
+        int sp1 = line.indexOf(' ', 9);
+        int row = line.substring(9, sp1).toInt();
+        int col = line.substring(sp1 + 1).toInt();
+        MotionControl::Command cmd = { MotionControl::CommandKind::MOVE_TO_WALL_SLOT,
+                                       (uint8_t)row, (uint8_t)col, false };
+        enterExecutingWithCommand(cmd);
       } else if (line.startsWith("CMD ")) {
-        // sera traitee Task 7
-        Serial.print("[GameController] CMD recue (sera traitee Task 7): ");
-        Serial.println(line);
+        Serial.print("[GameController] CMD non-impl: "); Serial.println(line);
       } else {
         Serial.print("[GameController] CONNECTED rx unhandled: ");
         Serial.println(line);
       }
     }
-    // intention bouton ?
     if (ButtonMatrix::hasIntent()) {
       emitIntent(ButtonMatrix::takeIntent());
     }
@@ -169,8 +182,8 @@ namespace {
       resetUartActivity();
       if (line == "ACK") {
         _consecutiveTimeouts = 0;
-        // pour le plan 1, on enchaine directement EXECUTING (sera affine Task 7)
-        enterState(GameController::State::EXECUTING);
+        MotionControl::Command cmd = { MotionControl::CommandKind::MOVE_TO_WALL_SLOT, 0, 0, false };
+        enterExecutingWithCommand(cmd);
         return;
       }
       if (line == "NACK") {
@@ -180,13 +193,11 @@ namespace {
         return;
       }
       if (line == "KEEP") {
-        // tolere pendant l'attente, ne quitte pas l'etat
         return;
       }
       Serial.print("[GameController] INTENT_PENDING rx unhandled: ");
       Serial.println(line);
     }
-    // timeout 500 ms ?
     if (millis() - _stateEnteredMs >= INTENT_ACK_TIMEOUT_MS) {
       _consecutiveTimeouts++;
       Serial.print("[GameController] intent timeout (consecutive=");
@@ -197,6 +208,42 @@ namespace {
         return;
       }
       enterState(GameController::State::CONNECTED);
+    }
+  }
+
+  void tickExecuting() {
+    if (millis() - _lastUartActivityMs >= UART_TIMEOUT_MS) {
+      enterError("UART_LOST");
+      return;
+    }
+    // KEEPALIVE peut arriver
+    String line;
+    if (UartLink::tryReadLine(line)) {
+      resetUartActivity();
+      // les autres trames sont ignorees pendant EXECUTING
+    }
+    // resultat moteur ?
+    MotionControl::Result res;
+    if (_waitingMotion && MotionControl::tryGetResult(res)) {
+      _waitingMotion = false;
+      switch (res.kind) {
+        case MotionControl::ResultKind::DONE:
+          UartLink::sendLine("DONE");
+          enterState(GameController::State::CONNECTED);
+          break;
+        case MotionControl::ResultKind::ERR_MOTOR_TIMEOUT:
+          enterError("MOTOR_TIMEOUT");
+          break;
+        case MotionControl::ResultKind::ERR_LIMIT_UNEXPECTED:
+          enterError("LIMIT_UNEXPECTED");
+          break;
+        case MotionControl::ResultKind::ERR_HOMING_FAILED:
+          enterError("HOMING_FAILED");
+          break;
+        case MotionControl::ResultKind::ERR_I2C_NACK:
+          enterError("I2C_NACK");
+          break;
+      }
     }
   }
 
@@ -224,6 +271,7 @@ void GameController::tick() {
     case State::DEMO:                  tickDemo();          break;
     case State::CONNECTED:             tickConnected();     break;
     case State::BUTTON_INTENT_PENDING: tickIntentPending(); break;
+    case State::EXECUTING:             tickExecuting();     break;
     case State::ERROR_STATE:           tickError();         break;
     default: break;
   }
