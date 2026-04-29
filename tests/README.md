@@ -272,8 +272,8 @@ Cette suite de tests garantit la **robustesse et la fiabilité** du moteur de je
 ### Prochaines étapes 🚀
 
 Le moteur de jeu est **prêt pour l'intégration hardware** :
-- Interface avec la Raspberry Pi 5
-- Détection des pièces sur le plateau physique
-- Contrôle des moteurs pour le système de murs
-- Affichage des coups de l'IA sur le plateau physique
+- Interface avec la Raspberry Pi 3/4
+- Détection des appuis sur la matrice de boutons 6×6 (via firmware ESP32)
+- Contrôle des moteurs XY pour le système de murs (via firmware ESP32)
+- Affichage des coups de l'IA sur les LEDs WS2812B du plateau physique
 

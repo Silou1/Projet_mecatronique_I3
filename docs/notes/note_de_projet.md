@@ -56,11 +56,14 @@ Le mécanisme des murs est géré par un plateau 3D conçu en plusieurs niveaux.
 * **Objectif de l’Optimisation :** Cette disposition permet de réduire le nombre de fils nécessaires et de simplifier le circuit électrique global.  
 * **Repérage :** La position du pion (et des actions) est repérée grâce à un système de coordonnées XY (ligne/colonne).  
   
-## ****5. Système de Contrôle (Cerveau du Projet)****  
-  
-* **Contrôleur Principal :** Le jeu et le plateau sont contrôlés par une carte Raspberry Pi 5.  
-* **Rôle du Raspberry Pi 5 :** Cette carte gérera tous les mécanismes complexes ainsi que la partie Intelligence Artificielle (IA).  
-* **Flexibilité :** D'autres contrôleurs pourront être définis ultérieurement pour adapter le jeu à différents contextes d'utilisation.
+## ****5. Système de Contrôle (Cerveau du Projet)****
+
+> **Note de mise à jour (2026-04-28)** : l'architecture initialement prévue avec une seule Raspberry Pi 5 a évolué vers une architecture à deux processeurs (RPi 3/4 + ESP32-WROOM via UART). Voir [02_architecture.md](../02_architecture.md) pour la vision actuelle.
+
+* **Contrôleur principal :** Raspberry Pi 3/4 — gère le moteur de jeu Python et l'intelligence artificielle (Minimax + alpha-bêta).
+* **Microcontrôleur temps réel :** ESP32-WROOM (Freenove) — gère tout le hardware du plateau (moteurs XY pour le piston, LEDs WS2812B, matrice boutons 6×6, servo de réinitialisation).
+* **Liaison entre les deux :** UART0 à 115200 bauds.
+* **Justification de la séparation :** la RPi a la puissance de calcul pour l'IA, l'ESP32 a le temps réel et le contrôle hardware fiable (FreeRTOS, watchdog, GPIO directs).
   
   
   
