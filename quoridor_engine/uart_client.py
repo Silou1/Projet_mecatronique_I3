@@ -285,6 +285,11 @@ class UartClient:
         if stripped[0:1] == b"<":
             try:
                 frame = Frame.decode(stripped)
+                # Reset session si BOOT_START ou HELLO en session active
+                if frame.type == "BOOT_START" or (
+                    frame.type == "HELLO" and self.is_connected
+                ):
+                    self._reset_session()
                 self._rx_queue.put(frame)
             except UartProtocolError:
                 # Rejet silencieux (cf. §3.6 spec)
@@ -478,3 +483,10 @@ class UartClient:
         if not self.is_connected:
             return
         self._send_request(type="CMD_RESET", args="")
+
+    def _reset_session(self) -> None:
+        """Reset complet de la session apres reboot ESP32 (sec 5.1 spec)."""
+        with self._tx_seq_lock:
+            self._tx_seq = 0
+        self._last_request_seq = None
+        self._last_err_received = None

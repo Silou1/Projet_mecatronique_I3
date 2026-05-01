@@ -683,3 +683,43 @@ class TestConnectWithEspInError:
         client.close()
 
         client.close()
+
+
+class TestSessionReset:
+    """Reset session sur BOOT_START ou nouveau HELLO en session active (§5.1 spec)."""
+
+    def test_boot_start_resets_tx_seq(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+
+        # Avance le compteur
+        for _ in range(10):
+            client.send_keepalive()
+        # tx_seq devrait etre a 10
+        assert client._tx_seq == 10
+
+        # Simule reception BOOT_START
+        client._reset_session()
+
+        assert client._tx_seq == 0
+        assert client._last_request_seq is None
+
+    def test_reader_resets_session_on_boot_start(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        # Avance le compteur
+        for _ in range(5):
+            client.send_keepalive()
+
+        # Inject BOOT_START
+        boot = Frame(type="BOOT_START", args="", seq=0)
+        mock_serial.inject_rx(boot.encode())
+
+        time.sleep(0.2)
+
+        # tx_seq doit etre reset
+        assert client._tx_seq == 0
+
+        client.close()
