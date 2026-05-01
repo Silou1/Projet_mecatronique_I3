@@ -179,6 +179,8 @@ class UartClient:
 
     PROTOCOL_VERSION = 1
     MAX_DEBUG_LINES = 200  # buffer circulaire pour les logs ESP32
+    CMD_TIMEOUT_SECONDS = 15.0
+    CMD_MAX_ATTEMPTS = 3
 
     def __init__(
         self,
@@ -206,6 +208,8 @@ class UartClient:
 
         self._reader_thread: Optional[threading.Thread] = None
         self._stop_reader = threading.Event()
+
+        self._cmd_timeout_seconds = self.CMD_TIMEOUT_SECONDS
 
         self.is_connected = False
 
@@ -362,3 +366,52 @@ class UartClient:
         if not self.is_connected:
             return
         self._send_response(type="NACK", args=reason, ack=request_seq)
+
+    def send_cmd(self, type: str, args: str) -> None:
+        """Envoie une CMD au firmware ESP32 avec retry idempotent.
+
+        Bloque jusqu'a reception du DONE correspondant ou epuisement des essais.
+        En cas d'echec apres CMD_MAX_ATTEMPTS essais : leve UartTimeoutError.
+        En cas d'ERR recu pour cette CMD : leve UartHardwareError.
+        """
+        if not self.is_connected:
+            raise UartError("client non connecte")
+
+        seq = self._next_tx_seq()
+        frame = Frame(type=type, args=args, seq=seq)
+        self._last_request_seq = seq
+
+        for attempt in range(1, self.CMD_MAX_ATTEMPTS + 1):
+            self._send_frame(frame)  # meme seq sur tous les essais
+            deadline = self._clock() + self._cmd_timeout_seconds
+
+            while self._clock() < deadline:
+                try:
+                    received = self._rx_queue.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+
+                # Match DONE
+                if received.type == "DONE" and received.ack == seq:
+                    self._last_request_seq = None
+                    return
+
+                # Match ERR avec ack=seq -> erreur hardware sur cette CMD
+                if received.type == "ERR" and received.ack == seq:
+                    self._last_request_seq = None
+                    raise UartHardwareError(received.args or "UNKNOWN")
+
+                # Frame non liee a cette requete : on ignore
+                # (les autres consommateurs liront via receive() en parallele)
+                # Pour eviter de perdre les frames non liees, on les remet en queue
+                # uniquement si elles ne sont pas des reponses (ACK/NACK/DONE/ERR/HELLO/HELLO_ACK)
+                if received.type not in ("ACK", "NACK", "DONE", "ERR", "HELLO", "HELLO_ACK"):
+                    self._rx_queue.put(received)
+
+            # Timeout sur cet essai, on retente (sauf si dernier essai - boucle for sortira)
+
+        # CMD_MAX_ATTEMPTS essais epuises sans DONE
+        self._last_request_seq = None
+        raise UartTimeoutError(
+            f"CMD {type} {args} : aucun DONE apres {self.CMD_MAX_ATTEMPTS} essais"
+        )

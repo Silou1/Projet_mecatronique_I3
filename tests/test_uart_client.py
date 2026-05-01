@@ -480,3 +480,113 @@ class TestReceiveIntents:
         sent = mock_serial.get_tx()
         assert sent.startswith(b"<NACK ILLEGAL|seq=")
         assert b"|ack=42|" in sent
+
+
+class TestSendCmd:
+    """Emission CMD avec retry idempotent (§5.5 spec)."""
+
+    def test_send_cmd_returns_on_done_received(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        result = []
+        def runner():
+            try:
+                client.send_cmd("CMD", "MOVE 2 5")
+                result.append("done")
+            except Exception as e:
+                result.append(("err", e))
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        # Petite attente pour que la CMD parte
+        time.sleep(0.1)
+
+        # Recupere le seq utilise dans la trame TX
+        sent = mock_serial.peek_tx()
+        import re
+        m = re.search(rb"\|seq=(\d+)\|", sent)
+        assert m is not None
+        seq_used = int(m.group(1))
+
+        # Simule la reception de DONE avec le bon ack
+        done = Frame(type="DONE", args="", seq=99, ack=seq_used)
+        mock_serial.inject_rx(done.encode())
+
+        t.join(timeout=2)
+        assert result == ["done"]
+
+        client.close()
+
+    def test_send_cmd_retries_with_same_seq_on_timeout(self, mock_serial, mock_clock):
+        """Apres timeout sans DONE, retransmettre la meme trame avec le meme seq."""
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        # Configure timeout court pour test
+        client._cmd_timeout_seconds = 1.0
+
+        result = []
+        def runner():
+            try:
+                client.send_cmd("CMD", "MOVE 2 5")
+                result.append("done")
+            except UartTimeoutError as e:
+                result.append(("timeout", e))
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        time.sleep(0.1)
+        first_tx = mock_serial.peek_tx()
+        import re
+        first_seq = int(re.search(rb"\|seq=(\d+)\|", first_tx).group(1))
+
+        # Avance l'horloge mock pour declencher le 1er retry
+        mock_clock.advance(1.5)
+        time.sleep(0.1)
+
+        full_tx = mock_serial.peek_tx()
+        # On doit voir 2 trames maintenant : envoi initial + retry, MEME seq
+        all_seqs = re.findall(rb"\|seq=(\d+)\|", full_tx)
+        assert len(all_seqs) >= 2
+        assert all_seqs[0] == all_seqs[1]
+        assert int(all_seqs[0]) == first_seq
+
+        # Resoudre proprement
+        done = Frame(type="DONE", args="", seq=99, ack=first_seq)
+        mock_serial.inject_rx(done.encode())
+        t.join(timeout=2)
+
+        client.close()
+
+    def test_send_cmd_raises_timeout_after_3_attempts(self, mock_serial, mock_clock):
+        """3 essais sans DONE -> UartTimeoutError."""
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+        client._cmd_timeout_seconds = 0.1
+
+        result = []
+        def runner():
+            try:
+                client.send_cmd("CMD", "MOVE 2 5")
+                result.append("done")
+            except UartTimeoutError as e:
+                result.append("timeout")
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        # Avance assez pour 3 timeouts (avec un peu de marge)
+        for _ in range(4):
+            time.sleep(0.15)
+            mock_clock.advance(0.2)
+
+        t.join(timeout=3)
+        assert result == ["timeout"]
+
+        client.close()
