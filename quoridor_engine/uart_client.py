@@ -331,3 +331,12 @@ class UartClient:
         frame = Frame(type=type, args=args, seq=seq, version=version)
         self._send_frame(frame)
         return seq
+
+    def send_keepalive(self) -> None:
+        """Envoie une trame KEEPALIVE. A appeler periodiquement (1 s) depuis le main loop.
+
+        No-op si pas connecte.
+        """
+        if not self.is_connected:
+            return
+        self._send_request(type="KEEPALIVE", args="")

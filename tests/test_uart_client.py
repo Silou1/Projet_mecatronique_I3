@@ -396,3 +396,38 @@ class TestHandshake:
         assert result == ["timeout"]
 
         client.close()
+
+
+class TestKeepalive:
+    """Emission de KEEPALIVE - methode appelable par le main loop."""
+
+    def test_send_keepalive_writes_frame(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+
+        client.send_keepalive()
+
+        sent = mock_serial.get_tx()
+        assert sent.startswith(b"<KEEPALIVE|seq=")
+        assert sent.endswith(b">\n")
+
+    def test_send_keepalive_increments_seq(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+
+        client.send_keepalive()
+        client.send_keepalive()
+
+        sent = mock_serial.get_tx()
+        # On doit voir seq=0 puis seq=1 (compteur initialise a 0)
+        assert b"|seq=0|" in sent
+        assert b"|seq=1|" in sent
+
+    def test_send_keepalive_no_op_if_not_connected(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        # is_connected reste False (pas d'appel a connect)
+
+        client.send_keepalive()
+
+        # Rien ne doit etre envoye si pas connecte
+        assert mock_serial.get_tx() == b""
