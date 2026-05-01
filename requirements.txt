@@ -12,3 +12,6 @@ pytest-timeout>=2.2.0
 # RPi.GPIO>=0.7.1  # Pour Raspberry Pi (décommenter si nécessaire)
 # gpiozero>=1.6.2  # Alternative plus simple pour GPIO
 
+# Communication serie avec ESP32 (Phase P8)
+pyserial>=3.5
+
