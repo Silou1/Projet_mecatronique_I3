@@ -24,3 +24,27 @@ class TestExceptionHierarchy:
         err = UartHardwareError("MOTOR_TIMEOUT")
         assert err.code == "MOTOR_TIMEOUT"
         assert "MOTOR_TIMEOUT" in str(err)
+
+
+from quoridor_engine.uart_client import compute_crc
+
+
+class TestCrc:
+    """CRC-16 CCITT-FALSE (poly 0x1021, init 0xFFFF) sur les vecteurs figes du spec §3.5."""
+
+    @pytest.mark.parametrize("data,expected", [
+        ("MOVE_REQ 3 4|seq=42", 0xAED2),
+        ("CMD MOVE 2 5|seq=43", 0x8489),
+        ("KEEPALIVE|seq=0", 0x74D8),
+    ])
+    def test_crc_reference_vectors(self, data: str, expected: int):
+        assert compute_crc(data.encode("ascii")) == expected
+
+    def test_crc_returns_int_in_uint16_range(self):
+        crc = compute_crc(b"hello")
+        assert 0 <= crc <= 0xFFFF
+        assert isinstance(crc, int)
+
+    def test_crc_empty_returns_init_value(self):
+        # CCITT-FALSE init=0xFFFF, sur input vide le CRC reste a init
+        assert compute_crc(b"") == 0xFFFF

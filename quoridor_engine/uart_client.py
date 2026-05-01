@@ -3,6 +3,17 @@
 Voir docs/superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md
 """
 
+import binascii
+
+
+def compute_crc(data: bytes) -> int:
+    """Calcule le CRC-16 CCITT-FALSE sur les octets fournis.
+
+    Polynome 0x1021, valeur initiale 0xFFFF, sans reflexion, sans XOR final.
+    Retourne un entier non signe sur 16 bits.
+    """
+    return binascii.crc_hqx(data, 0xFFFF)
+
 
 class UartError(Exception):
     """Base pour toutes les erreurs UART."""
