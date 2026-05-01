@@ -357,3 +357,44 @@ bool UartLink::tryReadLine(String& out) {
   _legacyHasPending = false;
   return true;
 }
+
+void UartLink::respondCmdDone(uint8_t ackSeq) {
+  _lastCmdResult = CmdResult::DONE;
+  _lastCmdErrCode[0] = '\0';
+  sendFrame("DONE", "", (int)ackSeq);
+}
+
+void UartLink::respondCmdErr(uint8_t ackSeq, const char* code) {
+  _lastCmdResult = CmdResult::ERR;
+  strncpy(_lastCmdErrCode, code, sizeof(_lastCmdErrCode) - 1);
+  _lastCmdErrCode[sizeof(_lastCmdErrCode) - 1] = '\0';
+  // Cette ERR repond a une CMD : porte ack=
+  sendFrame("ERR", code, (int)ackSeq);
+  // Active la reemission periodique (cf. sec 6.5 spec)
+  _errActive = true;
+  strncpy(_errActiveCode, code, sizeof(_errActiveCode) - 1);
+  _errActiveCode[sizeof(_errActiveCode) - 1] = '\0';
+  _lastErrEmitMs = millis();
+}
+
+void UartLink::emitSpontaneousErr(const char* code) {
+  // ERR sans ack : entree en ERROR depuis un etat sans CMD en cours
+  sendFrame("ERR", code, -1);
+  _errActive = true;
+  strncpy(_errActiveCode, code, sizeof(_errActiveCode) - 1);
+  _errActiveCode[sizeof(_errActiveCode) - 1] = '\0';
+  _lastErrEmitMs = millis();
+}
+
+void UartLink::tickErrReemission(unsigned long currentMs) {
+  if (!_errActive) return;
+  if (currentMs - _lastErrEmitMs >= ERR_REEMIT_PERIOD_MS) {
+    sendFrame("ERR", _errActiveCode, -1);
+    _lastErrEmitMs = currentMs;
+  }
+}
+
+void UartLink::clearErrState() {
+  _errActive = false;
+  _errActiveCode[0] = '\0';
+}
