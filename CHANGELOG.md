@@ -7,6 +7,24 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Ajouté — P8 Protocole UART Plan 2 (2026-05-01, en cours)
+- **Spec complet** du protocole UART Plan 2 (`docs/superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md`) : trames texte framees, CRC-16 CCITT-FALSE, sequencement avec ack matching, idempotence retry CMD, politique d'erreurs typees, vecteurs de reference figes
+- **Plan d'implementation** detaille en 30 tasks (`docs/superpowers/plans/2026-05-01-protocole-uart-plan-2-implementation.md`)
+- **Module Python `quoridor_engine/uart_client.py`** (~600 lignes) : client UART complet avec encodage/decodage de trames, threading background, sequencement, retry idempotent CMD (3 essais, 15 s), gestion d'erreurs typees (UartError, UartTimeoutError, UartProtocolError, UartVersionError, UartHardwareError), classification recuperable/non-recuperable des codes ERR, auto CMD_RESET pour erreurs recuperables, gestion §6.6 (RPi reboote + ESP32 en ERROR)
+- **91 tests unitaires** sur `tests/test_uart_client.py` (avec MockSerial et MockClock dans `tests/conftest.py`), couverture **99 %** sur uart_client.py (cible spec : ≥ 90 %)
+- **Refactor complet `firmware/src/UartLink.{h,cpp}`** : nouvelle API `sendFrame` / `log` / `logf` / `tryGetFrame` / `respondCmdDone` / `respondCmdErr` / `emitSpontaneousErr` / `tickErrReemission` / `clearErrState`, framing CRC-16 CCITT-FALSE, mutex FreeRTOS pour synchroniser les acces a Serial entre Core 0 et Core 1, dedup CMD idempotent
+- **Documentation utilisateur** reecrite : `docs/06_protocole_uart.md`
+- Ajout dependance `pyserial>=3.5` a `requirements.txt`
+
+### Modifie — P8
+- `firmware/src/main.cpp` : emet `BOOT_START` et `SETUP_DONE` en trames protocolaires framees, appelle `tickErrReemission` dans loop()
+- `firmware/src/GameController.cpp` et tous les autres modules ESP32 : tous les `Serial.print` directs remplaces par `UartLink::log` / `logf`, suppression des appels `sendLine` / `tryReadLine` (API Plan 1 supprimee)
+- `quoridor_engine/__init__.py` : exporte `UartClient`, `Frame`, et toutes les exceptions UART
+- 181 tests unitaires (90 anciens + 91 uart_client)
+
+### Reporte — P8.6
+- Tests d'integration ESP32 DevKit ↔ Python reportes au 2026-05-04 (DevKit indisponible). Checklist : `firmware/INTEGRATION_TESTS_PENDING.md`
+
 ### Ajouté
 - Audit complet du PCB v2 (hardware/AUDIT_PCB_V2.md)
 - Guide de modifications PCB pour EasyEDA (Word, envoye a Jean)

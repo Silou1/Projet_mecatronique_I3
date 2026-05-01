@@ -79,12 +79,12 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 
 > But : remplacer le protocole texte stub du Plan 1 par un protocole final (binaire ou texte enrichi avec framing + intégrité), implémenté côté ESP32 *et* côté Python.
 
-- [ ] **P8.1** Designer le protocole final — trancher : framing (COBS, SLIP, longueur fixe ?), intégrité (CRC-8/16, checksum XOR ?), versioning, ID de séquence (questions ouvertes dans [06_protocole_uart.md](06_protocole_uart.md))
-- [ ] **P8.2** Documenter le protocole arrêté dans [06_protocole_uart.md](06_protocole_uart.md)
-- [ ] **P8.3** Refactor [firmware/src/UartLink.{cpp,h}](../firmware/src/) pour implémenter le protocole final
-- [ ] **P8.4** Créer un module Python client UART (probablement `quoridor_engine/uart_client.py` ou `interface/uart.py`)
-- [ ] **P8.5** Tests unitaires côté Python (avec serial loopback ou ESP32 DevKit en mode echo)
-- [ ] **P8.6** Tests d'intégration ESP32 DevKit ↔ Python : envoi/réception de toutes les trames
+- [x] **P8.1** Designer le protocole final — trancher : framing (COBS, SLIP, longueur fixe ?), intégrité (CRC-8/16, checksum XOR ?), versioning, ID de séquence (questions ouvertes dans [06_protocole_uart.md](06_protocole_uart.md))
+- [x] **P8.2** Documenter le protocole arrêté dans [06_protocole_uart.md](06_protocole_uart.md)
+- [x] **P8.3** Refactor [firmware/src/UartLink.{cpp,h}](../firmware/src/) pour implémenter le protocole final
+- [x] **P8.4** Créer un module Python client UART (probablement `quoridor_engine/uart_client.py` ou `interface/uart.py`)
+- [x] **P8.5** Tests unitaires côté Python (avec serial loopback ou ESP32 DevKit en mode echo)
+- [ ] **P8.6** Tests d'intégration ESP32 DevKit ↔ Python : envoi/réception de toutes les trames *(reporté au 2026-05-04, retour DevKit — checklist : [`firmware/INTEGRATION_TESTS_PENDING.md`](../firmware/INTEGRATION_TESTS_PENDING.md))*
 
 ### P9 — Intégration logicielle RPi ↔ ESP32 📋
 
