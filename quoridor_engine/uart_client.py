@@ -171,6 +171,27 @@ class UartHardwareError(UartError):
         super().__init__(full_msg)
 
 
+RECOVERABLE_ERR_CODES = frozenset([
+    "UART_LOST",
+    "BUTTON_MATRIX",
+])
+
+NON_RECOVERABLE_ERR_CODES = frozenset([
+    "MOTOR_TIMEOUT",
+    "LIMIT_UNEXPECTED",
+    "HOMING_FAILED",
+    "I2C_NACK",
+    "BOOT_I2C",
+    "BOOT_LED",
+    "BOOT_HOMING",
+])
+
+
+def is_recoverable_err(code: str) -> bool:
+    """Retourne True si le code d'erreur ESP32 est traitable par CMD_RESET auto."""
+    return code in RECOVERABLE_ERR_CODES
+
+
 class UartClient:
     """Client UART Plan 2 cote Raspberry Pi (Python).
 
@@ -415,3 +436,30 @@ class UartClient:
         raise UartTimeoutError(
             f"CMD {type} {args} : aucun DONE apres {self.CMD_MAX_ATTEMPTS} essais"
         )
+
+    def handle_err_received(self, frame: "Frame") -> str:
+        """Traite une trame ERR recue de l'ESP32.
+
+        Si recuperable : envoie CMD_RESET, retourne "RESET_SENT".
+        Si non recuperable : leve UartHardwareError.
+        """
+        if frame.type != "ERR":
+            raise ValueError(f"handle_err_received attend une trame ERR, recu {frame.type}")
+
+        code = frame.args or "UNKNOWN"
+
+        # Dedup logs : ne pas spammer si meme code que le dernier recu
+        if code != self._last_err_received:
+            self._last_err_received = code
+
+        if is_recoverable_err(code):
+            self.send_cmd_reset()
+            return "RESET_SENT"
+        else:
+            raise UartHardwareError(code)
+
+    def send_cmd_reset(self) -> None:
+        """Envoie CMD_RESET pour reboot logiciel de l'ESP32."""
+        if not self.is_connected:
+            return
+        self._send_request(type="CMD_RESET", args="")

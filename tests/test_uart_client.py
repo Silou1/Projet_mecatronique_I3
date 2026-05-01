@@ -590,3 +590,53 @@ class TestSendCmd:
         assert result == ["timeout"]
 
         client.close()
+
+
+class TestErrHandling:
+    """Reception et classement des ERR (§4.3 spec)."""
+
+    def test_err_recoverable_codes(self):
+        from quoridor_engine.uart_client import is_recoverable_err
+        assert is_recoverable_err("UART_LOST") is True
+        assert is_recoverable_err("BUTTON_MATRIX") is True
+
+    def test_err_unrecoverable_codes(self):
+        from quoridor_engine.uart_client import is_recoverable_err
+        for code in ["MOTOR_TIMEOUT", "LIMIT_UNEXPECTED", "HOMING_FAILED",
+                     "I2C_NACK", "BOOT_I2C", "BOOT_LED", "BOOT_HOMING"]:
+            assert is_recoverable_err(code) is False, f"{code} ne doit pas etre recuperable"
+
+    def test_handle_err_recoverable_sends_cmd_reset(self, mock_serial, mock_clock):
+        """Reception ERR UART_LOST -> envoi auto de CMD_RESET."""
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        err = Frame(type="ERR", args="UART_LOST", seq=99)
+        mock_serial.inject_rx(err.encode())
+
+        time.sleep(0.2)
+        frame = client.receive(timeout=0.5)
+        action = client.handle_err_received(frame)
+
+        assert action == "RESET_SENT"
+        sent = mock_serial.get_tx()
+        assert b"<CMD_RESET|" in sent
+
+        client.close()
+
+    def test_handle_err_non_recoverable_raises_hardware_error(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        err = Frame(type="ERR", args="MOTOR_TIMEOUT", seq=99)
+        mock_serial.inject_rx(err.encode())
+
+        time.sleep(0.2)
+        frame = client.receive(timeout=0.5)
+
+        with pytest.raises(UartHardwareError, match="MOTOR_TIMEOUT"):
+            client.handle_err_received(frame)
+
+        client.close()
