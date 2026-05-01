@@ -110,3 +110,35 @@ class TestFrameEncodeRequests:
         f = Frame(type="MOVE_REQ", args="3 4", seq=42)
         encoded = f.encode()
         assert b"|crc=AED2>" in encoded
+
+
+class TestFrameEncodeResponses:
+    """Encodage de trames de reponse (avec ack=)."""
+
+    def test_encode_ack(self):
+        f = Frame(type="ACK", args="", seq=17, ack=42)
+        encoded = f.encode()
+        # Ordre : seq puis ack puis crc
+        assert encoded.startswith(b"<ACK|seq=17|ack=42|crc=")
+        assert encoded.endswith(b">\n")
+
+    def test_encode_nack_with_reason(self):
+        f = Frame(type="NACK", args="ILLEGAL", seq=18, ack=42)
+        encoded = f.encode()
+        assert encoded.startswith(b"<NACK ILLEGAL|seq=18|ack=42|crc=")
+
+    def test_encode_done(self):
+        f = Frame(type="DONE", args="", seq=44, ack=43)
+        encoded = f.encode()
+        assert encoded.startswith(b"<DONE|seq=44|ack=43|crc=")
+
+    def test_encode_hello_ack(self):
+        f = Frame(type="HELLO_ACK", args="", seq=0, ack=2)
+        encoded = f.encode()
+        assert encoded.startswith(b"<HELLO_ACK|seq=0|ack=2|crc=")
+
+    def test_encode_err_with_ack_response_to_cmd(self):
+        # ERR emis en reponse a une CMD echouee : porte un ack=
+        f = Frame(type="ERR", args="MOTOR_TIMEOUT", seq=46, ack=43)
+        encoded = f.encode()
+        assert encoded.startswith(b"<ERR MOTOR_TIMEOUT|seq=46|ack=43|crc=")
