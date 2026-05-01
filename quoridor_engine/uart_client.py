@@ -340,3 +340,25 @@ class UartClient:
         if not self.is_connected:
             return
         self._send_request(type="KEEPALIVE", args="")
+
+    def receive(self, timeout=None):
+        """Recupere la prochaine intention recue (MOVE_REQ, WALL_REQ, ERR, ...) ou None si timeout.
+
+        timeout : duree max d'attente en secondes. None = bloquant.
+        """
+        try:
+            return self._rx_queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def send_ack(self, request_seq: int) -> None:
+        """Repond ACK a une requete dont le seq est request_seq."""
+        if not self.is_connected:
+            return
+        self._send_response(type="ACK", args="", ack=request_seq)
+
+    def send_nack(self, request_seq: int, reason: str) -> None:
+        """Repond NACK avec une raison (mot-cle MAJUSCULES)."""
+        if not self.is_connected:
+            return
+        self._send_response(type="NACK", args=reason, ack=request_seq)

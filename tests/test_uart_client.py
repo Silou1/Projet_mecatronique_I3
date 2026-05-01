@@ -431,3 +431,52 @@ class TestKeepalive:
 
         # Rien ne doit etre envoye si pas connecte
         assert mock_serial.get_tx() == b""
+
+
+class TestReceiveIntents:
+    """Reception MOVE_REQ / WALL_REQ et reponse ACK/NACK."""
+
+    def test_receive_returns_move_req(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        f = Frame(type="MOVE_REQ", args="3 4", seq=42)
+        mock_serial.inject_rx(f.encode())
+
+        intent = client.receive(timeout=1.0)
+        assert intent.type == "MOVE_REQ"
+        assert intent.args == "3 4"
+        assert intent.seq == 42
+
+        client.close()
+
+    def test_receive_returns_none_on_timeout(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        intent = client.receive(timeout=0.1)
+        assert intent is None
+
+        client.close()
+
+    def test_send_ack_carries_request_seq(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+
+        client.send_ack(request_seq=42)
+
+        sent = mock_serial.get_tx()
+        assert sent.startswith(b"<ACK|seq=")
+        assert b"|ack=42|" in sent
+
+    def test_send_nack_carries_reason_and_request_seq(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+
+        client.send_nack(request_seq=42, reason="ILLEGAL")
+
+        sent = mock_serial.get_tx()
+        assert sent.startswith(b"<NACK ILLEGAL|seq=")
+        assert b"|ack=42|" in sent
