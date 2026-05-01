@@ -127,3 +127,24 @@ void UartLink::sendFrame(const char* type, const char* args, int ack, int versio
     writeUnderMutex(full, (size_t)n);
   }
 }
+
+void UartLink::log(const char* tag, const char* msg) {
+  char buf[160];
+  int n = snprintf(buf, sizeof(buf), "[%s] %s\n", tag, msg);
+  if (n > 0 && (size_t)n < sizeof(buf)) {
+    writeUnderMutex(buf, (size_t)n);
+  }
+}
+
+void UartLink::logf(const char* tag, const char* fmt, ...) {
+  char msg[140];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(msg, sizeof(msg), fmt, args);
+  va_end(args);
+  log(tag, msg);
+}
+
+uint32_t UartLink::getRejectedCount() {
+  return _rejectedCount;
+}
