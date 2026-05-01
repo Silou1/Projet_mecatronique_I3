@@ -142,3 +142,50 @@ class TestFrameEncodeResponses:
         f = Frame(type="ERR", args="MOTOR_TIMEOUT", seq=46, ack=43)
         encoded = f.encode()
         assert encoded.startswith(b"<ERR MOTOR_TIMEOUT|seq=46|ack=43|crc=")
+
+
+class TestFrameDecodeValid:
+    """Decodage de trames valides bien formees."""
+
+    def test_decode_keepalive(self):
+        # Encoder puis decoder doit redonner la meme Frame
+        original = Frame(type="KEEPALIVE", args="", seq=0)
+        encoded = original.encode()
+        decoded = Frame.decode(encoded.rstrip(b"\n"))
+        assert decoded.type == "KEEPALIVE"
+        assert decoded.args == ""
+        assert decoded.seq == 0
+        assert decoded.ack is None
+        assert decoded.version is None
+
+    def test_decode_move_req(self):
+        original = Frame(type="MOVE_REQ", args="3 4", seq=42)
+        decoded = Frame.decode(original.encode().rstrip(b"\n"))
+        assert decoded.type == "MOVE_REQ"
+        assert decoded.args == "3 4"
+        assert decoded.seq == 42
+
+    def test_decode_ack_with_ack_field(self):
+        original = Frame(type="ACK", args="", seq=17, ack=42)
+        decoded = Frame.decode(original.encode().rstrip(b"\n"))
+        assert decoded.ack == 42
+        assert decoded.seq == 17
+
+    def test_decode_hello_with_version(self):
+        original = Frame(type="HELLO", args="", seq=2, version=1)
+        decoded = Frame.decode(original.encode().rstrip(b"\n"))
+        assert decoded.version == 1
+
+    def test_decode_err_with_ack(self):
+        original = Frame(type="ERR", args="MOTOR_TIMEOUT", seq=46, ack=43)
+        decoded = Frame.decode(original.encode().rstrip(b"\n"))
+        assert decoded.type == "ERR"
+        assert decoded.args == "MOTOR_TIMEOUT"
+        assert decoded.ack == 43
+
+    def test_decode_handles_bytes_with_trailing_newline(self):
+        # Le decoder doit accepter une trame avec ou sans \n final
+        original = Frame(type="KEEPALIVE", args="", seq=0)
+        with_newline = original.encode()  # avec \n
+        decoded = Frame.decode(with_newline)
+        assert decoded.type == "KEEPALIVE"
