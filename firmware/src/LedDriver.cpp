@@ -1,19 +1,17 @@
 #include "LedDriver.h"
+#include "UartLink.h"
 
 void LedDriver::init() {
-  Serial.println("[LedDriver] init (stub)");
+  UartLink::log("LED", "init (stub)");
 }
 
 void LedDriver::setPixel(uint8_t index, uint8_t r, uint8_t g, uint8_t b) {
   // stub : log uniquement
-  Serial.print("[LedDriver] setPixel "); Serial.print(index);
-  Serial.print(" "); Serial.print(r);
-  Serial.print(" "); Serial.print(g);
-  Serial.print(" "); Serial.println(b);
+  UartLink::logf("LED", "setPixel %d %d %d %d", index, r, g, b);
 }
 
 void LedDriver::clear() {
-  Serial.println("[LedDriver] clear");
+  UartLink::log("LED", "clear");
 }
 
 void LedDriver::show() {
@@ -21,6 +19,6 @@ void LedDriver::show() {
 }
 
 bool LedDriver::selfTest() {
-  Serial.println("[LedDriver] selfTest -> OK (stub)");
+  UartLink::log("LED", "selfTest -> OK (stub)");
   return true;
 }

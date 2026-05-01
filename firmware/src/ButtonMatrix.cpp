@@ -1,4 +1,5 @@
 #include "ButtonMatrix.h"
+#include "UartLink.h"
 
 namespace {
   ButtonMatrix::Intent _pending = { ButtonMatrix::IntentKind::NONE, 0, 0 };
@@ -6,7 +7,7 @@ namespace {
 }
 
 void ButtonMatrix::init() {
-  Serial.println("[ButtonMatrix] init (stub)");
+  UartLink::log("BTN", "init (stub)");
 }
 
 void ButtonMatrix::poll() {

@@ -1,12 +1,13 @@
 #include "LedAnimator.h"
 #include "LedDriver.h"
+#include "UartLink.h"
 
 namespace {
   LedAnimator::Pattern _current = LedAnimator::Pattern::OFF;
 }
 
 void LedAnimator::init() {
-  Serial.println("[LedAnimator] init (stub)");
+  UartLink::log("ANIM", "init (stub)");
 }
 
 void LedAnimator::tick() {
@@ -16,7 +17,6 @@ void LedAnimator::tick() {
 void LedAnimator::play(Pattern p) {
   if (p != _current) {
     _current = p;
-    Serial.print("[LedAnimator] play pattern=");
-    Serial.println((int)p);
+    UartLink::logf("ANIM", "play pattern=%d", (int)p);
   }
 }

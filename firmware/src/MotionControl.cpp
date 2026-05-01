@@ -1,4 +1,5 @@
 #include "MotionControl.h"
+#include "UartLink.h"
 #include "esp_task_wdt.h"
 #include "freertos/task.h"
 
@@ -13,8 +14,7 @@ namespace {
     for (;;) {
       esp_task_wdt_reset();
       if (xQueueReceive(_commandQueue, &cmd, pdMS_TO_TICKS(500)) == pdTRUE) {
-        Serial.print("[MotionControl] exec command kind=");
-        Serial.println((int)cmd.kind);
+        UartLink::logf("MOT", "exec command kind=%d", (int)cmd.kind);
         // simulation decoupee pour ne pas depasser le watchdog
         for (int i = 0; i < 10; ++i) {
           esp_task_wdt_reset();
@@ -28,7 +28,7 @@ namespace {
 }
 
 void MotionControl::init() {
-  Serial.println("[MotionControl] init (FreeRTOS task)");
+  UartLink::log("MOT", "init (FreeRTOS task)");
   _commandQueue = xQueueCreate(4, sizeof(Command));
   _resultQueue  = xQueueCreate(4, sizeof(Result));
   // tache pinnee sur Core 0 (la loop principale tourne sur Core 1)
@@ -44,6 +44,6 @@ bool MotionControl::tryGetResult(Result& out) {
 }
 
 bool MotionControl::selfTest() {
-  Serial.println("[MotionControl] selfTest -> OK (stub I2C)");
+  UartLink::log("MOT", "selfTest -> OK (stub I2C)");
   return true;
 }
