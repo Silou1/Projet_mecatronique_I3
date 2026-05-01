@@ -241,3 +241,39 @@ class TestFrameDecodeRejects:
     def test_reject_unknown_metadata_field(self):
         with pytest.raises(UartProtocolError, match="champ inconnu"):
             Frame.decode(b"<KEEPALIVE|seq=0|foo=bar|crc=ABCD>")
+
+
+class TestMocks:
+    """Sanity checks pour MockSerial et MockClock (fixtures conftest.py)."""
+
+    def test_mock_serial_write_and_get_tx(self, mock_serial):
+        mock_serial.write(b"hello")
+        assert mock_serial.get_tx() == b"hello"
+        assert mock_serial.get_tx() == b""  # vide apres lecture
+
+    def test_mock_serial_inject_rx_and_readline(self, mock_serial):
+        mock_serial.inject_rx(b"line1\nline2\n")
+        assert mock_serial.readline() == b"line1\n"
+        assert mock_serial.readline() == b"line2\n"
+        assert mock_serial.readline() == b""
+
+    def test_mock_serial_in_waiting(self, mock_serial):
+        assert mock_serial.in_waiting == 0
+        mock_serial.inject_rx(b"abc")
+        assert mock_serial.in_waiting == 3
+
+    def test_mock_serial_close(self, mock_serial):
+        assert mock_serial.is_open is True
+        mock_serial.close()
+        assert mock_serial.is_open is False
+
+    def test_mock_clock_advance(self, mock_clock):
+        assert mock_clock() == 0.0
+        mock_clock.advance(15.0)
+        assert mock_clock() == 15.0
+
+    def test_mock_clock_callable_multiple_times(self, mock_clock):
+        # Doit etre stable entre 2 appels sans advance
+        t1 = mock_clock()
+        t2 = mock_clock()
+        assert t1 == t2
