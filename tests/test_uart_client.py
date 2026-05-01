@@ -685,6 +685,75 @@ class TestConnectWithEspInError:
         client.close()
 
 
+class TestDebugCoexistence:
+    """Lignes ne commencant pas par '<' = logs debug, ignorees par le protocole (§7.4 spec)."""
+
+    def test_debug_line_does_not_pollute_rx_queue(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+
+        mock_serial.inject_rx(b"[FSM] BOOT -> WAITING_RPI\n")
+        mock_serial.inject_rx(b"[BTN] tick=12345\n")
+
+        time.sleep(0.2)
+
+        # rx_queue doit etre vide (rien de protocolaire)
+        assert client._rx_queue.empty()
+        # debug_lines doit contenir les 2 lignes
+        assert len(client._debug_lines) == 2
+        assert "[FSM]" in client._debug_lines[0]
+        assert "[BTN]" in client._debug_lines[1]
+
+        client.close()
+
+    def test_protocol_frame_after_debug_works(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+
+        # Mix : log puis trame
+        mock_serial.inject_rx(b"[FSM] starting\n")
+        f = Frame(type="KEEPALIVE", args="", seq=0)
+        mock_serial.inject_rx(f.encode())
+
+        time.sleep(0.2)
+
+        # La frame doit etre dans la queue
+        received = client._rx_queue.get(timeout=1)
+        assert received.type == "KEEPALIVE"
+        # Le log dans debug
+        assert any("[FSM]" in l for l in client._debug_lines)
+
+        client.close()
+
+    def test_line_with_lt_in_middle_is_debug(self, mock_serial, mock_clock):
+        """[FSM] transition from <BOOT> n'est PAS une trame, c'est du debug."""
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+
+        mock_serial.inject_rx(b"[FSM] transition from <BOOT>\n")
+
+        time.sleep(0.2)
+
+        assert client._rx_queue.empty()
+        assert len(client._debug_lines) == 1
+
+        client.close()
+
+    def test_corrupted_protocol_frame_is_silently_dropped(self, mock_serial, mock_clock):
+        """Une trame avec mauvais CRC est ignoree silencieusement (§3.6)."""
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+
+        mock_serial.inject_rx(b"<KEEPALIVE|seq=0|crc=0000>\n")  # CRC bidon
+
+        time.sleep(0.2)
+
+        # Rien dans la queue (rejet silencieux)
+        assert client._rx_queue.empty()
+
+        client.close()
+
+
 class TestSessionReset:
     """Reset session sur BOOT_START ou nouveau HELLO en session active (§5.1 spec)."""
 
