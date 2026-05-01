@@ -23,6 +23,15 @@ Ces règles s'appliquent à **toutes les phases** ci-dessous.
 | 📋 | **CHANGELOG.md tenu à jour** | Une entrée par fin de phase dans [CHANGELOG.md](../CHANGELOG.md). |
 | 🛟 | **Fallback hardware** | Si PCB bloquée, continuer en simulation sur DevKit. Si mécanique 3D en retard, tester moteurs en breadboard hors plateau. |
 
+## ⏸️ Note d'avancement — 2026-05-01
+
+Le DevKit ESP32 n'est pas disponible avant **lundi 2026-05-04** (prêté à un camarade). Pour ne pas perdre le week-end, on **suspend P6** et on **bascule sur P8** (Protocole UART Plan 2), entièrement réalisable sans hardware :
+
+- **P8.1–P8.5** sont du design + code Python + compilation firmware (pas besoin de flasher)
+- **P8.6** (tests d'intégration sur vrai port série) reste reporté à lundi avec P6 et P7
+
+Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis on revient sur P6 / P7 / P8.6 au retour du DevKit.
+
 ## Phases ✅ déjà terminées
 
 | # | Phase | Référence |
@@ -39,9 +48,11 @@ Ces règles s'appliquent à **toutes les phases** ci-dessous.
 
 > Phases **réalisables avec un ESP32 DevKit nu**, sans dépendre de la PCB v2.
 
-### P6 — Setup environnement firmware 🚧
+### P6 — Setup environnement firmware ⏸️
 
 > But : pouvoir compiler, flasher et observer la sortie série du DevKit depuis le Mac.
+>
+> **En pause** jusqu'au retour du DevKit (lundi 2026-05-04). Voir note d'avancement ci-dessus.
 
 - [ ] **P6.1** Brancher l'ESP32 DevKit au Mac via USB
 - [ ] **P6.2** Installer le driver USB-série (CP210x ou CH340 selon le module)
@@ -64,7 +75,7 @@ Ces règles s'appliquent à **toutes les phases** ci-dessous.
 - [ ] **P7.9** Identifier et corriger les bugs trouvés (commits de correctifs)
 - [ ] **P7.10** Supprimer [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md), commit `test(firmware): plan 1 valide en bout-en-bout sur cible`
 
-### P8 — Protocole UART Plan 2 📋
+### P8 — Protocole UART Plan 2 🚧
 
 > But : remplacer le protocole texte stub du Plan 1 par un protocole final (binaire ou texte enrichi avec framing + intégrité), implémenté côté ESP32 *et* côté Python.
 
@@ -172,6 +183,7 @@ Ces règles s'appliquent à **toutes les phases** ci-dessous.
 
 - ✅ **fait** — terminé et committé
 - 🚧 **en cours** — phase active
+- ⏸️ **en pause** — démarrée mais bloquée (hardware indisponible, dépendance externe…)
 - 📋 **à faire** — pas encore démarrée
 
 ## Suivi
