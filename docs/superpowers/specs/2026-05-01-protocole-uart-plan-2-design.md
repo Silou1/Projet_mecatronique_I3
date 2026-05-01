@@ -198,9 +198,9 @@ Le CRC est calculé sur ces 19 octets, encodé en 4 hexa majuscules, et inséré
 
 | Input (zone CRC) | CRC attendu (à figer en P8.4) |
 |---|---|
-| `MOVE_REQ 3 4\|seq=42` | `0x____` |
-| `CMD MOVE 2 5\|seq=43` | `0x____` |
-| `KEEPALIVE\|seq=0` | `0x____` |
+| `MOVE_REQ 3 4\|seq=42` | `0xAED2` |
+| `CMD MOVE 2 5\|seq=43` | `0x8489` |
+| `KEEPALIVE\|seq=0` | `0x74D8` |
 
 **Procédure de figement :**
 
