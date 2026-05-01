@@ -333,3 +333,66 @@ class TestUartClientInit:
         assert "[FSM]" in client._debug_lines[0]
 
         client.close()
+
+
+from quoridor_engine.uart_client import UartVersionError
+
+
+class TestHandshake:
+    """Handshake HELLO / HELLO_ACK + verification version (§6.6 spec)."""
+
+    def test_connect_sends_hello_ack_on_hello_v1(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock, expected_version=1)
+        client._start_reader_thread()
+
+        # Simule reception HELLO v=1
+        hello = Frame(type="HELLO", args="", seq=2, version=1)
+        mock_serial.inject_rx(hello.encode())
+
+        # connect doit aboutir
+        client.connect(timeout=1.0)
+        assert client.is_connected
+
+        # Verifier qu'on a bien envoye HELLO_ACK avec ack=2
+        sent = mock_serial.get_tx()
+        assert b"<HELLO_ACK|" in sent
+        assert b"|ack=2|" in sent
+
+        client.close()
+
+    def test_connect_raises_version_error_on_mismatch(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock, expected_version=1)
+        client._start_reader_thread()
+
+        # Simule reception HELLO v=2 (incompatible)
+        hello = Frame(type="HELLO", args="", seq=2, version=2)
+        mock_serial.inject_rx(hello.encode())
+
+        with pytest.raises(UartVersionError, match="version"):
+            client.connect(timeout=1.0)
+
+        client.close()
+
+    def test_connect_raises_timeout_if_no_hello(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock, expected_version=1)
+        client._start_reader_thread()
+
+        result = []
+        def runner():
+            try:
+                client.connect(timeout=0.5)
+                result.append("connected")
+            except UartTimeoutError as e:
+                result.append("timeout")
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        # Avance l'horloge pour declencher le timeout
+        time.sleep(0.1)
+        mock_clock.advance(1.0)
+
+        t.join(timeout=2)
+        assert result == ["timeout"]
+
+        client.close()

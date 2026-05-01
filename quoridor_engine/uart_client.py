@@ -285,3 +285,49 @@ class UartClient:
         except Exception:
             pass
         self.is_connected = False
+
+    def connect(self, timeout: float = 3.0) -> None:
+        """Realise le handshake HELLO/HELLO_ACK et verifie la version.
+
+        Bloque jusqu'a reception d'un HELLO valide ou timeout.
+        Leve UartTimeoutError si pas de HELLO recu, UartVersionError si version incompatible.
+        """
+        self._start_reader_thread()
+
+        deadline = self._clock() + timeout
+        while self._clock() < deadline:
+            try:
+                frame = self._rx_queue.get(timeout=0.05)
+            except queue.Empty:
+                continue
+
+            if frame.type == "HELLO":
+                # Verifie version
+                if frame.version != self._expected_version:
+                    raise UartVersionError(
+                        f"version protocole incompatible : "
+                        f"recu v={frame.version}, attendu v={self._expected_version}"
+                    )
+                # Repond HELLO_ACK avec ack=seq du HELLO
+                self._send_response(type="HELLO_ACK", args="", ack=frame.seq)
+                self.is_connected = True
+                return
+
+        raise UartTimeoutError(f"aucun HELLO recu apres {timeout}s")
+
+    def _send_frame(self, frame: "Frame") -> None:
+        """Envoie une frame deja construite sur le port serie."""
+        self._serial.write(frame.encode())
+
+    def _send_response(self, type: str, args: str, ack: int) -> None:
+        """Construit et envoie une reponse (avec ack=)."""
+        seq = self._next_tx_seq()
+        frame = Frame(type=type, args=args, seq=seq, ack=ack)
+        self._send_frame(frame)
+
+    def _send_request(self, type: str, args: str, version: Optional[int] = None) -> int:
+        """Construit et envoie une requete. Retourne le seq utilise."""
+        seq = self._next_tx_seq()
+        frame = Frame(type=type, args=args, seq=seq, version=version)
+        self._send_frame(frame)
+        return seq
