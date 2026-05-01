@@ -792,3 +792,224 @@ class TestSessionReset:
         assert client._tx_seq == 0
 
         client.close()
+
+
+class TestFrameDecodeEdgeCases:
+    """Branches defensives de Frame.decode non couvertes par les tests de base."""
+
+    def test_decode_strips_cr_before_lf(self):
+        # L66 : strip \r apres avoir enleve \n -> doit accepter \r\n final
+        original = Frame(type="KEEPALIVE", args="", seq=0)
+        encoded_with_crlf = original.encode().rstrip(b"\n") + b"\r\n"
+        decoded = Frame.decode(encoded_with_crlf)
+        assert decoded.type == "KEEPALIVE"
+
+    def test_decode_rejects_no_pipe_metadata(self):
+        # L82 : len(parts) < 2 -> "trame sans champs metadata"
+        # Construire une trame avec un seul champ (pas de '|')
+        # On forge directement car il n'y a pas de CRC valide possible sans '|'
+        with pytest.raises(UartProtocolError, match="champs metadata"):
+            Frame.decode(b"<KEEPALIVE>")
+
+    def test_decode_rejects_non_hex_crc(self):
+        # L105-106 : int(crc_value, 16) leve ValueError -> "crc non hexadecimal"
+        with pytest.raises(UartProtocolError, match="crc non hexadecimal"):
+            Frame.decode(b"<KEEPALIVE|seq=0|crc=ZZZZ>")
+
+    def test_decode_rejects_non_numeric_seq(self):
+        # L116-117 : int(field[4:]) leve ValueError pour seq= non numerique
+        body = "KEEPALIVE|seq=ABC"
+        crc = compute_crc(body.encode("ascii"))
+        raw = f"<{body}|crc={crc:04X}>".encode("ascii")
+        with pytest.raises(UartProtocolError, match="seq non numerique"):
+            Frame.decode(raw)
+
+    def test_decode_rejects_non_numeric_ack(self):
+        # L123-124 : int(field[4:]) leve ValueError pour ack= non numerique
+        body = "ACK|seq=0|ack=XYZ"
+        crc = compute_crc(body.encode("ascii"))
+        raw = f"<{body}|crc={crc:04X}>".encode("ascii")
+        with pytest.raises(UartProtocolError, match="ack non numerique"):
+            Frame.decode(raw)
+
+    def test_decode_rejects_ack_out_of_range(self):
+        # L126 : ack hors [0, 255] -> "ack hors plage"
+        body = "ACK|seq=0|ack=300"
+        crc = compute_crc(body.encode("ascii"))
+        raw = f"<{body}|crc={crc:04X}>".encode("ascii")
+        with pytest.raises(UartProtocolError, match="ack hors plage"):
+            Frame.decode(raw)
+
+    def test_decode_rejects_non_numeric_version(self):
+        # L130-131 : int(field[2:]) leve ValueError pour v= non numerique
+        body = "HELLO|seq=0|v=abc"
+        crc = compute_crc(body.encode("ascii"))
+        raw = f"<{body}|crc={crc:04X}>".encode("ascii")
+        with pytest.raises(UartProtocolError, match="v non numerique"):
+            Frame.decode(raw)
+
+
+class TestUartClientEdgeCases:
+    """Branches defensives de UartClient non couvertes par les tests nominaux."""
+
+    def test_reader_loop_breaks_on_serial_exception(self, mock_serial, mock_clock):
+        # L259-260 : si serial.read() leve une exception, le thread s'arrete
+        call_count = [0]
+        original_read = mock_serial.read
+
+        def failing_read(n):
+            call_count[0] += 1
+            if call_count[0] > 1:
+                raise IOError("port ferme")
+            return b""
+
+        mock_serial.read = failing_read
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+        time.sleep(0.3)
+        # Le thread doit s'etre arrete apres l'exception
+        assert not client._reader_thread.is_alive()
+
+    def test_reader_loop_clears_buffer_on_overflow(self, mock_serial, mock_clock):
+        # L272 : si buffer > 80 octets sans \n, _read_buffer est vide
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        # Injecte > 80 octets sans \n (pas de newline pour forcer accumulation)
+        mock_serial.inject_rx(b"X" * 90)
+        client._start_reader_thread()
+        time.sleep(0.3)
+        # Le buffer doit avoir ete vide (pas de crash, pas de \n = tout jete)
+        assert len(client._read_buffer) == 0
+        client.close()
+
+    def test_dispatch_ignores_empty_stripped_line(self, mock_serial, mock_clock):
+        # L283 : ligne vide apres rstrip -> return immediat
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._dispatch_line(b"\r\n")  # stripped -> b"" -> return
+        assert client._rx_queue.empty()
+        assert client._debug_lines == []
+
+    def test_dispatch_debug_rotation_trims_old_lines(self, mock_serial, mock_clock):
+        # L306 : quand debug_lines depasse MAX_DEBUG_LINES, rotation
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        # Injecter MAX_DEBUG_LINES + 5 lignes debug directement via _dispatch_line
+        for i in range(client.MAX_DEBUG_LINES + 5):
+            client._dispatch_line(f"[DBG] line {i}\n".encode("ascii"))
+        assert len(client._debug_lines) == client.MAX_DEBUG_LINES
+
+    def test_close_handles_serial_exception_gracefully(self, mock_serial, mock_clock):
+        # L315-316 : serial.close() leve une exception -> ignoree silencieusement
+        def failing_close():
+            raise IOError("erreur fermeture")
+        mock_serial.close = failing_close
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+        # Ne doit pas lever d'exception
+        client.close()
+        assert client.is_connected is False
+
+    def test_send_ack_no_op_if_not_connected(self, mock_serial, mock_clock):
+        # L402 : send_ack ne fait rien si is_connected = False
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.send_ack(request_seq=42)
+        assert mock_serial.get_tx() == b""
+
+    def test_send_nack_no_op_if_not_connected(self, mock_serial, mock_clock):
+        # L408 : send_nack ne fait rien si is_connected = False
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.send_nack(request_seq=42, reason="ILLEGAL")
+        assert mock_serial.get_tx() == b""
+
+    def test_send_cmd_raises_if_not_connected(self, mock_serial, mock_clock):
+        # L419 : send_cmd leve UartError si is_connected = False
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        with pytest.raises(UartError, match="non connecte"):
+            client.send_cmd("CMD", "MOVE 2 5")
+
+    def test_send_cmd_raises_hardware_error_on_err_response(self, mock_serial, mock_clock):
+        # L441-443 : si ERR recu avec ack=seq pendant send_cmd -> UartHardwareError
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        result = []
+        def runner():
+            try:
+                client.send_cmd("CMD", "MOVE 2 5")
+                result.append("done")
+            except UartHardwareError as e:
+                result.append(("hardware_err", e.code))
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        time.sleep(0.1)
+
+        # Recupere le seq utilise
+        sent = mock_serial.peek_tx()
+        import re
+        m = re.search(rb"\|seq=(\d+)\|", sent)
+        assert m is not None
+        seq_used = int(m.group(1))
+
+        # Simule ERR avec ack=seq (erreur hardware)
+        err = Frame(type="ERR", args="MOTOR_TIMEOUT", seq=99, ack=seq_used)
+        mock_serial.inject_rx(err.encode())
+
+        t.join(timeout=2)
+        assert result == [("hardware_err", "MOTOR_TIMEOUT")]
+
+        client.close()
+
+    def test_send_cmd_requeues_unrelated_frames(self, mock_serial, mock_clock):
+        # L449-450 : frames non liees a la requete courante sont remises en queue
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.is_connected = True
+        client._start_reader_thread()
+
+        result = []
+        def runner():
+            try:
+                client.send_cmd("CMD", "MOVE 2 5")
+                result.append("done")
+            except Exception as e:
+                result.append(("err", e))
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        time.sleep(0.1)
+
+        # Recupere le seq utilise
+        sent = mock_serial.peek_tx()
+        import re
+        m = re.search(rb"\|seq=(\d+)\|", sent)
+        assert m is not None
+        seq_used = int(m.group(1))
+
+        # Injecte une MOVE_REQ (non liee) puis le DONE
+        unrelated = Frame(type="MOVE_REQ", args="1 2", seq=10)
+        done = Frame(type="DONE", args="", seq=99, ack=seq_used)
+        mock_serial.inject_rx(unrelated.encode() + done.encode())
+
+        t.join(timeout=2)
+        assert result == ["done"]
+
+        # La MOVE_REQ doit etre remise dans la queue
+        requeued = client.receive(timeout=0.5)
+        assert requeued is not None
+        assert requeued.type == "MOVE_REQ"
+
+        client.close()
+
+    def test_handle_err_received_raises_on_non_err_frame(self, mock_serial, mock_clock):
+        # L467 : leve ValueError si frame.type != "ERR"
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        f = Frame(type="KEEPALIVE", args="", seq=0)
+        with pytest.raises(ValueError, match="ERR"):
+            client.handle_err_received(f)
+
+    def test_send_cmd_reset_no_op_if_not_connected(self, mock_serial, mock_clock):
+        # L484 : send_cmd_reset ne fait rien si is_connected = False
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client.send_cmd_reset()
+        assert mock_serial.get_tx() == b""
