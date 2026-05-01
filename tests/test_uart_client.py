@@ -639,4 +639,47 @@ class TestErrHandling:
         with pytest.raises(UartHardwareError, match="MOTOR_TIMEOUT"):
             client.handle_err_received(frame)
 
+
+class TestConnectWithEspInError:
+    """§6.6 : RPi reboote + ESP32 deja en ERROR."""
+
+    def test_connect_sends_reset_if_only_err_received(self, mock_serial, mock_clock):
+        """Si on recoit ERR au lieu de HELLO -> envoyer CMD_RESET et attendre HELLO."""
+        client = UartClient(serial_port=mock_serial, clock=mock_clock, expected_version=1)
+        client._start_reader_thread()
+
+        # 1) ESP32 envoie ERR au lieu de HELLO
+        err = Frame(type="ERR", args="UART_LOST", seq=99)
+        mock_serial.inject_rx(err.encode())
+
+        # 2) Connect doit envoyer CMD_RESET, puis attendre HELLO
+
+        # Lance connect dans un thread
+        result = []
+        def runner():
+            try:
+                client.connect(timeout=2.0)
+                result.append("connected")
+            except Exception as e:
+                result.append(("err", type(e).__name__))
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        # Attendre que connect ait envoye CMD_RESET
+        time.sleep(0.5)
+
+        sent = mock_serial.get_tx()
+        assert b"<CMD_RESET|" in sent
+
+        # 3) Simuler le reboot ESP32 : BOOT_START puis HELLO
+        boot = Frame(type="BOOT_START", args="", seq=0)
+        hello = Frame(type="HELLO", args="", seq=2, version=1)
+        mock_serial.inject_rx(boot.encode() + hello.encode())
+
+        t.join(timeout=3)
+        assert result == ["connected"]
+
+        client.close()
+
         client.close()

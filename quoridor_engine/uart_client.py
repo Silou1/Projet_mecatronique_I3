@@ -314,10 +314,15 @@ class UartClient:
     def connect(self, timeout: float = 3.0) -> None:
         """Realise le handshake HELLO/HELLO_ACK et verifie la version.
 
+        Gere aussi le cas RPi reboote + ESP32 en ERROR (§6.6 spec) :
+        - Si on recoit ERR avant HELLO, on envoie automatiquement CMD_RESET et on attend.
+
         Bloque jusqu'a reception d'un HELLO valide ou timeout.
         Leve UartTimeoutError si pas de HELLO recu, UartVersionError si version incompatible.
         """
         self._start_reader_thread()
+        # Dans le cas ESP32 en ERROR, on envoie un seul CMD_RESET et on attend
+        reset_already_sent = False
 
         deadline = self._clock() + timeout
         while self._clock() < deadline:
@@ -327,16 +332,26 @@ class UartClient:
                 continue
 
             if frame.type == "HELLO":
-                # Verifie version
                 if frame.version != self._expected_version:
                     raise UartVersionError(
                         f"version protocole incompatible : "
                         f"recu v={frame.version}, attendu v={self._expected_version}"
                     )
-                # Repond HELLO_ACK avec ack=seq du HELLO
                 self._send_response(type="HELLO_ACK", args="", ack=frame.seq)
                 self.is_connected = True
                 return
+
+            if frame.type == "ERR" and not reset_already_sent:
+                # ESP32 est en ERROR : envoyer CMD_RESET pour le rebooter
+                # On utilise un envoi direct sans verifier is_connected (qui est False)
+                seq = self._next_tx_seq()
+                reset_frame = Frame(type="CMD_RESET", args="", seq=seq)
+                self._send_frame(reset_frame)
+                reset_already_sent = True
+                # Etendre le timeout pour attendre le reboot ESP32 (§6.6 : 10 s)
+                deadline = max(deadline, self._clock() + 10.0)
+
+            # BOOT_START et autres trames sont ignorees, on continue d'attendre HELLO
 
         raise UartTimeoutError(f"aucun HELLO recu apres {timeout}s")
 
