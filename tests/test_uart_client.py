@@ -189,3 +189,55 @@ class TestFrameDecodeValid:
         with_newline = original.encode()  # avec \n
         decoded = Frame.decode(with_newline)
         assert decoded.type == "KEEPALIVE"
+
+
+class TestFrameDecodeRejects:
+    """Rejets de trames mal formees - couvre §3.6 du spec."""
+
+    def test_reject_too_long(self):
+        # Trame > 80 octets
+        long_args = "A" * 80
+        with pytest.raises(UartProtocolError, match="trop longue"):
+            Frame.decode(f"<MOVE_REQ {long_args}|seq=0|crc=ABCD>".encode("ascii"))
+
+    def test_reject_no_delimiters(self):
+        with pytest.raises(UartProtocolError, match="delimiteurs"):
+            Frame.decode(b"KEEPALIVE|seq=0|crc=ABCD")
+
+    def test_reject_only_open_delimiter(self):
+        with pytest.raises(UartProtocolError, match="delimiteurs"):
+            Frame.decode(b"<KEEPALIVE|seq=0|crc=ABCD")
+
+    def test_reject_lowercase_type(self):
+        with pytest.raises(UartProtocolError, match="TYPE invalide"):
+            Frame.decode(b"<keepalive|seq=0|crc=ABCD>")
+
+    def test_reject_missing_seq(self):
+        with pytest.raises(UartProtocolError, match="seq="):
+            Frame.decode(b"<KEEPALIVE|crc=ABCD>")
+
+    def test_reject_missing_crc(self):
+        with pytest.raises(UartProtocolError, match="crc="):
+            Frame.decode(b"<KEEPALIVE|seq=0>")
+
+    def test_reject_lowercase_crc(self):
+        with pytest.raises(UartProtocolError, match="format crc"):
+            Frame.decode(b"<KEEPALIVE|seq=0|crc=abcd>")
+
+    def test_reject_short_crc(self):
+        with pytest.raises(UartProtocolError, match="format crc"):
+            Frame.decode(b"<KEEPALIVE|seq=0|crc=AB>")
+
+    def test_reject_crc_value_mismatch(self):
+        # Trame valide en structure mais CRC incorrect
+        with pytest.raises(UartProtocolError, match="CRC invalide"):
+            Frame.decode(b"<KEEPALIVE|seq=0|crc=0000>")
+
+    def test_reject_seq_out_of_range(self):
+        with pytest.raises(UartProtocolError, match="seq hors plage"):
+            # 256 hors plage [0,255]
+            Frame.decode(b"<KEEPALIVE|seq=256|crc=ABCD>")
+
+    def test_reject_unknown_metadata_field(self):
+        with pytest.raises(UartProtocolError, match="champ inconnu"):
+            Frame.decode(b"<KEEPALIVE|seq=0|foo=bar|crc=ABCD>")
