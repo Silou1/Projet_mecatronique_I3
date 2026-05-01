@@ -35,10 +35,6 @@ namespace {
   // Stats
   uint32_t _rejectedCount = 0;
 
-  // Legacy Plan 1 (a supprimer apres refactor callers)
-  String _legacyPendingLine;
-  bool _legacyHasPending = false;
-
   // CRC-16 CCITT-FALSE (poly 0x1021, init 0xFFFF, sans reflexion)
   uint16_t crc16(const uint8_t* data, size_t len) {
     uint16_t crc = 0xFFFF;
@@ -79,7 +75,6 @@ void UartLink::init() {
   _frameQueueCount = 0;
   _rejectedCount = 0;
   _errActive = false;
-  _legacyHasPending = false;
   log("UART", "init");
 }
 
@@ -315,12 +310,7 @@ void UartLink::poll() {
         }
       } else if (llen > 0) {
         // Pas une trame protocolaire : tente injection BTN
-        // Conserve aussi en stub legacy pour compat ascendante (a supprimer apres refactor)
-        if (!tryHandleInjection(line)) {
-          // Legacy : conserve pour les callers Plan 1 qui appellent encore tryReadLine
-          _legacyPendingLine = _rxBuffer;
-          _legacyHasPending = true;
-        }
+        tryHandleInjection(line);
       }
       _rxBuffer = "";
     } else {
@@ -337,24 +327,6 @@ bool UartLink::tryGetFrame(Frame& out) {
   out = _frameQueue[_frameQueueHead];
   _frameQueueHead = (_frameQueueHead + 1) % FRAME_QUEUE_SIZE;
   _frameQueueCount--;
-  return true;
-}
-
-// ==================================================================
-// API legacy Plan 1 - stubs minimaux pour ne pas casser les callers existants.
-// A supprimer dans le refactor des callers (Tasks 25-27).
-// ==================================================================
-
-void UartLink::sendLine(const String& line) {
-  // Stub : envoie la ligne brute (sans framing). Les callers seront migres.
-  String out = line + "\n";
-  writeUnderMutex(out.c_str(), out.length());
-}
-
-bool UartLink::tryReadLine(String& out) {
-  if (!_legacyHasPending) return false;
-  out = _legacyPendingLine;
-  _legacyHasPending = false;
   return true;
 }
 

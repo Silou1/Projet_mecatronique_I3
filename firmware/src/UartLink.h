@@ -65,13 +65,6 @@ namespace UartLink {
   // Reset l'etat ERR (a la sortie de l'etat ERROR, ex apres CMD_RESET).
   void clearErrState();
 
-  // ==================================================================
-  // API legacy Plan 1 - sera supprimee dans le refactor des callers (Tasks 25-27).
-  // Ne pas utiliser dans du nouveau code.
-  // ==================================================================
-  void sendLine(const String& line);
-  bool tryReadLine(String& out);
-
   // Constantes protocole
   constexpr uint8_t PROTOCOL_VERSION = 1;
 }
