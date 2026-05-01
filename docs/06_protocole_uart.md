@@ -1,62 +1,129 @@
-# Protocole UART — RPi ↔ ESP32
+# Protocole UART — RPi ↔ ESP32 (Plan 2)
 
-> **Statut** : 🚧 *À définir lors du Plan 2 firmware. Cette page est un placeholder qui consolide ce qui existe déjà et liste les questions ouvertes.*
+> **Statut** : ✅ *Plan 2 figé. Implémentation en cours dans P8.*
+>
+> **Spec de référence** : [`superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md`](superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md). Cette page est un résumé pratique pour l'équipe ; en cas de divergence apparente, le spec fait foi.
 
-## Contexte
+## En une phrase
 
-- Liaison série **UART0** entre RPi 3/4 et ESP32-WROOM
-- Vitesse : **115200 bauds**, fin de ligne `LF`
-- Cette UART est **partagée avec le port USB** de debug de l'ESP32 → attention à ne pas confondre debug et trafic protocolaire
+Trames texte framées `<TYPE [args]|seq=N[|ack=M][|v=K]|crc=XXXX>\n`, intégrité CRC-16 CCITT-FALSE, séquencement modulo 256 avec `ack=M` sur les réponses, retry idempotent uniquement sur les `CMD ...` côté RPi (3 essais, 15 s).
 
-## Plan 1 — Protocole texte simplifié (actuel)
+## Liaison physique
 
-Le firmware Plan 1 utilise un protocole texte ligne-par-ligne, suffisant pour les tests mais sans framing ni intégrité.
+- **UART0** entre RPi 3/4 et ESP32-WROOM
+- **115200 bauds**, fin de ligne `LF`
+- Câble direct (pas de bus intermédiaire)
+- ⚠️ **Partagée avec le port USB de debug ESP32** : voir §"Co-existence debug" plus bas
 
-### Trames émises par l'ESP32
+## Format des trames
 
-| Trame | Sens | Description |
+```
+<TYPE [arg1 arg2 ...] | seq=N [|ack=M] [|v=K] | crc=XXXX>\n
+```
+
+| Champ | Description | Obligatoire ? |
 |---|---|---|
-| `BOOT_START` | ESP32 → RPi | Émise en début de `setup()` |
-| `SETUP_DONE` | ESP32 → RPi | Fin du `setup()` |
-| `HELLO` | ESP32 → RPi | Émise toutes les 200 ms en état `WAITING_RPI` |
-| `MOVE_REQ <ligne> <col>` | ESP32 → RPi | Demande de validation d'un coup détecté sur la matrice |
-| `DONE` | ESP32 → RPi | Fin d'exécution motrice |
-| `ERR <code>` | ESP32 → RPi | Erreur (ex : `ERR UART_LOST`) |
+| `<` ... `>\n` | Délimiteurs structurels | Oui |
+| `TYPE` | Mot-clé MAJUSCULES (ex : `MOVE_REQ`, `CMD`) | Oui |
+| Arguments | Mots-clés MAJUSCULES ou entiers décimaux, séparés par espaces | Selon TYPE |
+| `seq=N` | Numéro de séquence émetteur (0–255) | Oui |
+| `ack=M` | Seq de la requête à laquelle on répond | Sur réponses uniquement |
+| `v=K` | Version protocole | Sur `HELLO` uniquement (v=1 actuel) |
+| `crc=XXXX` | CRC-16 CCITT-FALSE en hexa MAJUSCULES sur 4 chars | Oui (toujours en dernier) |
 
-### Trames reçues par l'ESP32
+**Calcul CRC** : sur les octets entre `<` (exclu) et `|crc=` (exclu).
+**Polynôme** : 0x1021, **init** : 0xFFFF, **xorOut** : 0x0000, sans réflexion.
+**Implémentation Python** : `binascii.crc_hqx(data, 0xFFFF)` — dans la stdlib.
 
-| Trame | Sens | Description |
+**Vecteurs de référence figés** (cf. spec §3.5) :
+
+| Input (zone CRC) | CRC attendu |
+|---|---|
+| `MOVE_REQ 3 4\|seq=42` | `0xAED2` |
+| `CMD MOVE 2 5\|seq=43` | `0x8489` |
+| `KEEPALIVE\|seq=0` | `0x74D8` |
+
+**Longueur max** : 80 octets (toute trame plus longue est rejetée silencieusement).
+
+## Catalogue des trames
+
+### ESP32 → RPi (8 types)
+
+| TYPE | Args | Quand |
 |---|---|---|
-| `HELLO_ACK` | RPi → ESP32 | Confirmation du RPi, fait passer ESP32 en `CONNECTED` |
-| `KEEP` | RPi → ESP32 | Keepalive (à envoyer toutes les ≤ 3 s pour rester `CONNECTED`) |
-| `ACK` | RPi → ESP32 | Validation d'un `MOVE_REQ` |
-| `NACK` | RPi → ESP32 | Refus d'un `MOVE_REQ` (coup invalide) |
-| `CMD MOVE <ligne> <col>` | RPi → ESP32 | Commande directe (typiquement coup de l'IA) |
-| `RESET` | RPi → ESP32 | Reboot l'ESP32 depuis l'état `ERROR` |
-| `BTN <ligne> <col>` | (test) | Injection d'un appui bouton via Serial Monitor pour tests sans hardware |
+| `BOOT_START` | aucun | Tout début de `setup()` |
+| `SETUP_DONE` | aucun | Fin du `setup()` |
+| `HELLO` | aucun (`v=1` séparé) | Toutes les 200 ms en `WAITING_RPI` |
+| `MOVE_REQ` | `<row> <col>` | Détection clic 1 case |
+| `WALL_REQ` | `<h\|v> <row> <col>` | Détection clic 2 cases adjacentes |
+| `DONE` | aucun | Fin d'exécution d'une `CMD ...` reçue (porte `ack=`) |
+| `ERR` | `<code>` | Entrée dans `ERROR` (réémis 1 s, peut porter `ack=`) |
 
-### Limites
+### RPi → ESP32 (10 types)
 
-- Pas de checksum / CRC
-- Pas de framing binaire (lignes de texte arbitraires)
-- Pas de versioning du protocole
-- Pas de séquencement / retransmission
-- Pas de gestion d'ID de commande (impossible de corréler `MOVE_REQ` ↔ `ACK` si plusieurs en vol)
+| TYPE | Args | Quand |
+|---|---|---|
+| `HELLO_ACK` | aucun | Réponse à `HELLO` (active `CONNECTED`) |
+| `KEEPALIVE` | aucun | Toutes les 1 s en session active |
+| `ACK` | aucun | Validation d'un `MOVE_REQ`/`WALL_REQ` |
+| `NACK` | `<raison>` | Refus d'un `MOVE_REQ`/`WALL_REQ` |
+| `CMD MOVE` | `<row> <col>` | Coup IA déplacement |
+| `CMD WALL` | `<h\|v> <row> <col>` | Coup IA mur |
+| `CMD HIGHLIGHT` | `[<row> <col> ...]` (0 à 8) | Surbrillance ; vide = clear |
+| `CMD SET_TURN` | `<j1\|j2>` | Indicateur visuel de tour |
+| `CMD GAMEOVER` | `<j1\|j2>` | Fin de partie + servo |
+| `CMD_RESET` | aucun | Reset depuis `ERROR` |
 
-## Plan 2 — Protocole binaire à concevoir (📋 à faire)
+### Codes d'erreur (`ERR <code>`)
 
-Questions à trancher :
+**Récupérables (auto `CMD_RESET`)** : `UART_LOST`, `BUTTON_MATRIX`
+**Non récupérables (alerte humain)** : `MOTOR_TIMEOUT`, `LIMIT_UNEXPECTED`, `HOMING_FAILED`, `I2C_NACK`, `BOOT_I2C`, `BOOT_LED`, `BOOT_HOMING`
 
-1. **Format binaire ou texte enrichi** ? (texte = debuggable au Serial Monitor, binaire = plus compact et fiable)
-2. **Framing** : COBS, SLIP, byte stuffing, longueur fixe ?
-3. **Intégrité** : CRC-8, CRC-16, simple checksum XOR ?
-4. **Versioning** : champ version dans chaque trame ?
-5. **ID de séquence** : pour matcher requêtes/réponses
-6. **Timeouts et retransmissions** : politique côté RPi ? côté ESP32 ?
-7. **Bibliothèques candidates** : `pyserial` côté RPi (déjà standard), `MicroProtoSockets` ou framing custom côté ESP32
+### Codes de raison (`NACK <code>`)
+
+`ILLEGAL`, `OUT_OF_BOUNDS`, `WRONG_TURN`, `WALL_BLOCKED`, `NO_WALLS_LEFT`, `INVALID_FORMAT`
+
+## Séquencement et idempotence
+
+- Chaque émetteur (ESP32 et Python) maintient son propre compteur `tx_seq` ∈ [0, 255], incrémenté modulo 256 à chaque trame émise.
+- **Sur retry de `CMD ...` côté RPi : on réutilise le même seq** (sinon l'idempotence ne marcherait pas).
+- ESP32 stocke `last_cmd_seq_processed` + `last_cmd_result` pour dédup. Si un retry arrive pour la même seq déjà traitée → renvoie `DONE` sans re-exécuter.
+- Si retry pendant exécution en cours → ignore en silence (le RPi attendra son timeout).
+
+## Politique de retransmission
+
+| Trame | Retry auto ? |
+|---|---|
+| `MOVE_REQ` / `WALL_REQ` | Non (l'humain reclique) |
+| `CMD ...` | **Oui** : 2 retries (3 essais total), timeout 15 s, idempotent |
+| `KEEPALIVE` | Émis périodiquement (1 s) |
+| `HELLO` | Réémis périodiquement (200 ms) tant que pas d'`HELLO_ACK` |
+| `ERR` | Réémis périodiquement (1 s) tant que ESP32 en `ERROR` |
+| `ACK` / `NACK` / `DONE` | Non (réponses) |
+
+## Co-existence debug ↔ protocole
+
+L'UART0 est **physiquement la même** que le port USB de debug ESP32. Pour éviter la collision :
+
+- **Trames protocolaires** : commencent par `<`, se terminent par `>\n`. Émises uniquement via `UartLink::sendFrame()`.
+- **Logs de debug** : préfixés `[XXX]`, jamais commençant par `<`. Émis via `UartLink::log("XXX", ...)`.
+- **Côté Python** : la condition "premier caractère = `<`" classe la ligne comme protocolaire. Sinon → log ESP32 (affiché dans le buffer debug).
+- **Synchronisation FreeRTOS** : un mutex sur les accès à `Serial` empêche l'entrelacement entre Core 0 et Core 1 (sinon une trame en cours d'émission peut être corrompue par un log d'une autre tâche).
+
+## Mode injection test
+
+Pour les tests manuels au Serial Monitor (sans hardware), l'ESP32 accepte **en réception** un format simplifié :
+
+```
+BTN <row> <col>\n
+```
+
+Cette ligne (sans framing ni CRC) est interprétée comme un clic simulé. **Asymétrique** : seul l'ESP32 accepte ce format, le Python ne l'émet jamais.
 
 ## Pour aller plus loin
 
-- Implémentation actuelle ESP32 : [firmware/src/UartLink.{cpp,h}](../firmware/src/)
-- Côté Python (à écrire) : module `quoridor_engine/uart_client.py` ou équivalent — voir Phase P8 dans [00_plan_global.md](00_plan_global.md)
-- Scénarios de test série : [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md)
+- **Spec complet** (toutes les décisions, justifications, diagrammes, vecteurs CRC, stratégie de tests) : [`superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md`](superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md)
+- **Implémentation côté ESP32** : [`firmware/src/UartLink.{h,cpp}`](../firmware/src/)
+- **Implémentation côté Python** : [`quoridor_engine/uart_client.py`](../quoridor_engine/uart_client.py)
+- **Tests Python** : [`tests/test_uart_client.py`](../tests/test_uart_client.py)
+- **Plan d'implémentation P8** : [`superpowers/plans/2026-05-01-protocole-uart-plan-2-implementation.md`](superpowers/plans/2026-05-01-protocole-uart-plan-2-implementation.md)
