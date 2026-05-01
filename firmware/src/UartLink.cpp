@@ -148,3 +148,212 @@ void UartLink::logf(const char* tag, const char* fmt, ...) {
 uint32_t UartLink::getRejectedCount() {
   return _rejectedCount;
 }
+
+namespace {
+  // Parse une ligne brute (sans le \n final) en Frame.
+  // Retourne true si trame valide, false sinon.
+  bool parseFrame(const char* raw, size_t len, UartLink::Frame& out) {
+    // Verifie longueur max
+    if (len > 80) return false;
+    // Verifie delimiteurs
+    if (len < 3 || raw[0] != '<' || raw[len - 1] != '>') return false;
+
+    // Travaille sur le contenu interne (sans <>)
+    const char* inner = raw + 1;
+    size_t innerLen = len - 2;
+
+    // Trouve |crc= a la fin
+    if (innerLen < 9) return false;
+    const char* crcStart = nullptr;
+    for (int i = (int)innerLen - 9; i >= 0; i--) {
+      if (memcmp(inner + i, "|crc=", 5) == 0) {
+        crcStart = inner + i;
+        break;
+      }
+    }
+    if (!crcStart) return false;
+    const char* crcHex = crcStart + 5;
+    if (inner + innerLen - crcHex != 4) return false;
+    for (int i = 0; i < 4; i++) {
+      char c = crcHex[i];
+      bool valid = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F');
+      if (!valid) return false;
+    }
+    uint16_t recvCrc = 0;
+    for (int i = 0; i < 4; i++) {
+      char c = crcHex[i];
+      uint8_t v = (c >= '0' && c <= '9') ? (c - '0') : (c - 'A' + 10);
+      recvCrc = (recvCrc << 4) | v;
+    }
+
+    // Calcule le CRC sur la zone (inner sans |crc=XXXX)
+    size_t crcZoneLen = (size_t)(crcStart - inner);
+    uint16_t calcCrc = crc16((const uint8_t*)inner, crcZoneLen);
+    if (calcCrc != recvCrc) return false;
+
+    // Parser la zone : TYPE [args]|seq=N[|ack=M][|v=K]
+    char zone[96];
+    if (crcZoneLen >= sizeof(zone)) return false;
+    memcpy(zone, inner, crcZoneLen);
+    zone[crcZoneLen] = '\0';
+
+    char* firstPipe = strchr(zone, '|');
+    if (!firstPipe) return false;
+    *firstPipe = '\0';
+    char* head = zone;
+    char* metaStart = firstPipe + 1;
+
+    char* sp = strchr(head, ' ');
+    if (sp) {
+      *sp = '\0';
+      strncpy(out.type, head, sizeof(out.type) - 1);
+      out.type[sizeof(out.type) - 1] = '\0';
+      strncpy(out.args, sp + 1, sizeof(out.args) - 1);
+      out.args[sizeof(out.args) - 1] = '\0';
+    } else {
+      strncpy(out.type, head, sizeof(out.type) - 1);
+      out.type[sizeof(out.type) - 1] = '\0';
+      out.args[0] = '\0';
+    }
+
+    // Verifie que TYPE est en majuscules + chiffres + _
+    for (size_t i = 0; out.type[i]; i++) {
+      char c = out.type[i];
+      bool ok = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+      if (!ok) return false;
+    }
+
+    out.seq = 0;
+    out.ack = -1;
+    out.version = -1;
+    bool hasSeq = false;
+
+    char* tok = metaStart;
+    while (tok && *tok) {
+      char* nextPipe = strchr(tok, '|');
+      if (nextPipe) *nextPipe = '\0';
+
+      if (strncmp(tok, "seq=", 4) == 0) {
+        int v = atoi(tok + 4);
+        if (v < 0 || v > 255) return false;
+        out.seq = (uint8_t)v;
+        hasSeq = true;
+      } else if (strncmp(tok, "ack=", 4) == 0) {
+        int v = atoi(tok + 4);
+        if (v < 0 || v > 255) return false;
+        out.ack = (int16_t)v;
+      } else if (strncmp(tok, "v=", 2) == 0) {
+        out.version = (int16_t)atoi(tok + 2);
+      }
+
+      tok = nextPipe ? nextPipe + 1 : nullptr;
+    }
+
+    if (!hasSeq) return false;
+    return true;
+  }
+
+  bool isCmdFrame(const UartLink::Frame& f) {
+    return strcmp(f.type, "CMD") == 0 || strcmp(f.type, "CMD_RESET") == 0;
+  }
+
+  void enqueueFrame(const UartLink::Frame& f) {
+    if (_frameQueueCount >= FRAME_QUEUE_SIZE) {
+      _frameQueueHead = (_frameQueueHead + 1) % FRAME_QUEUE_SIZE;
+      _frameQueueCount--;
+    }
+    size_t idx = (_frameQueueHead + _frameQueueCount) % FRAME_QUEUE_SIZE;
+    _frameQueue[idx] = f;
+    _frameQueueCount++;
+  }
+
+  // Mode injection test : "BTN <row> <col>" sans framing
+  bool tryHandleInjection(const char* line) {
+    if (strncmp(line, "BTN ", 4) != 0) return false;
+    UartLink::Frame f;
+    strcpy(f.type, "MOVE_REQ");
+    strncpy(f.args, line + 4, sizeof(f.args) - 1);
+    f.args[sizeof(f.args) - 1] = '\0';
+    f.seq = 0;
+    f.ack = -1;
+    f.version = -1;
+    enqueueFrame(f);
+    return true;
+  }
+}
+
+void UartLink::poll() {
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c == '\n') {
+      Frame f;
+      const char* line = _rxBuffer.c_str();
+      size_t llen = _rxBuffer.length();
+
+      if (llen > 0 && line[0] == '<') {
+        if (parseFrame(line, llen, f)) {
+          // Dedup CMD (sec 5.3 spec)
+          if (isCmdFrame(f)) {
+            if ((int16_t)f.seq == _lastCmdSeqProcessed) {
+              if (_lastCmdResult == CmdResult::DONE) {
+                sendFrame("DONE", "", (int)f.seq);
+              } else if (_lastCmdResult == CmdResult::ERR) {
+                sendFrame("ERR", _lastCmdErrCode, (int)f.seq);
+              }
+              // Si NONE (en cours d'execution), ignore silencieusement
+            } else {
+              _lastCmdSeqProcessed = (int16_t)f.seq;
+              _lastCmdResult = CmdResult::NONE;
+              enqueueFrame(f);
+            }
+          } else {
+            enqueueFrame(f);
+          }
+        } else {
+          _rejectedCount++;
+        }
+      } else if (llen > 0) {
+        // Pas une trame protocolaire : tente injection BTN
+        // Conserve aussi en stub legacy pour compat ascendante (a supprimer apres refactor)
+        if (!tryHandleInjection(line)) {
+          // Legacy : conserve pour les callers Plan 1 qui appellent encore tryReadLine
+          _legacyPendingLine = _rxBuffer;
+          _legacyHasPending = true;
+        }
+      }
+      _rxBuffer = "";
+    } else {
+      _rxBuffer += c;
+      if (_rxBuffer.length() > 80) {
+        _rxBuffer = "";
+      }
+    }
+  }
+}
+
+bool UartLink::tryGetFrame(Frame& out) {
+  if (_frameQueueCount == 0) return false;
+  out = _frameQueue[_frameQueueHead];
+  _frameQueueHead = (_frameQueueHead + 1) % FRAME_QUEUE_SIZE;
+  _frameQueueCount--;
+  return true;
+}
+
+// ==================================================================
+// API legacy Plan 1 - stubs minimaux pour ne pas casser les callers existants.
+// A supprimer dans le refactor des callers (Tasks 25-27).
+// ==================================================================
+
+void UartLink::sendLine(const String& line) {
+  // Stub : envoie la ligne brute (sans framing). Les callers seront migres.
+  String out = line + "\n";
+  writeUnderMutex(out.c_str(), out.length());
+}
+
+bool UartLink::tryReadLine(String& out) {
+  if (!_legacyHasPending) return false;
+  out = _legacyPendingLine;
+  _legacyHasPending = false;
+  return true;
+}
