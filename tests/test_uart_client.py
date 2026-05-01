@@ -277,3 +277,59 @@ class TestMocks:
         t1 = mock_clock()
         t2 = mock_clock()
         assert t1 == t2
+
+
+import threading
+import time
+
+from quoridor_engine.uart_client import UartClient
+
+
+class TestUartClientInit:
+    """Construction de UartClient + thread de lecture."""
+
+    def test_init_does_not_open_port(self, mock_serial, mock_clock):
+        # L'ouverture est differee a connect()
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        assert client.is_connected is False
+
+    def test_close_stops_reader_thread(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()  # API interne pour tests
+        assert client._reader_thread is not None
+        assert client._reader_thread.is_alive()
+        client.close()
+        # Le thread doit s'arreter rapidement
+        client._reader_thread.join(timeout=2)
+        assert not client._reader_thread.is_alive()
+
+    def test_reader_thread_parses_incoming_frames(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+
+        # Inject une trame valide
+        f = Frame(type="KEEPALIVE", args="", seq=5)
+        mock_serial.inject_rx(f.encode())
+
+        # Laisser le thread lire (court timeout)
+        time.sleep(0.2)
+
+        # La frame doit etre dans la queue interne
+        received = client._rx_queue.get(timeout=1)
+        assert received.type == "KEEPALIVE"
+        assert received.seq == 5
+
+        client.close()
+
+    def test_reader_thread_classifies_debug_lines(self, mock_serial, mock_clock):
+        client = UartClient(serial_port=mock_serial, clock=mock_clock)
+        client._start_reader_thread()
+
+        mock_serial.inject_rx(b"[FSM] BOOT -> WAITING_RPI\n")
+        time.sleep(0.2)
+
+        # La ligne de debug doit etre dans le buffer debug, pas dans la rx_queue
+        assert client._debug_lines  # non vide
+        assert "[FSM]" in client._debug_lines[0]
+
+        client.close()
