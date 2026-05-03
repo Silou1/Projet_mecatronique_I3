@@ -16,7 +16,7 @@ Index global de la documentation du projet. Pour le pitch et l'installation rapi
 - [03_moteur_jeu.md](03_moteur_jeu.md) — Moteur Python : `GameState`, règles, API publique
 - [04_ia.md](04_ia.md) — Intelligence artificielle : Minimax, alpha-bêta, heuristiques
 - [05_firmware.md](05_firmware.md) — Firmware ESP32 : FSM 7 états, watchdog, FreeRTOS, modules
-- [06_protocole_uart.md](06_protocole_uart.md) — Protocole de communication RPi ↔ ESP32 *(à définir, Plan 2 firmware)*
+- [06_protocole_uart.md](06_protocole_uart.md) — Protocole de communication RPi ↔ ESP32 *(Plan 2 figé et implémenté ; tests d'intégration sur DevKit reportés au 2026-05-04)*
 - [07_hardware.md](07_hardware.md) — Carte électronique PCB v2 (renvoi vers `hardware/`)
 
 ## Tests
@@ -31,7 +31,7 @@ Index global de la documentation du projet. Pour le pitch et l'installation rapi
 
 ## Artefacts de session
 
-- [superpowers/](superpowers/) — Specs et plans générés par sessions Claude Code (planification firmware Plan 1, etc.). **À supprimer en fin de projet.**
+- [superpowers/](superpowers/) — Specs (décisions de design figées) et plans (étapes d'implémentation TDD) générés par sessions Claude Code. Voir [superpowers/README.md](superpowers/README.md) pour l'index complet et le statut de chaque artefact. **À nettoyer en fin de projet (P14.4).**
 
 ---
 
