@@ -12,7 +12,10 @@ from quoridor_engine.core import (
     PLAYER_ONE,
     PLAYER_TWO,
     BOARD_SIZE,
-    MAX_WALLS_PER_PLAYER
+    MAX_WALLS_PER_PLAYER,
+    move_pawn,
+    place_wall,
+    interpret_double_click,
 )
 
 
@@ -179,6 +182,63 @@ class TestInvalidMoveError:
         assert err.code == NackCode.ILLEGAL
         assert err.code.value == "ILLEGAL"
         assert str(err) == "test"
+
+
+class TestInvalidMoveErrorCodes:
+    """Vérifie que chaque site de InvalidMoveError porte le bon NackCode.
+
+    Couvre les 6 codes distincts levés par core.py :
+    WRONG_TURN, ILLEGAL, OUT_OF_BOUNDS, WALL_BLOCKED, NO_WALLS_LEFT, INVALID_FORMAT.
+    """
+
+    def test_wrong_turn_on_pawn_move(self):
+        """move_pawn lève WRONG_TURN si on agit pour le mauvais joueur."""
+        state = create_new_game()  # current_player = 'j1'
+        with pytest.raises(InvalidMoveError) as exc:
+            move_pawn(state, "j2", (1, 3))  # j2 essaie de jouer alors que c'est j1
+        assert exc.value.code == NackCode.WRONG_TURN
+
+    def test_illegal_pawn_move_target(self):
+        """move_pawn lève ILLEGAL pour une cible non-adjacente."""
+        state = create_new_game()  # j1 en (5, 3), peut aller (4, 3)
+        with pytest.raises(InvalidMoveError) as exc:
+            move_pawn(state, "j1", (3, 3))  # cible non-adjacente
+        assert exc.value.code == NackCode.ILLEGAL
+
+    def test_wall_out_of_bounds(self):
+        """place_wall lève OUT_OF_BOUNDS si le mur sort du plateau."""
+        state = create_new_game()
+        with pytest.raises(InvalidMoveError) as exc:
+            place_wall(state, "j1", ("h", 10, 10, 2))
+        assert exc.value.code == NackCode.OUT_OF_BOUNDS
+
+    def test_wall_already_exists_blocked(self):
+        """place_wall lève WALL_BLOCKED si un mur identique existe."""
+        state1 = create_new_game()
+        state2 = place_wall(state1, "j1", ("h", 2, 2, 2))
+        # state2 a maintenant le mur ; current_player passe à j2
+        with pytest.raises(InvalidMoveError) as exc:
+            place_wall(state2, "j2", ("h", 2, 2, 2))
+        assert exc.value.code == NackCode.WALL_BLOCKED
+
+    def test_no_walls_left(self):
+        """place_wall lève NO_WALLS_LEFT quand le joueur n'a plus de murs."""
+        # GameState direct, current_player=j1, j1 a 0 murs restants
+        state = GameState(
+            player_positions={"j1": (5, 3), "j2": (0, 3)},
+            walls=frozenset(),
+            player_walls={"j1": 0, "j2": 6},
+            current_player="j1",
+        )
+        with pytest.raises(InvalidMoveError) as exc:
+            place_wall(state, "j1", ("h", 0, 0, 2))
+        assert exc.value.code == NackCode.NO_WALLS_LEFT
+
+    def test_invalid_format_double_click_non_adjacent(self):
+        """interpret_double_click lève INVALID_FORMAT pour 2 cases non-adjacentes."""
+        with pytest.raises(InvalidMoveError) as exc:
+            interpret_double_click((0, 0), (5, 5))
+        assert exc.value.code == NackCode.INVALID_FORMAT
 
 
 if __name__ == '__main__':
