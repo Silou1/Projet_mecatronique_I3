@@ -1013,3 +1013,22 @@ class TestUartClientEdgeCases:
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
         client.send_cmd_reset()
         assert mock_serial.get_tx() == b""
+
+
+class TestRejectedCount:
+    """Verifie le compteur de trames mal formees (cf. spec P9 §9.2)."""
+
+    def test_rejected_count_starts_at_zero(self, mock_serial):
+        client = UartClient(mock_serial)
+        assert client.get_rejected_count() == 0
+
+    def test_rejected_count_increments_on_malformed_frame(self, mock_serial):
+        client = UartClient(mock_serial)
+        client._start_reader_thread()
+        try:
+            # Trame avec CRC invalide (volontairement faux)
+            mock_serial.inject_rx(b"<MOVE_REQ 3 4|seq=0|crc=0000>\n")
+            time.sleep(0.1)  # laisser le reader thread la consommer
+            assert client.get_rejected_count() >= 1
+        finally:
+            client.close()

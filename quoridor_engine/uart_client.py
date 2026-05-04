@@ -223,6 +223,9 @@ class UartClient:
         self._last_request_seq: Optional[int] = None
         self._last_err_received: Optional[str] = None
 
+        self._rejected_count = 0
+        self._rejected_lock = threading.Lock()
+
         self._rx_queue: "queue.Queue[Frame]" = queue.Queue()
         self._debug_lines: list = []  # logs ESP32 (lignes ne commencant pas par '<')
         self._read_buffer = bytearray()
@@ -240,6 +243,11 @@ class UartClient:
             seq = self._tx_seq
             self._tx_seq = (self._tx_seq + 1) & 0xFF
             return seq
+
+    def get_rejected_count(self) -> int:
+        """Retourne le nombre de trames mal formées reçues depuis le boot."""
+        with self._rejected_lock:
+            return self._rejected_count
 
     def _start_reader_thread(self) -> None:
         """Demarre le thread de lecture du port serie. Idempotent."""
@@ -292,8 +300,9 @@ class UartClient:
                     self._reset_session()
                 self._rx_queue.put(frame)
             except UartProtocolError:
-                # Rejet silencieux (cf. §3.6 spec)
-                pass
+                # Rejet silencieux (cf. §3.6 spec protocole). Compteur incremente pour debug.
+                with self._rejected_lock:
+                    self._rejected_count += 1
         else:
             # Ligne de debug ESP32
             try:
