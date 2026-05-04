@@ -168,8 +168,10 @@ class TestInvalidMoveError:
 
     def test_invalid_move_error_requires_code(self):
         """InvalidMoveError doit imposer un argument code obligatoire."""
-        with pytest.raises(TypeError):
-            InvalidMoveError("message sans code")  # manque code → TypeError
+        # match="code" garantit qu'on capture bien l'absence de l'argument `code`,
+        # pas un TypeError incident provenant d'une autre cause.
+        with pytest.raises(TypeError, match="code"):
+            InvalidMoveError("message sans code")
 
     def test_invalid_move_error_exposes_code_attribute(self):
         """L'attribut .code est accessible après levée."""

@@ -92,7 +92,7 @@ class InvalidMoveError(Exception):
               côté UART. Aligné sur le catalogue §4.4 du protocole.
     """
 
-    def __init__(self, message: str, code: "NackCode"):
+    def __init__(self, message: str, code: NackCode):
         super().__init__(message)
         self.code = code
 
@@ -422,7 +422,9 @@ def move_pawn(state: GameState, player: str, target_coord: Coord) -> GameState:
 
     # Vérification 2 : Le déplacement est-il légal ?
     if target_coord not in get_possible_pawn_moves(state, player):
-        raise InvalidMoveError(f"Le déplacement vers {target_coord} est invalide.", NackCode.ILLEGAL)
+        raise InvalidMoveError(
+            f"Le déplacement vers {target_coord} est invalide.", NackCode.ILLEGAL
+        )
     
     # Créer les nouvelles positions (copie pour ne pas modifier l'original)
     new_positions = state.player_positions.copy()
@@ -571,7 +573,9 @@ def _validate_wall_placement(state: GameState, wall: Wall) -> None:
     # Comme un mur a une longueur de 2, il ne peut pas commencer sur la
     # dernière ligne ou colonne (indices 0 à 4 seulement, pas 5)
     if not (0 <= r < BOARD_SIZE - 1 and 0 <= c < BOARD_SIZE - 1):
-        raise InvalidMoveError("Le mur est en dehors des limites de placement.", NackCode.OUT_OF_BOUNDS)
+        raise InvalidMoveError(
+            "Le mur est en dehors des limites de placement.", NackCode.OUT_OF_BOUNDS
+        )
 
     # ═══════════════════════════════════════════════════════════════════════
     # RÈGLE 2 : Vérifier qu'un mur identique n'existe pas déjà
@@ -729,7 +733,9 @@ def interpret_double_click(case1: Coord, case2: Coord) -> Wall:
         return ('v', ligne_min, c1, 2)
     
     # Les cases ne sont pas adjacentes : erreur
-    raise InvalidMoveError("Les deux cases cliquées doivent être adjacentes.", NackCode.INVALID_FORMAT)
+    raise InvalidMoveError(
+        "Les deux cases cliquées doivent être adjacentes.", NackCode.INVALID_FORMAT
+    )
 
 # =============================================================================
 # ORCHESTRATION DU JEU - Classe QuoridorGame

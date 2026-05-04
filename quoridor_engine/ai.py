@@ -1127,6 +1127,11 @@ class AI:
         if pawn_moves:
             return ('deplacement', random.choice(pawn_moves))
         else:
+            # NackCode.ILLEGAL utilisé faute de code dédié aux erreurs internes
+            # dans le catalogue UART Plan 2 figé. Ce fallback signale un bug
+            # moteur (aucun coup pion possible alors que la partie continue),
+            # pas un coup illégal joueur ; il ne devrait jamais être émis sur
+            # le wire en production. Voir P9 spec §10 (limitations).
             raise InvalidMoveError("L'IA ne trouve aucun coup valide !", NackCode.ILLEGAL)
 
     def clear_cache(self):
