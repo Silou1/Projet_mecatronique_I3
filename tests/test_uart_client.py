@@ -809,6 +809,35 @@ class TestSessionReset:
         client.close()
 
 
+class TestResetSessionClearsConnection:
+    """Regression bug : _reset_session doit clear is_connected (spec P9 §6.3)."""
+
+    def test_reset_session_sets_is_connected_false(self, mock_serial):
+        from quoridor_engine import UartClient
+
+        client = UartClient(mock_serial)
+        client.is_connected = True   # simule un etat post-handshake
+        client._reset_session()
+        assert client.is_connected is False
+
+    def test_boot_start_received_clears_is_connected(self, mock_serial):
+        import time
+        from quoridor_engine import UartClient
+        from quoridor_engine.uart_client import Frame
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        client._start_reader_thread()
+        try:
+            # Simuler un BOOT_START recu (ESP32 a reboote de lui-meme)
+            boot_frame = Frame(type="BOOT_START", args="", seq=0).encode()
+            mock_serial.inject_rx(boot_frame)
+            time.sleep(0.15)  # laisser le reader consommer
+            assert client.is_connected is False
+        finally:
+            client.close()
+
+
 class TestFrameDecodeEdgeCases:
     """Branches defensives de Frame.decode non couvertes par les tests de base."""
 

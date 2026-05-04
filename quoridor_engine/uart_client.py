@@ -503,8 +503,12 @@ class UartClient:
         self._send_request(type="CMD_RESET", args="")
 
     def _reset_session(self) -> None:
-        """Reset complet de la session apres reboot ESP32 (sec 5.1 spec)."""
+        """Reset complet de la session apres reboot ESP32 (sec 5.1 spec).
+
+        Ajout P9 (§6.3) : remettre is_connected a False pour forcer un re-handshake.
+        """
         with self._tx_seq_lock:
             self._tx_seq = 0
         self._last_request_seq = None
         self._last_err_received = None
+        self.is_connected = False  # AJOUT P9 §6.3
