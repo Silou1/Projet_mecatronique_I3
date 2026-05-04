@@ -89,6 +89,8 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 ### P9 — Intégration logicielle RPi ↔ ESP32 📋
 
 > But : faire dialoguer `quoridor_engine` avec l'ESP32 DevKit via UART. Mode plateau-physique-en-simulation, sans périphériques réels.
+>
+> **Note d'avancement — 2026-05-04 :** l'ESP32 DevKit a été récupéré, mais la reprise immédiate reste volontairement limitée aux tâches P9 faisables sans matériel. L'implémentation détaillée suit [`docs/superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md`](superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md). Tasks 1–11 terminées : `NackCode`, refactor `InvalidMoveError`, robustesse `UartClient`, squelette `GameSession` et helpers de conversion. Prochaine tâche : **Task 12 — `_process_player_intent`**. Les cases P9 ci-dessous restent décochées tant que les sous-tâches fonctionnelles complètes ne sont pas terminées et validées.
 
 - [ ] **P9.1** Adapter [main.py](../main.py) pour offrir un mode « plateau physique » en plus du mode console
 - [ ] **P9.2** Implémenter le flux entrant : Python attend `MOVE_REQ` → valide via `QuoridorGame` → renvoie `ACK` ou `NACK`

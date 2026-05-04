@@ -10,11 +10,28 @@
 
 **Phases couvertes du plan global :**
 - 🟢 P9.1 (CLI mode plateau) — Tasks 16–17
-- 🟢 P9.2 (flux entrant ACK/NACK) — Tasks 11
-- 🟢 P9.3 (flux sortant CMD) — Tasks 12–13
+- 🟢 P9.2 (flux entrant ACK/NACK) — Task 12 + intégration boucle Task 16
+- 🟢 P9.3 (flux sortant CMD IA + GAMEOVER) — Tasks 13–14 + intégration boucle Task 16
 - 🟢 P9.4 (firmware stubs `CMD WALL`/`CMD GAMEOVER`) — Task 18
 - 🟢 P9.6 (mise à jour docs) — Tasks 19–22
-- 📅 P9.5 (E2E DevKit) — checklist à compléter au retour DevKit (2026-05-04), Task 23
+- 📅 P9.5 (E2E DevKit) — checklist à compléter en session hardware, Task 23
+
+## État d'exécution — 2026-05-04
+
+**Contexte matériel :** l'ESP32 DevKit a été récupéré, mais la décision courante est de continuer d'abord les tâches P9 faisables sans matériel. P6/P7/P8.6/P9.5 restent volontairement reportées à une session hardware.
+
+**Branche / commit de reprise :** `main` poussé sur `origin/main` jusqu'à `f57fee9`.
+
+**Dernière vérification complète connue :** `.venv/bin/python -m pytest -q` → `211 passed`.
+
+**Terminé :**
+- Phase A — Tasks 1–4 : `NackCode`, refactor `InvalidMoveError`, mapping des codes d'erreur.
+- Phase B — Tasks 5–9 : robustesse `UartClient` sans matériel (`_rejected_count`, thread reader mort, reset session, ERR récupérable, keepalive).
+- Phase C — Tasks 10–11 : squelette `GameSession`, exports module, helpers `_parse_intent_to_move` et `_move_to_cmd_args`.
+
+**Prochaine tâche :** Task 12 — Flux entrant `_process_player_intent`.
+
+**À ne pas reprendre dans la prochaine session sauf demande explicite :** P6, P7, P8.6 et P9.5. Ces points nécessitent ou visent le DevKit ; l'objectif immédiat est de finir P9 côté logiciel testable sans ESP32.
 
 ---
 
