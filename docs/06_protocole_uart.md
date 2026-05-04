@@ -127,3 +127,23 @@ Cette ligne (sans framing ni CRC) est interprétée comme un clic simulé. **Asy
 - **Implémentation côté Python** : [`quoridor_engine/uart_client.py`](../quoridor_engine/uart_client.py)
 - **Tests Python** : [`tests/test_uart_client.py`](../tests/test_uart_client.py)
 - **Plan d'implémentation P8** : [`superpowers/plans/2026-05-01-protocole-uart-plan-2-implementation.md`](superpowers/plans/2026-05-01-protocole-uart-plan-2-implementation.md)
+
+---
+
+## Note P9 (2026-05-04) — sous-ensemble émis par la couche d'orchestration
+
+La couche `GameSession` côté RPi (P9) émet uniquement les CMD qui modifient
+l'état du jeu : `CMD MOVE`, `CMD WALL`, `CMD GAMEOVER`. Les CMD purement
+visuelles (`CMD HIGHLIGHT`, `CMD SET_TURN`) sont réservées à P11, quand les
+drivers LEDs réels seront en place. Jusque-là, le firmware les laisse au
+catch-all `CMD non-impl`.
+
+Côté firmware, P9 ajoute des stubs pour `CMD WALL` et `CMD GAMEOVER` dans
+`GameController::tickConnected` : la trame est acceptée, loggée en debug, puis
+un `DONE` est renvoyé immédiatement sans action mécanique. Ces stubs seront
+remplacés en P11 par la logique réelle (mouvement moteur pour `WALL`,
+déclenchement servo pour `GAMEOVER`).
+
+Aucune modification du format de trame, des codes d'erreur ou du séquencement
+n'est introduite par P9. Le protocole reste strictement défini par la spec
+[`2026-05-01-protocole-uart-plan-2-design.md`](superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md).

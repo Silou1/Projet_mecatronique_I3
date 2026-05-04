@@ -7,6 +7,29 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Ajouté — P9 Intégration logicielle RPi ↔ ESP32 (2026-05-04)
+- `quoridor_engine.NackCode` : enum des codes d'erreur typés alignés sur le protocole UART (`ILLEGAL`, `OUT_OF_BOUNDS`, `WRONG_TURN`, `WALL_BLOCKED`, `NO_WALLS_LEFT`, `INVALID_FORMAT`)
+- `quoridor_engine.GameSession` : classe d'orchestration de partie en mode plateau, avec cycle handshake → game loop → gameover → close et re-handshake automatique sur `ERR` récupérable
+- `main.py --mode plateau --port <chemin>` : nouveau mode CLI qui dispatche vers `GameSession.run()`
+- `main.py --debug` : mode verbeux pour les logs de session
+- Thread keepalive 1 Hz dans `UartClient`, démarré dans `connect()` et stoppé dans `close()`
+- Compteur `UartClient.get_rejected_count()` pour les trames mal formées rejetées silencieusement
+- Détection du thread reader mort dans `_send_frame` avec `UartError` immédiat
+- Stubs firmware `CMD WALL` et `CMD GAMEOVER` dans `GameController::tickConnected` (réponse `DONE` sans action mécanique, action réelle reportée à P11)
+
+### Modifié — P9
+- `InvalidMoveError(message, code)` : argument `code: NackCode` désormais obligatoire
+- `_reset_session()` remet `is_connected` à `False` après reboot ESP32 spontané
+- `handle_err_received()` remet `is_connected` à `False` après `CMD_RESET` envoyé, pour forcer le re-handshake côté orchestrateur
+
+### Tests — P9
+- `tests/test_game_session.py` couvre le flux entrant `ACK`/`NACK`, le flux sortant IA, `GAMEOVER`, les `ERR` et la boucle principale
+- `tests/test_main_cli.py` couvre `argparse` (`--mode`, `--port`, `--difficulty`, `--debug`)
+- Compilation firmware validée par `pio run` : `SUCCESS`, RAM 6.7 %, Flash 23.1 %
+
+### Reporté — P9.5
+- Tests d'intégration E2E sur DevKit ESP32 : checklist dans [`firmware/INTEGRATION_TESTS_PENDING.md`](firmware/INTEGRATION_TESTS_PENDING.md)
+
 ### Ajouté — P8 Protocole UART Plan 2 (2026-05-01, en cours)
 - **Spec complet** du protocole UART Plan 2 (`docs/superpowers/specs/2026-05-01-protocole-uart-plan-2-design.md`) : trames texte framees, CRC-16 CCITT-FALSE, sequencement avec ack matching, idempotence retry CMD, politique d'erreurs typees, vecteurs de reference figes
 - **Plan d'implementation** detaille en 30 tasks (`docs/superpowers/plans/2026-05-01-protocole-uart-plan-2-implementation.md`)
@@ -86,4 +109,3 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - **Supprimé** : pour les fonctionnalités supprimées
 - **Corrigé** : pour les corrections de bugs
 - **Sécurité** : en cas de vulnérabilités
-

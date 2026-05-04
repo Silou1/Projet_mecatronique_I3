@@ -95,3 +95,234 @@ class TestMoveToCmdArgs:
         coup = ("mur", ("v", 3, 4, 2))
 
         assert session._move_to_cmd_args(coup) == "WALL v 3 4"
+
+
+class TestProcessPlayerIntent:
+    """Spec P9 §4.4 : MOVE_REQ/WALL_REQ valide -> ACK ; invalide -> NACK <code>."""
+
+    def _make_connected_session(self, mock_serial):
+        from quoridor_engine import QuoridorGame, AI, GameSession, UartClient
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(QuoridorGame(), AI(player="j2"), client)
+        return session, client
+
+    def test_valid_move_req_sends_ack(self, mock_serial):
+        session, client = self._make_connected_session(mock_serial)
+        client._start_reader_thread()
+        try:
+            frame = Frame(type="MOVE_REQ", args="4 3", seq=42)
+
+            session._process_player_intent(frame)
+
+            tx = mock_serial.get_tx()
+            assert b"<ACK|" in tx
+            assert b"ack=42" in tx
+            assert session.game.get_current_player() == "j2"
+        finally:
+            client.close()
+
+    def test_invalid_move_req_sends_nack_with_code(self, mock_serial):
+        session, client = self._make_connected_session(mock_serial)
+        client._start_reader_thread()
+        try:
+            frame = Frame(type="MOVE_REQ", args="0 0", seq=43)
+
+            session._process_player_intent(frame)
+
+            tx = mock_serial.get_tx()
+            assert b"<NACK ILLEGAL|" in tx
+            assert b"ack=43" in tx
+        finally:
+            client.close()
+
+    def test_malformed_move_req_sends_nack_invalid_format(self, mock_serial):
+        session, client = self._make_connected_session(mock_serial)
+        client._start_reader_thread()
+        try:
+            frame = Frame(type="MOVE_REQ", args="xyz", seq=44)
+
+            session._process_player_intent(frame)
+
+            tx = mock_serial.get_tx()
+            assert b"<NACK INVALID_FORMAT|" in tx
+            assert b"ack=44" in tx
+        finally:
+            client.close()
+
+
+class TestSendAiMove:
+    """Spec P9 §5.2 : tour IA -> CMD MOVE/WALL -> DONE -> commit moteur."""
+
+    def _make_connected_session_with_ai(self, mock_serial, fake_move):
+        from quoridor_engine import QuoridorGame, GameSession, UartClient
+
+        class FakeAI:
+            def __init__(self, move):
+                self._move = move
+                self.player = "j2"
+
+            def find_best_move(self, state, verbose=False):
+                return self._move
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(QuoridorGame(), FakeAI(fake_move), client)
+        return session, client
+
+    def test_ai_pawn_move_sends_cmd_then_commits(self, mock_serial):
+        session, client = self._make_connected_session_with_ai(
+            mock_serial, ("deplacement", (1, 3))
+        )
+        client._start_reader_thread()
+        try:
+            session.game.play_move(("deplacement", (4, 3)))
+            done = Frame(type="DONE", args="", seq=0, ack=0)
+            mock_serial.inject_rx(done.encode())
+
+            session._send_ai_move()
+
+            tx = mock_serial.get_tx()
+            assert b"<CMD MOVE 1 3|" in tx
+            assert session.game.get_current_player() == "j1"
+        finally:
+            client.close()
+
+    def test_ai_wall_move_sends_cmd_wall(self, mock_serial):
+        session, client = self._make_connected_session_with_ai(
+            mock_serial, ("mur", ("h", 1, 1, 2))
+        )
+        client._start_reader_thread()
+        try:
+            session.game.play_move(("deplacement", (4, 3)))
+            done = Frame(type="DONE", args="", seq=0, ack=0)
+            mock_serial.inject_rx(done.encode())
+
+            session._send_ai_move()
+
+            tx = mock_serial.get_tx()
+            assert b"<CMD WALL h 1 1|" in tx
+        finally:
+            client.close()
+
+
+class TestSendGameover:
+    """Spec P9 §5.4 : fin de partie -> CMD GAMEOVER <winner>."""
+
+    def test_send_gameover_with_winner(self, mock_serial):
+        from quoridor_engine import AI, GameSession, UartClient
+
+        class StubGame:
+            def get_winner(self):
+                return "j1"
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(StubGame(), AI(player="j2"), client)
+        client._start_reader_thread()
+        try:
+            done = Frame(type="DONE", args="", seq=0, ack=0)
+            mock_serial.inject_rx(done.encode())
+
+            session._send_gameover()
+
+            tx = mock_serial.get_tx()
+            assert b"<CMD GAMEOVER j1|" in tx
+        finally:
+            client.close()
+
+    def test_send_gameover_no_winner_is_no_op(self, mock_serial):
+        from quoridor_engine import AI, GameSession, UartClient
+
+        class StubGame:
+            def get_winner(self):
+                return None
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(StubGame(), AI(player="j2"), client)
+        client._start_reader_thread()
+        try:
+            session._send_gameover()
+
+            tx = mock_serial.get_tx()
+            assert b"GAMEOVER" not in tx
+        finally:
+            client.close()
+
+
+class TestHandleErr:
+    """Spec P9 §6.4 : ERR récupérable -> reconnect ; non-récupérable -> remonte."""
+
+    def test_recoverable_err_triggers_reconnect(self, mock_serial):
+        from quoridor_engine import QuoridorGame, AI, GameSession, UartClient
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(QuoridorGame(), AI(player="j2"), client)
+        client._start_reader_thread()
+        try:
+            hello = Frame(type="HELLO", args="", seq=0, version=UartClient.PROTOCOL_VERSION)
+            mock_serial.inject_rx(hello.encode())
+
+            err = Frame(type="ERR", args="UART_LOST", seq=99)
+            session._handle_err(err)
+
+            tx = mock_serial.get_tx()
+            assert b"CMD_RESET" in tx
+            assert b"HELLO_ACK" in tx
+            assert client.is_connected is True
+        finally:
+            client.close()
+
+    def test_non_recoverable_err_raises(self, mock_serial):
+        import pytest
+        from quoridor_engine import QuoridorGame, AI, GameSession, UartClient
+        from quoridor_engine.uart_client import UartHardwareError
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(QuoridorGame(), AI(player="j2"), client)
+        client._start_reader_thread()
+        try:
+            err = Frame(type="ERR", args="HOMING_FAILED", seq=100)
+            with pytest.raises(UartHardwareError):
+                session._handle_err(err)
+        finally:
+            client.close()
+
+
+class TestGameLoop:
+    """Spec P9 §4.2 : alternance j1 plateau / j2 IA."""
+
+    def test_loop_exits_when_game_is_over(self, mock_serial):
+        from quoridor_engine import AI, GameSession, UartClient
+
+        class StubGame:
+            def is_game_over(self):
+                return (True, "j1")
+
+            def get_current_player(self):
+                return "j1"
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(StubGame(), AI(player="j2"), client)
+        client._start_reader_thread()
+        try:
+            session._game_loop()
+        finally:
+            client.close()
+
+    def test_check_health_raises_if_reader_dead(self, mock_serial):
+        import pytest
+        from quoridor_engine import QuoridorGame, AI, GameSession, UartClient
+        from quoridor_engine.uart_client import UartError
+
+        client = UartClient(mock_serial)
+        client.is_connected = True
+        session = GameSession(QuoridorGame(), AI(player="j2"), client)
+
+        with pytest.raises(UartError):
+            session._check_health()

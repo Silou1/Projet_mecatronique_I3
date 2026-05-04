@@ -168,6 +168,12 @@ namespace {
                                        (uint8_t)row, (uint8_t)col, false };
         _currentCmdAckSeq = f.seq;
         enterExecutingWithCommand(cmd);
+      } else if (strcmp(f.type, "CMD") == 0 && strncmp(f.args, "WALL ", 5) == 0) {
+        UartLink::logf("FSM", "CMD WALL stub: %s", f.args + 5);
+        UartLink::respondCmdDone(f.seq);
+      } else if (strcmp(f.type, "CMD") == 0 && strncmp(f.args, "GAMEOVER ", 9) == 0) {
+        UartLink::logf("FSM", "CMD GAMEOVER stub: %s", f.args + 9);
+        UartLink::respondCmdDone(f.seq);
       } else if (strcmp(f.type, "CMD") == 0) {
         UartLink::logf("FSM", "CMD non-impl: %s", f.args);
       } else if (strcmp(f.type, "CMD_RESET") == 0) {

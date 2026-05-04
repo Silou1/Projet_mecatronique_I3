@@ -86,18 +86,18 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 - [x] **P8.5** Tests unitaires côté Python (avec serial loopback ou ESP32 DevKit en mode echo)
 - [ ] **P8.6** Tests d'intégration ESP32 DevKit ↔ Python : envoi/réception de toutes les trames *(reporté au 2026-05-04, retour DevKit — checklist : [`firmware/INTEGRATION_TESTS_PENDING.md`](../firmware/INTEGRATION_TESTS_PENDING.md))*
 
-### P9 — Intégration logicielle RPi ↔ ESP32 📋
+### P9 — Intégration logicielle RPi ↔ ESP32 🚧
 
 > But : faire dialoguer `quoridor_engine` avec l'ESP32 DevKit via UART. Mode plateau-physique-en-simulation, sans périphériques réels.
 >
-> **Note d'avancement — 2026-05-04 :** l'ESP32 DevKit a été récupéré, mais la reprise immédiate reste volontairement limitée aux tâches P9 faisables sans matériel. L'implémentation détaillée suit [`docs/superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md`](superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md). Tasks 1–11 terminées : `NackCode`, refactor `InvalidMoveError`, robustesse `UartClient`, squelette `GameSession` et helpers de conversion. Prochaine tâche : **Task 12 — `_process_player_intent`**. Les cases P9 ci-dessous restent décochées tant que les sous-tâches fonctionnelles complètes ne sont pas terminées et validées.
+> **Note d'avancement — 2026-05-04 :** P9 est implémentée côté logiciel testable sans matériel : P9.1 à P9.4 et P9.6 sont complètes. Le détail suit [`docs/superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md`](superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md). **P9.5** reste ouverte : tests E2E sur DevKit physique, checklist dans [`firmware/INTEGRATION_TESTS_PENDING.md`](../firmware/INTEGRATION_TESTS_PENDING.md).
 
-- [ ] **P9.1** Adapter [main.py](../main.py) pour offrir un mode « plateau physique » en plus du mode console
-- [ ] **P9.2** Implémenter le flux entrant : Python attend `MOVE_REQ` → valide via `QuoridorGame` → renvoie `ACK` ou `NACK`
-- [ ] **P9.3** Implémenter le flux sortant : Python envoie `CMD MOVE` pour les coups joués par l'IA
-- [ ] **P9.4** Côté ESP32 (DevKit), conserver les boutons en mode injection (commande `BTN x y` via Serial) et les LEDs/moteurs en stub (logs uniquement)
-- [ ] **P9.5** Tests d'intégration end-to-end : partie complète PvIA via UART avec ESP32 DevKit
-- [ ] **P9.6** Mettre à jour [02_architecture.md](02_architecture.md) et [06_protocole_uart.md](06_protocole_uart.md)
+- [x] **P9.1** Adapter [main.py](../main.py) pour offrir un mode « plateau physique » en plus du mode console
+- [x] **P9.2** Implémenter le flux entrant : Python attend `MOVE_REQ` → valide via `QuoridorGame` → renvoie `ACK` ou `NACK`
+- [x] **P9.3** Implémenter le flux sortant : Python envoie `CMD MOVE` / `CMD WALL` pour les coups joués par l'IA, puis `CMD GAMEOVER`
+- [x] **P9.4** Côté ESP32 (DevKit), conserver les boutons en mode injection (commande `BTN x y` via Serial) et les LEDs/moteurs en stub (logs uniquement)
+- [ ] **P9.5** Tests d'intégration end-to-end : partie complète PvIA via UART avec ESP32 DevKit *(hardware requis)*
+- [x] **P9.6** Mettre à jour [02_architecture.md](02_architecture.md) et [06_protocole_uart.md](06_protocole_uart.md)
 
 ---
 

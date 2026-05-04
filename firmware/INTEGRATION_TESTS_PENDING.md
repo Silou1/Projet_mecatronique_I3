@@ -102,3 +102,64 @@ Quand tous les tests passent :
 - [ ] Supprimer ce fichier (`firmware/INTEGRATION_TESTS_PENDING.md`)
 - [ ] Commit `test(firmware): plan 2 valide en bout-en-bout sur DevKit`
 - [ ] Démarrer P9 (intégration RPi ↔ ESP32 dans `main.py`)
+
+---
+
+## P9.5 — Tests E2E RPi ↔ ESP32 DevKit
+
+> **Cible :** hardware requis. P9.1 à P9.4 et P9.6 sont validées sans ESP32 ;
+> cette section est le dernier bloc avant de cocher P9 comme terminé.
+
+**Pré-requis matériel :** DevKit ESP32-WROOM connecté en USB. Plateau physique
+non requis : les boutons restent injectables via `BTN x y` au Serial Monitor.
+
+**Pré-requis logiciel :**
+
+- Firmware Plan 2 + stubs P9 flashés : `cd firmware && pio run -t upload`
+- Python : `python main.py --mode plateau --port /dev/ttyUSB0 --debug`
+
+### Scénario 1 — Partie nominale PvIA via injection manuelle
+
+1. Lancer Python en mode plateau avec `--debug`.
+2. Vérifier le handshake `HELLO` → `HELLO_ACK`.
+3. Au Serial Monitor, injecter `BTN 4 3` (déplacement j1).
+4. Vérifier côté Python : `ACK` pour le coup `('deplacement', (4, 3))`.
+5. Vérifier au Serial Monitor : `<MOVE_REQ 4 3|...>` puis `<ACK|...|ack=N|...>`.
+6. Tour IA : Python doit envoyer `CMD MOVE r c` ou `CMD WALL h r c`, puis recevoir `DONE`.
+7. Continuer au moins 5 tours.
+8. En fin de partie, vérifier `CMD GAMEOVER <winner>` puis `DONE`.
+9. Le port se ferme proprement.
+
+### Scénario 2 — Coupure UART en milieu de partie
+
+1. Lancer une partie en mode plateau.
+2. Après 2-3 coups, débrancher le câble USB pendant 5 secondes.
+3. Rebrancher.
+4. Vérifier côté Python : `ERR UART_LOST` récupérable → `CMD_RESET` → nouveau handshake.
+5. Continuer la partie : les nouveaux `BTN x y` doivent fonctionner.
+6. Limitation acceptée P9 : les LEDs et la position visuelle ne sont pas restaurées après reboot.
+
+### Scénario 3 — IA pose un mur
+
+1. Lancer avec `--difficulty difficile` pour augmenter la probabilité d'un mur.
+2. Jouer jusqu'à ce que l'IA pose un mur.
+3. Vérifier côté Python : `CMD WALL h r c` ou `CMD WALL v r c`.
+4. Vérifier au Serial Monitor : `FSM CMD WALL stub: ...` puis `DONE`.
+5. Le tour rebascule à `j1`.
+
+### Scénario 4 — Idempotence d'une CMD perdue
+
+1. Instrumenter temporairement le firmware pour simuler la perte du premier `DONE`.
+2. Reflasher.
+3. Lancer une partie et observer le retry Python : même `CMD`, même `seq`, après timeout.
+4. Vérifier que la commande n'est pas exécutée deux fois côté firmware.
+5. Retirer l'instrumentation et reflasher avant de cocher le scénario.
+
+### Validation finale P9
+
+Quand tous les scénarios P9.5 passent :
+
+- [ ] Cocher P9.5 dans `docs/00_plan_global.md`
+- [ ] Passer P9 de 🚧 à ✅
+- [ ] Supprimer la section P9.5 de ce fichier
+- [ ] Commit `test(firmware): P9 valide en bout-en-bout sur DevKit`
