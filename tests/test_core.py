@@ -144,6 +144,26 @@ class TestConstants:
         assert PLAYER_TWO == 'j2'
 
 
+def test_nack_code_values_aligned_with_uart_protocol():
+    """NackCode.X.value doit correspondre exactement aux codes du spec UART §4.4."""
+    from quoridor_engine.core import NackCode
+
+    assert NackCode.ILLEGAL.value == "ILLEGAL"
+    assert NackCode.OUT_OF_BOUNDS.value == "OUT_OF_BOUNDS"
+    assert NackCode.WRONG_TURN.value == "WRONG_TURN"
+    assert NackCode.WALL_BLOCKED.value == "WALL_BLOCKED"
+    assert NackCode.NO_WALLS_LEFT.value == "NO_WALLS_LEFT"
+    assert NackCode.INVALID_FORMAT.value == "INVALID_FORMAT"
+
+
+def test_nack_code_is_str_enum():
+    """NackCode hérite de str pour permettre `nack.value` direct dans les trames."""
+    from quoridor_engine.core import NackCode
+
+    assert isinstance(NackCode.ILLEGAL, str)
+    assert isinstance(NackCode.ILLEGAL.value, str)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 

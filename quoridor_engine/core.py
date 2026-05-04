@@ -30,6 +30,7 @@ Un mur ne peut jamais bloquer complètement le chemin d'un joueur vers son objec
 from dataclasses import dataclass, replace, field
 from typing import FrozenSet, Dict, Tuple, Literal, List, Callable, Any
 from collections import deque
+from enum import Enum
 
 # =============================================================================
 # CONSTANTES ET TYPES DE BASE
@@ -67,6 +68,20 @@ MAX_WALLS_PER_PLAYER = 6
 # =============================================================================
 # EXCEPTIONS PERSONNALISÉES
 # =============================================================================
+
+class NackCode(str, Enum):
+    """Codes d'erreur typés pour les NACK du protocole UART Plan 2.
+
+    Les valeurs MAJUSCULES sont alignées exactement sur le catalogue §4.4
+    du spec protocole [docs/06_protocole_uart.md].
+    """
+    ILLEGAL         = "ILLEGAL"
+    OUT_OF_BOUNDS   = "OUT_OF_BOUNDS"
+    WRONG_TURN      = "WRONG_TURN"
+    WALL_BLOCKED    = "WALL_BLOCKED"
+    NO_WALLS_LEFT   = "NO_WALLS_LEFT"
+    INVALID_FORMAT  = "INVALID_FORMAT"
+
 
 class InvalidMoveError(Exception):
     """
