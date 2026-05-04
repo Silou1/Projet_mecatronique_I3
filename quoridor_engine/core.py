@@ -75,12 +75,12 @@ class NackCode(str, Enum):
     Les valeurs MAJUSCULES sont alignées exactement sur le catalogue §4.4
     du spec protocole [docs/06_protocole_uart.md].
     """
-    ILLEGAL         = "ILLEGAL"
-    OUT_OF_BOUNDS   = "OUT_OF_BOUNDS"
-    WRONG_TURN      = "WRONG_TURN"
-    WALL_BLOCKED    = "WALL_BLOCKED"
-    NO_WALLS_LEFT   = "NO_WALLS_LEFT"
-    INVALID_FORMAT  = "INVALID_FORMAT"
+    ILLEGAL = "ILLEGAL"
+    OUT_OF_BOUNDS = "OUT_OF_BOUNDS"
+    WRONG_TURN = "WRONG_TURN"
+    WALL_BLOCKED = "WALL_BLOCKED"
+    NO_WALLS_LEFT = "NO_WALLS_LEFT"
+    INVALID_FORMAT = "INVALID_FORMAT"
 
 
 class InvalidMoveError(Exception):
