@@ -404,6 +404,7 @@ class TestKeepalive:
     def test_send_keepalive_writes_frame(self, mock_serial, mock_clock):
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
         client.is_connected = True
+        client._start_reader_thread()
 
         client.send_keepalive()
 
@@ -411,9 +412,12 @@ class TestKeepalive:
         assert sent.startswith(b"<KEEPALIVE|seq=")
         assert sent.endswith(b">\n")
 
+        client.close()
+
     def test_send_keepalive_increments_seq(self, mock_serial, mock_clock):
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
         client.is_connected = True
+        client._start_reader_thread()
 
         client.send_keepalive()
         client.send_keepalive()
@@ -422,6 +426,8 @@ class TestKeepalive:
         # On doit voir seq=0 puis seq=1 (compteur initialise a 0)
         assert b"|seq=0|" in sent
         assert b"|seq=1|" in sent
+
+        client.close()
 
     def test_send_keepalive_no_op_if_not_connected(self, mock_serial, mock_clock):
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
@@ -464,6 +470,7 @@ class TestReceiveIntents:
     def test_send_ack_carries_request_seq(self, mock_serial, mock_clock):
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
         client.is_connected = True
+        client._start_reader_thread()
 
         client.send_ack(request_seq=42)
 
@@ -471,15 +478,20 @@ class TestReceiveIntents:
         assert sent.startswith(b"<ACK|seq=")
         assert b"|ack=42|" in sent
 
+        client.close()
+
     def test_send_nack_carries_reason_and_request_seq(self, mock_serial, mock_clock):
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
         client.is_connected = True
+        client._start_reader_thread()
 
         client.send_nack(request_seq=42, reason="ILLEGAL")
 
         sent = mock_serial.get_tx()
         assert sent.startswith(b"<NACK ILLEGAL|seq=")
         assert b"|ack=42|" in sent
+
+        client.close()
 
 
 class TestSendCmd:
@@ -760,6 +772,7 @@ class TestSessionReset:
     def test_boot_start_resets_tx_seq(self, mock_serial, mock_clock):
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
         client.is_connected = True
+        client._start_reader_thread()
 
         # Avance le compteur
         for _ in range(10):
@@ -772,6 +785,8 @@ class TestSessionReset:
 
         assert client._tx_seq == 0
         assert client._last_request_seq is None
+
+        client.close()
 
     def test_reader_resets_session_on_boot_start(self, mock_serial, mock_clock):
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
@@ -1032,3 +1047,24 @@ class TestRejectedCount:
             assert client.get_rejected_count() >= 1
         finally:
             client.close()
+
+
+class TestReaderThreadDeath:
+    """Verifie que la mort du thread de lecture est detectee a l'envoi."""
+
+    def test_send_frame_raises_when_reader_thread_dead(self, mock_serial):
+        client = UartClient(mock_serial)
+        client._start_reader_thread()
+        # Tuer le thread de lecture proprement
+        client._stop_reader.set()
+        client._reader_thread.join(timeout=2)
+        assert not client._reader_thread.is_alive()
+
+        # Toute tentative d'envoi doit lever UartError
+        frame = Frame(type="KEEPALIVE", args="", seq=0)
+        with pytest.raises(UartError, match="reader thread"):
+            client._send_frame(frame)
+
+    def test_is_reader_alive_returns_false_before_start(self, mock_serial):
+        client = UartClient(mock_serial)
+        assert client._is_reader_alive() is False

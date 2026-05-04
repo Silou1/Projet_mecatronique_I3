@@ -369,8 +369,17 @@ class UartClient:
 
         raise UartTimeoutError(f"aucun HELLO recu apres {timeout}s")
 
+    def _is_reader_alive(self) -> bool:
+        """True ssi le thread de lecture tourne. Cf. spec P9 §6.2."""
+        return self._reader_thread is not None and self._reader_thread.is_alive()
+
     def _send_frame(self, frame: "Frame") -> None:
-        """Envoie une frame deja construite sur le port serie."""
+        """Envoie une frame deja construite sur le port serie.
+
+        Leve UartError si le thread de lecture est mort (cf. spec P9 §6.2).
+        """
+        if not self._is_reader_alive():
+            raise UartError("reader thread died — connexion cassée")
         self._serial.write(frame.encode())
 
     def _send_response(self, type: str, args: str, ack: int) -> None:
