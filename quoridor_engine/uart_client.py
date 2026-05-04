@@ -441,10 +441,16 @@ class UartClient:
         self._last_request_seq = seq
 
         for attempt in range(1, self.CMD_MAX_ATTEMPTS + 1):
+            if not self.is_connected:
+                self._last_request_seq = None
+                raise UartError("client non connecte")
             self._send_frame(frame)  # meme seq sur tous les essais
             deadline = self._clock() + self._cmd_timeout_seconds
 
             while self._clock() < deadline:
+                if not self.is_connected:
+                    self._last_request_seq = None
+                    raise UartError("client non connecte")
                 try:
                     received = self._rx_queue.get(timeout=0.05)
                 except queue.Empty:

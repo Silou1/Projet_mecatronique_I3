@@ -969,6 +969,49 @@ class TestUartClientEdgeCases:
         with pytest.raises(UartError, match="non connecte"):
             client.send_cmd("CMD", "MOVE 2 5")
 
+    def test_send_cmd_aborts_if_session_resets_while_waiting_done(self, mock_serial):
+        """BOOT_START en pleine CMD doit interrompre la boucle de retry."""
+        client = UartClient(serial_port=mock_serial)
+        client.is_connected = True
+        client._start_reader_thread()
+        client._cmd_timeout_seconds = 0.5
+
+        result = []
+
+        def runner():
+            try:
+                client.send_cmd("CMD", "MOVE 2 5")
+                result.append("done")
+            except UartError as e:
+                result.append(("uart_error", str(e)))
+            except UartTimeoutError:
+                result.append("timeout")
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        try:
+            deadline = time.monotonic() + 0.5
+            while (
+                mock_serial.peek_tx().count(b"<CMD MOVE 2 5|") == 0
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            first_tx = mock_serial.peek_tx()
+            assert first_tx.count(b"<CMD MOVE 2 5|") == 1
+
+            # Simule un reboot ESP32 pendant l'attente du DONE.
+            boot = Frame(type="BOOT_START", args="", seq=99)
+            mock_serial.inject_rx(boot.encode())
+
+            t.join(timeout=1)
+            assert result and result[0][0] == "uart_error"
+            assert "non connecte" in result[0][1]
+            assert mock_serial.peek_tx().count(b"<CMD MOVE 2 5|") == 1
+
+        finally:
+            client.close()
+
     def test_send_cmd_raises_hardware_error_on_err_response(self, mock_serial, mock_clock):
         # L441-443 : si ERR recu avec ack=seq pendant send_cmd -> UartHardwareError
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
