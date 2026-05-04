@@ -38,11 +38,12 @@ Vue d'ensemble complète : [docs/02_architecture.md](docs/02_architecture.md).
 | Moteur de jeu Python (règles, validation, undo) | ✅ |
 | IA Minimax + alpha-bêta | ✅ |
 | Interface console | ✅ |
-| Tests Python (181 tests, ≥ 99 % sur le module UART) | ✅ |
+| Tests Python (226 tests, ≥ 99 % sur le module UART) | ✅ |
 | Firmware ESP32 — squelette + FSM (Plan 1) | ✅ |
 | **Protocole UART Plan 2** — design, code Python (`uart_client.py`), refactor firmware (`UartLink`) | ✅ |
-| Tests d'intégration firmware ↔ Python sur DevKit (P8.6) | 🚧 reporté 2026-05-04 |
-| Intégration logicielle RPi ↔ ESP32 dans `main.py` (P9) | 📋 |
+| **Intégration logicielle RPi ↔ ESP32** — `GameSession`, mode `--mode plateau` (P9.1–P9.4, P9.6) | ✅ |
+| Tests d'intégration firmware ↔ Python sur DevKit (P8.6) | 🚧 attente DevKit |
+| Tests E2E partie complète PvIA sur DevKit (P9.5) | 🚧 attente DevKit |
 | Drivers hardware réels + PCB v2 (P10–P14) | 📋 |
 
 Plan global détaillé : [docs/00_plan_global.md](docs/00_plan_global.md).
@@ -58,7 +59,7 @@ Plan global détaillé : [docs/00_plan_global.md](docs/00_plan_global.md).
 ## Tests
 
 ```bash
-pytest                                          # 181 tests (90 moteur/IA + 91 UART), ~7 s
+pytest                                          # 226 tests (moteur/IA + UART + GameSession + CLI), ~8 s
 pytest --cov=quoridor_engine --cov-report=html  # couverture
 ```
 
