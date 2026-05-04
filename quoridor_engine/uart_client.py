@@ -220,6 +220,7 @@ class UartClient:
 
         self._tx_seq = 0
         self._tx_seq_lock = threading.Lock()
+        self._connection_lock = threading.Lock()
         self._last_request_seq: Optional[int] = None
         self._last_err_received: Optional[str] = None
 
@@ -382,6 +383,13 @@ class UartClient:
             raise UartError("reader thread died — connexion cassée")
         self._serial.write(frame.encode())
 
+    def _send_frame_if_connected(self, frame: "Frame") -> None:
+        """Envoie une frame uniquement si la session est toujours connectee."""
+        with self._connection_lock:
+            if not self.is_connected:
+                raise UartError("client non connecte")
+            self._send_frame(frame)
+
     def _send_response(self, type: str, args: str, ack: int) -> None:
         """Construit et envoie une reponse (avec ack=)."""
         seq = self._next_tx_seq()
@@ -441,10 +449,11 @@ class UartClient:
         self._last_request_seq = seq
 
         for attempt in range(1, self.CMD_MAX_ATTEMPTS + 1):
-            if not self.is_connected:
+            try:
+                self._send_frame_if_connected(frame)  # meme seq sur tous les essais
+            except UartError:
                 self._last_request_seq = None
-                raise UartError("client non connecte")
-            self._send_frame(frame)  # meme seq sur tous les essais
+                raise
             deadline = self._clock() + self._cmd_timeout_seconds
 
             while self._clock() < deadline:
@@ -455,6 +464,12 @@ class UartClient:
                     received = self._rx_queue.get(timeout=0.05)
                 except queue.Empty:
                     continue
+
+                if not self.is_connected:
+                    if received.type in ("BOOT_START", "HELLO"):
+                        self._rx_queue.put(received)
+                    self._last_request_seq = None
+                    raise UartError("client non connecte")
 
                 # Match DONE
                 if received.type == "DONE" and received.ack == seq:
@@ -517,4 +532,5 @@ class UartClient:
             self._tx_seq = 0
         self._last_request_seq = None
         self._last_err_received = None
-        self.is_connected = False  # AJOUT P9 §6.3
+        with self._connection_lock:
+            self.is_connected = False  # AJOUT P9 §6.3

@@ -1012,6 +1012,48 @@ class TestUartClientEdgeCases:
         finally:
             client.close()
 
+    def test_send_cmd_preserves_hello_if_session_resets_while_waiting_done(self, mock_serial):
+        """Un HELLO qui casse la session doit rester disponible pour reconnect()."""
+        client = UartClient(serial_port=mock_serial)
+        client.is_connected = True
+        client._start_reader_thread()
+        client._cmd_timeout_seconds = 0.5
+
+        result = []
+
+        def runner():
+            try:
+                client.send_cmd("CMD", "MOVE 2 5")
+                result.append("done")
+            except UartError:
+                result.append("uart_error")
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        try:
+            deadline = time.monotonic() + 0.5
+            while (
+                mock_serial.peek_tx().count(b"<CMD MOVE 2 5|") == 0
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            assert mock_serial.peek_tx().count(b"<CMD MOVE 2 5|") == 1
+
+            hello = Frame(type="HELLO", args="", seq=77, version=1)
+            mock_serial.inject_rx(hello.encode())
+
+            t.join(timeout=1)
+            assert result == ["uart_error"]
+
+            preserved = client.receive(timeout=0.1)
+            assert preserved is not None
+            assert preserved.type == "HELLO"
+            assert preserved.version == 1
+
+        finally:
+            client.close()
+
     def test_send_cmd_raises_hardware_error_on_err_response(self, mock_serial, mock_clock):
         # L441-443 : si ERR recu avec ack=seq pendant send_cmd -> UartHardwareError
         client = UartClient(serial_port=mock_serial, clock=mock_clock)
