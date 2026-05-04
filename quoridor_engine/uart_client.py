@@ -233,6 +233,9 @@ class UartClient:
 
         self._reader_thread: Optional[threading.Thread] = None
         self._stop_reader = threading.Event()
+        self._keepalive_thread: Optional[threading.Thread] = None
+        self._stop_keepalive = threading.Event()
+        self._keepalive_period = 1.0
 
         self._cmd_timeout_seconds = self.CMD_TIMEOUT_SECONDS
 
@@ -259,6 +262,26 @@ class UartClient:
             target=self._reader_loop, daemon=True, name="UartReader"
         )
         self._reader_thread.start()
+
+    def _start_keepalive_thread(self) -> None:
+        """Demarre le thread keepalive. Idempotent."""
+        if self._keepalive_thread is not None and self._keepalive_thread.is_alive():
+            return
+        self._stop_keepalive.clear()
+        self._keepalive_thread = threading.Thread(
+            target=self._keepalive_loop, daemon=True, name="UartKeepalive"
+        )
+        self._keepalive_thread.start()
+
+    def _keepalive_loop(self) -> None:
+        """Emet periodiquement KEEPALIVE tant que la session est active."""
+        while not self._stop_keepalive.is_set():
+            try:
+                self.send_keepalive()
+            except Exception:
+                break
+            if self._stop_keepalive.wait(timeout=self._keepalive_period):
+                return
 
     def _reader_loop(self) -> None:
         """Boucle de lecture. Decoupe en lignes, classe trame protocole / debug."""
@@ -317,6 +340,9 @@ class UartClient:
 
     def close(self) -> None:
         """Arrete le thread de lecture et ferme le port serie."""
+        self._stop_keepalive.set()
+        if self._keepalive_thread is not None:
+            self._keepalive_thread.join(timeout=2)
         self._stop_reader.set()
         if self._reader_thread is not None:
             self._reader_thread.join(timeout=2)
@@ -351,9 +377,10 @@ class UartClient:
                     raise UartVersionError(
                         f"version protocole incompatible : "
                         f"recu v={frame.version}, attendu v={self._expected_version}"
-                    )
+                )
                 self._send_response(type="HELLO_ACK", args="", ack=frame.seq)
                 self.is_connected = True
+                self._start_keepalive_thread()
                 return
 
             if frame.type == "ERR" and not reset_already_sent:

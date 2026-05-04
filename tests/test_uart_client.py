@@ -439,6 +439,51 @@ class TestKeepalive:
         assert mock_serial.get_tx() == b""
 
 
+class TestKeepaliveThread:
+    """Verifie le thread keepalive (spec P9 §2.4)."""
+
+    def _make_connected_client(self, mock_serial):
+        client = UartClient(mock_serial)
+        client._keepalive_period = 0.05
+        hello = Frame(type="HELLO", args="", seq=0, version=UartClient.PROTOCOL_VERSION)
+        mock_serial.inject_rx(hello.encode())
+        client.connect(timeout=2.0)
+        return client
+
+    def test_keepalive_thread_started_after_connect(self, mock_serial):
+        client = self._make_connected_client(mock_serial)
+
+        try:
+            assert client._keepalive_thread is not None
+            assert client._keepalive_thread.is_alive()
+
+        finally:
+            client.close()
+
+    def test_keepalive_thread_stops_on_close(self, mock_serial):
+        client = self._make_connected_client(mock_serial)
+        ka_thread = client._keepalive_thread
+
+        client.close()
+        ka_thread.join(timeout=1)
+
+        assert not ka_thread.is_alive()
+
+    def test_keepalive_emits_keepalive_frames_periodically(self, mock_serial):
+        client = self._make_connected_client(mock_serial)
+
+        try:
+            mock_serial.get_tx()  # vider HELLO_ACK et eventuel premier KEEPALIVE
+            time.sleep(0.2)
+            tx = mock_serial.get_tx()
+
+            keepalive_count = tx.count(b"KEEPALIVE")
+            assert keepalive_count >= 2
+
+        finally:
+            client.close()
+
+
 class TestReceiveIntents:
     """Reception MOVE_REQ / WALL_REQ et reponse ACK/NACK."""
 
