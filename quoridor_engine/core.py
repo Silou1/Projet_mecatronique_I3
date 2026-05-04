@@ -84,16 +84,17 @@ class NackCode(str, Enum):
 
 
 class InvalidMoveError(Exception):
+    """Exception levée pour un coup invalide selon les règles Quoridor.
+
+    Args:
+        message: description humaine (en français)
+        code: NackCode obligatoire, utilisé pour construire la trame NACK
+              côté UART. Aligné sur le catalogue §4.4 du protocole.
     """
-    Exception levée quand un coup ne respecte pas les règles du jeu.
-    
-    Exemples de cas où cette exception est levée :
-    - Déplacement vers une case inaccessible (hors plateau, bloquée par un mur)
-    - Placement d'un mur qui chevauche un mur existant
-    - Placement d'un mur qui bloquerait complètement un joueur
-    - Tentative de jouer alors que ce n'est pas son tour
-    """
-    pass
+
+    def __init__(self, message: str, code: "NackCode"):
+        super().__init__(message)
+        self.code = code
 
 
 # =============================================================================
@@ -417,11 +418,11 @@ def move_pawn(state: GameState, player: str, target_coord: Coord) -> GameState:
     """
     # Vérification 1 : Est-ce le tour de ce joueur ?
     if player != state.current_player:
-        raise InvalidMoveError(f"Ce n'est pas le tour du joueur {player}.")
-    
+        raise InvalidMoveError(f"Ce n'est pas le tour du joueur {player}.", NackCode.WRONG_TURN)
+
     # Vérification 2 : Le déplacement est-il légal ?
     if target_coord not in get_possible_pawn_moves(state, player):
-        raise InvalidMoveError(f"Le déplacement vers {target_coord} est invalide.")
+        raise InvalidMoveError(f"Le déplacement vers {target_coord} est invalide.", NackCode.ILLEGAL)
     
     # Créer les nouvelles positions (copie pour ne pas modifier l'original)
     new_positions = state.player_positions.copy()
@@ -570,13 +571,13 @@ def _validate_wall_placement(state: GameState, wall: Wall) -> None:
     # Comme un mur a une longueur de 2, il ne peut pas commencer sur la
     # dernière ligne ou colonne (indices 0 à 4 seulement, pas 5)
     if not (0 <= r < BOARD_SIZE - 1 and 0 <= c < BOARD_SIZE - 1):
-        raise InvalidMoveError("Le mur est en dehors des limites de placement.")
+        raise InvalidMoveError("Le mur est en dehors des limites de placement.", NackCode.OUT_OF_BOUNDS)
 
     # ═══════════════════════════════════════════════════════════════════════
     # RÈGLE 2 : Vérifier qu'un mur identique n'existe pas déjà
     # ═══════════════════════════════════════════════════════════════════════
     if wall in state.walls:
-        raise InvalidMoveError("Un mur identique existe déjà.")
+        raise InvalidMoveError("Un mur identique existe déjà.", NackCode.WALL_BLOCKED)
     
     # ═══════════════════════════════════════════════════════════════════════
     # RÈGLE 3 : Vérifier le chevauchement avec des murs parallèles
@@ -588,13 +589,13 @@ def _validate_wall_placement(state: GameState, wall: Wall) -> None:
         overlapping = [('h', r, c - 1, 2), ('h', r, c + 1, 2)]
         for ow in overlapping:
             if ow in state.walls:
-                raise InvalidMoveError("Le mur chevauche un mur existant.")
+                raise InvalidMoveError("Le mur chevauche un mur existant.", NackCode.WALL_BLOCKED)
     else:
         # Pour un mur vertical, vérifier les murs verticaux adjacents
         overlapping = [('v', r - 1, c, 2), ('v', r + 1, c, 2)]
         for ow in overlapping:
             if ow in state.walls:
-                raise InvalidMoveError("Le mur chevauche un mur existant.")
+                raise InvalidMoveError("Le mur chevauche un mur existant.", NackCode.WALL_BLOCKED)
     
     # ═══════════════════════════════════════════════════════════════════════
     # RÈGLE 4 : Vérifier le croisement avec un mur perpendiculaire
@@ -603,7 +604,7 @@ def _validate_wall_placement(state: GameState, wall: Wall) -> None:
     # Le mur perpendiculaire aurait la même position mais l'autre orientation
     intersecting = ('v', r, c, 2) if orientation == 'h' else ('h', r, c, 2)
     if intersecting in state.walls:
-        raise InvalidMoveError("Le mur croise un mur existant.")
+        raise InvalidMoveError("Le mur croise un mur existant.", NackCode.WALL_BLOCKED)
 
 
 def place_wall(state: GameState, player: str, wall: Wall) -> GameState:
@@ -639,11 +640,11 @@ def place_wall(state: GameState, player: str, wall: Wall) -> GameState:
     """
     # Vérification 1 : Est-ce le tour de ce joueur ?
     if player != state.current_player:
-        raise InvalidMoveError(f"Ce n'est pas le tour du joueur {player}.")
-    
+        raise InvalidMoveError(f"Ce n'est pas le tour du joueur {player}.", NackCode.WRONG_TURN)
+
     # Vérification 2 : Le joueur a-t-il encore des murs ?
     if state.player_walls[player] <= 0:
-        raise InvalidMoveError("Le joueur n'a plus de murs.")
+        raise InvalidMoveError("Le joueur n'a plus de murs.", NackCode.NO_WALLS_LEFT)
     
     # Vérification 3 : Le mur respecte-t-il les règles géométriques ?
     _validate_wall_placement(state, wall)
@@ -662,11 +663,11 @@ def place_wall(state: GameState, player: str, wall: Wall) -> GameState:
     
     # Vérifier que le joueur 1 peut encore atteindre son objectif
     if not _path_exists(temp_state, temp_state.player_positions[PLAYER_ONE], goal_j1):
-        raise InvalidMoveError("Le mur bloque le chemin du joueur 1.")
-    
+        raise InvalidMoveError("Le mur bloque le chemin du joueur 1.", NackCode.WALL_BLOCKED)
+
     # Vérifier que le joueur 2 peut encore atteindre son objectif
     if not _path_exists(temp_state, temp_state.player_positions[PLAYER_TWO], goal_j2):
-        raise InvalidMoveError("Le mur bloque le chemin du joueur 2.")
+        raise InvalidMoveError("Le mur bloque le chemin du joueur 2.", NackCode.WALL_BLOCKED)
     
     # ═══════════════════════════════════════════════════════════════════════
     # Tout est valide ! Créer le nouvel état de jeu
@@ -728,7 +729,7 @@ def interpret_double_click(case1: Coord, case2: Coord) -> Wall:
         return ('v', ligne_min, c1, 2)
     
     # Les cases ne sont pas adjacentes : erreur
-    raise InvalidMoveError("Les deux cases cliquées doivent être adjacentes.")
+    raise InvalidMoveError("Les deux cases cliquées doivent être adjacentes.", NackCode.INVALID_FORMAT)
 
 # =============================================================================
 # ORCHESTRATION DU JEU - Classe QuoridorGame

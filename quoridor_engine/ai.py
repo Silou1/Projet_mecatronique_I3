@@ -64,6 +64,7 @@ from .core import (
     move_pawn,
     place_wall,
     InvalidMoveError,
+    NackCode,
     _is_wall_between,
     _path_exists,
     _validate_wall_placement
@@ -1126,7 +1127,7 @@ class AI:
         if pawn_moves:
             return ('deplacement', random.choice(pawn_moves))
         else:
-            raise InvalidMoveError("L'IA ne trouve aucun coup valide !")
+            raise InvalidMoveError("L'IA ne trouve aucun coup valide !", NackCode.ILLEGAL)
 
     def clear_cache(self):
         """

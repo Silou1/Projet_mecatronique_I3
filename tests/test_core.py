@@ -163,6 +163,22 @@ class TestNackCode:
         assert isinstance(NackCode.ILLEGAL.value, str)
 
 
+class TestInvalidMoveError:
+    """Tests de la signature InvalidMoveError (message, code: NackCode)."""
+
+    def test_invalid_move_error_requires_code(self):
+        """InvalidMoveError doit imposer un argument code obligatoire."""
+        with pytest.raises(TypeError):
+            InvalidMoveError("message sans code")  # manque code → TypeError
+
+    def test_invalid_move_error_exposes_code_attribute(self):
+        """L'attribut .code est accessible après levée."""
+        err = InvalidMoveError("test", NackCode.ILLEGAL)
+        assert err.code == NackCode.ILLEGAL
+        assert err.code.value == "ILLEGAL"
+        assert str(err) == "test"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 
