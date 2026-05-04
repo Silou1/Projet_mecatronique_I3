@@ -499,8 +499,11 @@ class UartClient:
     def handle_err_received(self, frame: "Frame") -> str:
         """Traite une trame ERR recue de l'ESP32.
 
-        Si recuperable : envoie CMD_RESET, retourne "RESET_SENT".
-        Si non recuperable : leve UartHardwareError.
+        Si recuperable : envoie CMD_RESET, clear is_connected, retourne "RESET_SENT".
+        Si non recuperable : leve UartHardwareError sans toucher is_connected.
+
+        Ordre critique : CMD_RESET doit etre emis avant de casser la connexion,
+        sinon send_cmd_reset() no-op silencieusement.
         """
         if frame.type != "ERR":
             raise ValueError(f"handle_err_received attend une trame ERR, recu {frame.type}")
@@ -513,6 +516,8 @@ class UartClient:
 
         if is_recoverable_err(code):
             self.send_cmd_reset()
+            with self._connection_lock:
+                self.is_connected = False
             return "RESET_SENT"
         else:
             raise UartHardwareError(code)

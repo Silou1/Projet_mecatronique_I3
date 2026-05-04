@@ -634,6 +634,7 @@ class TestErrHandling:
         assert action == "RESET_SENT"
         sent = mock_serial.get_tx()
         assert b"<CMD_RESET|" in sent
+        assert client.is_connected is False
 
         client.close()
 
@@ -650,6 +651,10 @@ class TestErrHandling:
 
         with pytest.raises(UartHardwareError, match="MOTOR_TIMEOUT"):
             client.handle_err_received(frame)
+
+        assert client.is_connected is True
+
+        client.close()
 
 
 class TestConnectWithEspInError:
