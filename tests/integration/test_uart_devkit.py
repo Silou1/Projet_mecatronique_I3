@@ -49,3 +49,21 @@ def test_sc_3_cmd_ia(connected_devkit):
     connected_devkit.write(make_frame("CMD", "MOVE 2 5", seq=cmd_seq))
     out = wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={cmd_seq}\|crc=", timeout=4.0)
     assert "DONE" in out, "pas de DONE reçu pour CMD MOVE"
+
+
+@pytest.mark.devkit
+def test_sc_4_idempotence(connected_devkit):
+    """Sc 4 — Replay même CMD avec même seq → DONE renvoyé sans re-exécution."""
+    connected_devkit.reset_input_buffer()
+    cmd_seq = 20
+    frame = make_frame("CMD", "MOVE 1 1", seq=cmd_seq)
+    connected_devkit.write(frame)
+    out1 = wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={cmd_seq}\|crc=", timeout=4.0)
+    assert "DONE" in out1, "pas de DONE pour 1ère émission"
+    # 2e émission, même frame
+    connected_devkit.reset_input_buffer()
+    connected_devkit.write(frame)
+    out2 = wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={cmd_seq}\|crc=", timeout=2.0)
+    assert "DONE" in out2, "pas de DONE renvoyé sur replay"
+    n_exec_2 = out2.count("[MOT] exec command")
+    assert n_exec_2 == 0, f"commande re-executée ({n_exec_2}x) au lieu d'être idempotente"
