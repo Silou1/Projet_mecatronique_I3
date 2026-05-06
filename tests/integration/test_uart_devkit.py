@@ -39,3 +39,13 @@ def test_sc_2_btn_humain(connected_devkit):
     assert "state 5" in out2, "pas de transition state 5 (EXECUTING)"
     out3 = wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={move_seq}\|crc=", timeout=4.0)
     assert "DONE" in out3, "pas de DONE reçu"
+
+
+@pytest.mark.devkit
+def test_sc_3_cmd_ia(connected_devkit):
+    """Sc 3 — CMD MOVE r c → DONE."""
+    connected_devkit.reset_input_buffer()
+    cmd_seq = 10
+    connected_devkit.write(make_frame("CMD", "MOVE 2 5", seq=cmd_seq))
+    out = wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={cmd_seq}\|crc=", timeout=4.0)
+    assert "DONE" in out, "pas de DONE reçu pour CMD MOVE"
