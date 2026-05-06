@@ -1,0 +1,14 @@
+[project]
+name = "quoridor-mecatronique"
+version = "0.1.0"
+description = "Moteur de jeu Quoridor 6x6 + intégration ESP32 (projet mécatronique ICAM 3A)"
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+devkit = ["pyserial>=3.5"]
+
+[tool.pytest.ini_options]
+markers = [
+  "devkit: tests qui requièrent le DevKit ESP32 branché (skipés sinon)",
+]
+testpaths = ["tests"]
