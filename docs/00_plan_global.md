@@ -75,7 +75,7 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 - [ ] **P7.9** Identifier et corriger les bugs trouvés (commits de correctifs)
 - [ ] **P7.10** Supprimer [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md), commit `test(firmware): plan 1 valide en bout-en-bout sur cible`
 
-### P8 — Protocole UART Plan 2 🚧
+### P8 — Protocole UART Plan 2 ✅
 
 > But : remplacer le protocole texte stub du Plan 1 par un protocole final (binaire ou texte enrichi avec framing + intégrité), implémenté côté ESP32 *et* côté Python.
 
@@ -84,7 +84,7 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 - [x] **P8.3** Refactor [firmware/src/UartLink.{cpp,h}](../firmware/src/) pour implémenter le protocole final
 - [x] **P8.4** Créer un module Python client UART (probablement `quoridor_engine/uart_client.py` ou `interface/uart.py`)
 - [x] **P8.5** Tests unitaires côté Python (avec serial loopback ou ESP32 DevKit en mode echo)
-- [ ] **P8.6** Tests d'intégration ESP32 DevKit ↔ Python : envoi/réception de toutes les trames *(reporté au 2026-05-04, retour DevKit — checklist : [`firmware/INTEGRATION_TESTS_PENDING.md`](../firmware/INTEGRATION_TESTS_PENDING.md))*
+- [x] **P8.6** Tests d'intégration ESP32 DevKit ↔ Python : envoi/réception de toutes les trames *(sc 1-8 valides via `firmware/tests_devkit/run_p86_manual.py` puis portes en pytest dans [`tests/integration/test_uart_devkit.py`](../tests/integration/test_uart_devkit.py) avec marqueur `@pytest.mark.devkit` — 2026-05-06)*
 
 ### P9 — Intégration logicielle RPi ↔ ESP32 🚧
 

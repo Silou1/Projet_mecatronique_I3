@@ -3,9 +3,10 @@
 > **Cible :** lundi 2026-05-04, retour du DevKit ESP32. À exécuter avant de cocher P8.6 dans le plan global.
 >
 > **Mise à jour 2026-05-06 :** P8.6 sc 1-8 validés via le script automatisé
-> `firmware/tests_devkit/run_p86_manual.py` (DevKit Freenove, port
-> `/dev/cu.usbserial-110`). Sc 9 (test pytest dans `tests/integration/`) reste
-> différé. Voir aussi la section P9.5 plus bas pour les tests E2E.
+> `firmware/tests_devkit/run_p86_manual.py` puis portés en pytest dans
+> `tests/integration/test_uart_devkit.py` (commits du même jour). Sc 9 (test
+> pytest dans `tests/integration/`) **terminé**. Voir aussi la section P9.5
+> plus bas pour les tests E2E.
 
 ## Préparatifs
 
@@ -88,12 +89,18 @@
 
 ### 9. Test Python ↔ ESP32 réel (script automatisé)
 
-Créer `tests/integration/test_uart_devkit.py` (à écrire à ce moment-là, pas dans P8.5) qui ouvre le port série réel et joue les scénarios 1-8 ci-dessus en automatique.
+- [x] Créer `tests/integration/test_uart_devkit.py` qui ouvre le port série
+  réel et joue les scénarios 1-8 ci-dessus en automatique.
 
-> **Statut :** différé. Les sc 1-8 ont été validés via le script
-> `firmware/tests_devkit/run_p86_manual.py` (semi-automatique : reset DevKit,
-> handshake, exécute les 8 scénarios, table de synthèse PASS/FAIL). Le portage
-> sous `pytest` reste à faire dans une session ultérieure.
+> **Statut :** ✅ portage pytest réalisé le 2026-05-06. Les 8 scénarios sont
+> exécutables via `pytest tests/integration/test_uart_devkit.py -v` (avec
+> DevKit branché, runtime ~25 s) et auto-skippés sinon (marqueur
+> `@pytest.mark.devkit`, fixture `serial_port` qui appelle `pytest.skip()`
+> si aucun `/dev/cu.usbserial-*` n'est détecté).
+> `firmware/tests_devkit/run_p86_manual.py` reste utilisable pour debug
+> interactif (`python firmware/tests_devkit/run_p86_manual.py 5` pour un sc
+> isolé). Helpers protocole et serial mutualisés dans
+> `firmware/tests_devkit/_uart_helpers.py`.
 
 ## Calcul CRC pour les tests manuels
 
