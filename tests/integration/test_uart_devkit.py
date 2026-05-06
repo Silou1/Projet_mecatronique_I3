@@ -20,3 +20,22 @@ def test_sc_1_handshake(raw_devkit):
     raw_devkit.write(make_frame("HELLO_ACK", seq=0, ack=int(m.group(1))))
     out2 = wait_for(raw_devkit, r"\[FSM\] -> state 3", timeout=2.0)
     assert "state 3" in out2, "pas de transition vers state 3 (CONNECTED)"
+
+
+@pytest.mark.devkit
+def test_sc_2_btn_humain(connected_devkit):
+    """Sc 2 — BTN x y → MOVE_REQ → ACK → EXECUTING → DONE."""
+    connected_devkit.reset_input_buffer()
+    connected_devkit.write(b"BTN 3 4\n")
+    out = wait_for(connected_devkit, r"<MOVE_REQ 3 4\|seq=(\d+)\|crc=", timeout=2.0)
+    m = re.search(r"<MOVE_REQ 3 4\|seq=(\d+)\|crc=([0-9A-F]+)>", out)
+    assert m, "pas de MOVE_REQ 3 4 émis"
+    move_seq = int(m.group(1))
+    crc_recv = m.group(2)
+    crc_calc = crc16(f"MOVE_REQ 3 4|seq={move_seq}")
+    assert crc_recv == crc_calc, f"CRC MOVE_REQ invalide (recu {crc_recv}, calculé {crc_calc})"
+    connected_devkit.write(make_frame("ACK", seq=0, ack=move_seq))
+    out2 = wait_for(connected_devkit, r"\[FSM\] -> state 5", timeout=2.0)
+    assert "state 5" in out2, "pas de transition state 5 (EXECUTING)"
+    out3 = wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={move_seq}\|crc=", timeout=4.0)
+    assert "DONE" in out3, "pas de DONE reçu"
