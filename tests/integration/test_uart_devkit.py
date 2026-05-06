@@ -94,3 +94,17 @@ def test_sc_6_trame_longue(connected_devkit):
     assert "<ERR" not in out, "trame longue a déclenché un ERR"
     assert "[FSM] ->" not in out, "trame longue a déclenché une transition d'état"
     keepalive(connected_devkit)
+
+
+@pytest.mark.devkit
+def test_sc_7_btn_sans_framing(connected_devkit):
+    """Sc 7 — Mode injection BTN x y (sans <>) → MOVE_REQ x y émis."""
+    connected_devkit.reset_input_buffer()
+    connected_devkit.write(b"BTN 5 5\n")
+    out = wait_for(connected_devkit, r"<MOVE_REQ 5 5\|seq=(\d+)\|crc=", timeout=2.0)
+    m = re.search(r"<MOVE_REQ 5 5\|seq=(\d+)\|crc=", out)
+    assert m, "pas de MOVE_REQ 5 5 après BTN injection"
+    move_seq = int(m.group(1))
+    # Répondre ACK pour ne pas laisser la FSM dans un état sale
+    connected_devkit.write(make_frame("ACK", seq=0, ack=move_seq))
+    wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={move_seq}", timeout=4.0)
