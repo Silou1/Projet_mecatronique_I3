@@ -80,3 +80,17 @@ def test_sc_5_crc_corrompu(connected_devkit):
     assert "<ERR" not in out, "trame CRC bidon a déclenché un ERR"
     assert "[FSM] ->" not in out, "trame CRC bidon a déclenché une transition d'état"
     keepalive(connected_devkit)  # éviter expiration watchdog avant prochain test
+
+
+@pytest.mark.devkit
+def test_sc_6_trame_longue(connected_devkit):
+    """Sc 6 — Trame > 80 octets → rejet silencieux."""
+    keepalive(connected_devkit)
+    connected_devkit.reset_input_buffer()
+    payload = b"<" + b"A" * 95 + b">\n"
+    connected_devkit.write(payload)
+    out = read_for(connected_devkit, 1.0)
+    assert "<ACK" not in out, "trame longue a déclenché un ACK"
+    assert "<ERR" not in out, "trame longue a déclenché un ERR"
+    assert "[FSM] ->" not in out, "trame longue a déclenché une transition d'état"
+    keepalive(connected_devkit)
