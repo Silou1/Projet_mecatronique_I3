@@ -8,7 +8,7 @@ import re
 
 import pytest
 
-from _uart_helpers import crc16, make_frame, read_for, wait_for
+from _uart_helpers import crc16, keepalive, make_frame, read_for, wait_for
 
 
 @pytest.mark.devkit
@@ -67,3 +67,16 @@ def test_sc_4_idempotence(connected_devkit):
     assert "DONE" in out2, "pas de DONE renvoyé sur replay"
     n_exec_2 = out2.count("[MOT] exec command")
     assert n_exec_2 == 0, f"commande re-executée ({n_exec_2}x) au lieu d'être idempotente"
+
+
+@pytest.mark.devkit
+def test_sc_5_crc_corrompu(connected_devkit):
+    """Sc 5 — Trame avec CRC bidon → rejet silencieux (pas d'ACK/ERR/transition)."""
+    keepalive(connected_devkit)  # rafraîchir watchdog avant test passif
+    connected_devkit.reset_input_buffer()
+    connected_devkit.write(b"<KEEPALIVE|seq=0|crc=0000>\n")
+    out = read_for(connected_devkit, 1.0)
+    assert "<ACK" not in out, "trame CRC bidon a déclenché un ACK"
+    assert "<ERR" not in out, "trame CRC bidon a déclenché un ERR"
+    assert "[FSM] ->" not in out, "trame CRC bidon a déclenché une transition d'état"
+    keepalive(connected_devkit)  # éviter expiration watchdog avant prochain test
