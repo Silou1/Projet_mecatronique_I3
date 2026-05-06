@@ -3,103 +3,28 @@
 
 Joue les 8 scenarios de firmware/INTEGRATION_TESTS_PENDING.md en sequence,
 stop on first FAIL. Pas un test pytest : outil hardware-dependent qui
-necessite le DevKit branche sur /dev/cu.usbserial-110.
+necessite le DevKit branche sur /dev/cu.usbserial-*.
 
-Le scenario 9 (test pytest automatise) est differe a une session ulterieure.
+Pour la version pytest automatique, voir tests/integration/test_uart_devkit.py.
 """
 
-import binascii
 import re
 import sys
-import time
 
 import serial
 
-PORT = "/dev/cu.usbserial-110"
-BAUD = 115200
+from _uart_helpers import (
+    BAUD,
+    crc16,
+    find_devkit_port,
+    keepalive,
+    make_frame,
+    read_for,
+    reset_esp,
+    wait_for,
+)
 
-# --- Helpers protocole ---
-
-
-def crc16(data: str) -> str:
-    """CRC-16 CCITT-FALSE sur la zone CRC, retourne hex 4 chars majuscules."""
-    return f"{binascii.crc_hqx(data.encode('ascii'), 0xFFFF):04X}"
-
-
-def make_frame(type_, args="", seq=0, ack=None, version=None) -> bytes:
-    body = type_
-    if args:
-        body += " " + args
-    body += f"|seq={seq}"
-    if ack is not None:
-        body += f"|ack={ack}"
-    if version is not None:
-        body += f"|v={version}"
-    return f"<{body}|crc={crc16(body)}>\n".encode("ascii")
-
-
-FRAME_RE = re.compile(r"<([^>]+)>")
-
-
-def parse_frames(text: str):
-    out = []
-    for m in FRAME_RE.finditer(text):
-        body = m.group(1)
-        parts = body.split("|")
-        head = parts[0].split(" ", 1)
-        type_ = head[0]
-        args = head[1] if len(head) > 1 else ""
-        fields = {}
-        for p in parts[1:]:
-            if "=" in p:
-                k, v = p.split("=", 1)
-                fields[k] = v
-        # Verification CRC trame recue
-        crc_recv = fields.pop("crc", None)
-        zone = body.rsplit("|crc=", 1)[0]
-        crc_calc = crc16(zone)
-        crc_ok = (crc_recv == crc_calc)
-        out.append({"type": type_, "args": args, "crc_ok": crc_ok, "raw": m.group(0), **fields})
-    return out
-
-
-# --- Helpers serial ---
-
-
-def reset_esp(s: serial.Serial) -> None:
-    s.dtr = False  # GPIO0 high (boot Flash)
-    s.rts = True   # EN low (reset)
-    time.sleep(0.1)
-    s.reset_input_buffer()
-    s.rts = False  # EN high (run)
-
-
-def keepalive(s: serial.Serial) -> None:
-    """Trame KEEPALIVE valide pour rafraichir le watchdog UART (3 s) du firmware."""
-    s.write(make_frame("KEEPALIVE", seq=0))
-
-
-def read_for(s: serial.Serial, duration: float) -> str:
-    start = time.time()
-    buf = bytearray()
-    while time.time() - start < duration:
-        chunk = s.read(4096)
-        if chunk:
-            buf.extend(chunk)
-    return buf.decode("ascii", errors="replace")
-
-
-def wait_for(s: serial.Serial, pattern: str, timeout: float = 5.0) -> str:
-    start = time.time()
-    buf = bytearray()
-    rx = re.compile(pattern)
-    while time.time() - start < timeout:
-        chunk = s.read(2048)
-        if chunk:
-            buf.extend(chunk)
-            if rx.search(buf.decode("ascii", errors="replace")):
-                return buf.decode("ascii", errors="replace")
-    return buf.decode("ascii", errors="replace")
+PORT = find_devkit_port() or "/dev/cu.usbserial-110"
 
 
 # --- Scenarios ---
