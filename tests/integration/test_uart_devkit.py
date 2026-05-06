@@ -108,3 +108,29 @@ def test_sc_7_btn_sans_framing(connected_devkit):
     # Répondre ACK pour ne pas laisser la FSM dans un état sale
     connected_devkit.write(make_frame("ACK", seq=0, ack=move_seq))
     wait_for(connected_devkit, rf"<DONE\|seq=\d+\|ack={move_seq}", timeout=4.0)
+
+
+@pytest.mark.devkit
+def test_sc_8_err_reset(connected_devkit):
+    """Sc 8 — ERR initial → réémission 1Hz → CMD_RESET → BOOT_START.
+
+    Note : dans le stub MotionControl, (99,99) est accepté ; l'ERR observée
+    vient du watchdog UART (3 s sans trame valide pendant la phase passive),
+    pas d'une erreur métier. Validation par erreur métier reportée à P11.
+    """
+    connected_devkit.reset_input_buffer()
+    cmd_seq = 30
+    connected_devkit.write(make_frame("CMD", "MOVE 99 99", seq=cmd_seq))
+    out = wait_for(connected_devkit, r"<ERR ", timeout=4.0)
+    assert "<ERR " in out, "pas de ERR initial reçu"
+    # Réémission ERR pendant 2.5 s (informatif, on ne fail pas si pas vu)
+    out2 = read_for(connected_devkit, 2.5)
+    err_reemissions = re.findall(r"<ERR [^>]+>", out2)
+    err_no_ack = [e for e in err_reemissions if "|ack=" not in e]
+    # CMD_RESET → BOOT_START
+    connected_devkit.reset_input_buffer()
+    connected_devkit.write(make_frame("CMD_RESET", seq=0))
+    out3 = wait_for(connected_devkit, r"<BOOT_START\|seq=0", timeout=4.0)
+    assert "<BOOT_START" in out3, "pas de reboot après CMD_RESET"
+    # Trace info pour debug si besoin (visible avec -s)
+    print(f"[sc 8] ERR ré-émis sans ack : {len(err_no_ack)}")
