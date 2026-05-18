@@ -195,12 +195,14 @@ function renderPlateauToggle(state) {
 
 function renderError(state) {
   if (state.last_error && state.last_error.code) {
-    showToast(state.last_error.message || state.last_error.code);
-    // Le serveur garde last_error jusqu'à new-game/quit ; on le montre une fois
-    // donc on garde une trace locale pour pas spammer.
+    // Le serveur garde last_error jusqu'à new-game/quit ; on ne montre le toast
+    // qu'une seule fois par code d'erreur grâce à une trace locale.
     if (state.last_error.code !== window._lastShownError) {
+      showToast(state.last_error.message || state.last_error.code);
       window._lastShownError = state.last_error.code;
     }
+  } else {
+    window._lastShownError = null;
   }
 }
 
