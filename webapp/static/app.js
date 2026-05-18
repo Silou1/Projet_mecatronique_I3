@@ -216,6 +216,13 @@ function render(newState) {
   }
   renderModal(state);
   renderPlateauToggle(state);
+  // Sync chip vitesse in-game avec le serveur
+  const speedGroup = document.querySelector('[data-field="speed-ingame"]');
+  if (speedGroup) {
+    speedGroup.querySelectorAll(".chip").forEach(c => {
+      c.classList.toggle("selected", c.dataset.value === state.speed);
+    });
+  }
   renderError(state);
 }
 
