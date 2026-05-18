@@ -273,6 +273,10 @@ class QuoridorService:
         # Application du coup DANS le lock
         with self._lock:
             self._ai_thinking = False
+            # Garde : si l'utilisateur a quitté la partie pendant que l'IA réfléchissait,
+            # _state peut être None ou le status peut avoir changé.
+            if self._status != "playing" or self._state is None:
+                return False
             move_type, move_data = move
             try:
                 if move_type == "deplacement":
@@ -327,10 +331,10 @@ class QuoridorService:
             return
         if self._uart_bridge is None or not self._uart_bridge.available:
             return
-        try:
-            self._uart_bridge.forward_move(move)
-        except Exception as e:  # noqa: BLE001
+        self._uart_bridge.forward_move(move)  # ne lève jamais (cf. contrat UartBridge)
+        # Si le bridge vient de se désactiver à cause d'une erreur, notifier le client.
+        if not self._uart_bridge.available:
             self._last_error = {
                 "code": "PLATEAU_LOST",
-                "message": f"Plateau déconnecté: {e}",
+                "message": "Plateau déconnecté, partie en mode app.",
             }
