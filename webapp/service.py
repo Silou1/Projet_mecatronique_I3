@@ -209,6 +209,31 @@ class QuoridorService:
                 raise ValueError(f"Orientation invalide: {orientation!r}")
             self._wall_placement_mode = orientation
 
+    def pause(self) -> None:
+        """Met la partie en pause (no-op si pas en 'playing')."""
+        with self._lock:
+            if self._status == "playing":
+                self._status = "paused"
+
+    def resume(self) -> None:
+        """Reprend la partie depuis pause (no-op si pas en 'paused')."""
+        with self._lock:
+            if self._status == "paused":
+                self._status = "playing"
+                self._last_ai_move_at = time.monotonic()
+
+    def set_speed(self, speed: str) -> None:
+        """Change la vitesse IA vs IA."""
+        if speed not in _DELAIS:
+            raise ValueError(f"Vitesse invalide: {speed!r}")
+        with self._lock:
+            self._speed = speed
+
+    def quit_to_home(self) -> None:
+        """Termine la partie. Garde mode/difficulté/vitesse/plateau_mode."""
+        with self._lock:
+            self._reset_partie()
+
     def _forward_to_plateau_unlocked(self, move: tuple) -> None:
         """Forward best-effort au plateau physique si actif. Suppose le lock acquis."""
         if not self._plateau_mode:

@@ -107,3 +107,36 @@ class TestWallMode:
         service.set_wall_mode("h")
         service.set_wall_mode(None)
         assert service.to_dict()["wall_placement_mode"] is None
+
+
+class TestControles:
+    def test_pause_change_status(self, service):
+        service.new_game(mode="ai_vs_ai", difficulty="facile", plateau_mode=False)
+        service.pause()
+        assert service.to_dict()["status"] == "paused"
+
+    def test_resume_remet_playing(self, service):
+        service.new_game(mode="ai_vs_ai", difficulty="facile", plateau_mode=False)
+        service.pause()
+        service.resume()
+        assert service.to_dict()["status"] == "playing"
+
+    def test_pause_hors_partie_no_op(self, service):
+        service.pause()
+        assert service.to_dict()["status"] == "waiting"
+
+    def test_set_speed_persiste(self, service):
+        service.set_speed("rapide")
+        assert service.to_dict()["speed"] == "rapide"
+        service.new_game(mode="ai_vs_ai", difficulty="facile", plateau_mode=False)
+        assert service.to_dict()["speed"] == "rapide"
+
+    def test_quit_to_home_efface_partie_garde_reglages(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="difficile", plateau_mode=False)
+        service.set_speed("rapide")
+        service.quit_to_home()
+        state = service.to_dict()
+        assert state["status"] == "waiting"
+        assert state["difficulty"] == "difficile"
+        assert state["speed"] == "rapide"
+        assert state["mode"] == "human_vs_ai"
