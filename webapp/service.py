@@ -134,3 +134,84 @@ class QuoridorService:
             "last_error": self._last_error,
             "wall_placement_mode": self._wall_placement_mode,
         }
+
+    def apply_user_move(self, move_payload: dict) -> None:
+        """Applique un coup envoyé par l'utilisateur (humain).
+
+        Raises:
+            InvalidMoveError: si la partie n'est pas active, si ce n'est pas
+                              le tour de l'humain, ou si le coup est invalide.
+        """
+        from quoridor_engine.core import NackCode, move_pawn, place_wall
+
+        with self._lock:
+            if self._status != "playing":
+                raise InvalidMoveError("Aucune partie active.", NackCode.WRONG_TURN)
+            if self._mode == "ai_vs_ai":
+                raise InvalidMoveError(
+                    "Pas de coup humain en mode IA vs IA.", NackCode.WRONG_TURN
+                )
+            if self._is_ai_turn_unlocked():
+                raise InvalidMoveError(
+                    "Ce n'est pas le tour du joueur humain.", NackCode.WRONG_TURN
+                )
+
+            player = self._state.current_player
+            move_type = move_payload.get("type")
+
+            if move_type == "deplacement":
+                target = tuple(move_payload["target"])
+                new_state = move_pawn(self._state, player, target)
+            elif move_type == "mur":
+                wall = (
+                    move_payload["orientation"],
+                    int(move_payload["row"]),
+                    int(move_payload["col"]),
+                    2,
+                )
+                new_state = place_wall(self._state, player, wall)
+            else:
+                raise InvalidMoveError(
+                    f"Type de coup inconnu: {move_type!r}",
+                    NackCode.INVALID_FORMAT,
+                )
+
+            self._state = new_state
+            self._turn_count += 1
+            self._wall_placement_mode = None
+            self._last_ai_move_at = time.monotonic()
+            self._check_game_over_unlocked()
+            self._forward_to_plateau_unlocked((move_type, move_payload))
+
+    def _is_ai_turn_unlocked(self) -> bool:
+        """True si le tour courant est celui d'une IA. Suppose le lock acquis."""
+        if self._state is None:
+            return False
+        if self._state.current_player == PLAYER_ONE and self._ai_j1 is not None:
+            return True
+        if self._state.current_player == PLAYER_TWO and self._ai_j2 is not None:
+            return True
+        return False
+
+    def _check_game_over_unlocked(self) -> None:
+        """Met à jour status/winner si la partie est terminée. Suppose le lock acquis."""
+        if self._state is None:
+            return
+        is_over, winner = self._state.is_game_over()
+        if is_over:
+            self._status = "finished"
+            self._winner = winner
+
+    def _forward_to_plateau_unlocked(self, move: tuple) -> None:
+        """Forward best-effort au plateau physique si actif. Suppose le lock acquis."""
+        if not self._plateau_mode:
+            return
+        if self._uart_bridge is None or not self._uart_bridge.available:
+            return
+        try:
+            self._uart_bridge.forward_move(move)
+        except Exception as e:  # noqa: BLE001
+            self._last_error = {
+                "code": "PLATEAU_LOST",
+                "message": f"Plateau déconnecté: {e}",
+            }

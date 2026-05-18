@@ -48,3 +48,29 @@ class TestNewGame:
         state = service.to_dict()
         assert state["turn_count"] == 0
         assert state["difficulty"] == "facile"
+
+
+class TestApplyUserMoveDeplacement:
+    def test_deplacement_valide_change_tour(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        service.apply_user_move({"type": "deplacement", "target": (4, 3)})
+        state = service.to_dict()
+        assert state["players"]["j1"]["position"] == [4, 3]
+        assert state["current_player"] == "j2"
+        assert state["turn_count"] == 1
+
+    def test_deplacement_invalide_leve_erreur(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        with pytest.raises(InvalidMoveError):
+            service.apply_user_move({"type": "deplacement", "target": (0, 0)})
+
+    def test_deplacement_pendant_tour_ai_rejete(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        service.apply_user_move({"type": "deplacement", "target": (4, 3)})
+        with pytest.raises(InvalidMoveError):
+            service.apply_user_move({"type": "deplacement", "target": (1, 3)})
+
+    def test_deplacement_en_mode_ai_vs_ai_rejete(self, service):
+        service.new_game(mode="ai_vs_ai", difficulty="facile", plateau_mode=False)
+        with pytest.raises(InvalidMoveError):
+            service.apply_user_move({"type": "deplacement", "target": (4, 3)})
