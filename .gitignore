@@ -64,3 +64,6 @@ firmware/.pio/
 firmware/.vscode/
 firmware/compile_commands.json
 
+# Superpowers brainstorming (mockups visuels locaux)
+.superpowers/
+
