@@ -72,8 +72,8 @@ class StateResponse(BaseModel):
     turn_count: int = 0
     current_player: Optional[PlayerId] = None
     ai_thinking: bool = False
-    players: dict = Field(default_factory=dict)
-    walls: list = Field(default_factory=list)
+    players: dict[str, PlayerInfo] = Field(default_factory=dict)
+    walls: list[WallInfo] = Field(default_factory=list)
     winner: Optional[PlayerId] = None
     plateau: PlateauInfo = Field(
         default_factory=lambda: PlateauInfo(available=False, mode_active=False, connected=False)
