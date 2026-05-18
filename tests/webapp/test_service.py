@@ -74,3 +74,36 @@ class TestApplyUserMoveDeplacement:
         service.new_game(mode="ai_vs_ai", difficulty="facile", plateau_mode=False)
         with pytest.raises(InvalidMoveError):
             service.apply_user_move({"type": "deplacement", "target": (4, 3)})
+
+
+class TestApplyUserMoveMur:
+    def test_pose_mur_horizontal_valide(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        service.apply_user_move(
+            {"type": "mur", "orientation": "h", "row": 4, "col": 2}
+        )
+        state = service.to_dict()
+        assert {"orientation": "h", "row": 4, "col": 2} in state["walls"]
+        assert state["players"]["j1"]["walls_remaining"] == 5
+        assert state["current_player"] == "j2"
+        assert state["turn_count"] == 1
+        assert state["wall_placement_mode"] is None
+
+
+class TestWallMode:
+    def test_active_mur_horizontal(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        service.set_wall_mode("h")
+        assert service.to_dict()["wall_placement_mode"] == "h"
+
+    def test_basculer_h_vers_v(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        service.set_wall_mode("h")
+        service.set_wall_mode("v")
+        assert service.to_dict()["wall_placement_mode"] == "v"
+
+    def test_desactivation_avec_null(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        service.set_wall_mode("h")
+        service.set_wall_mode(None)
+        assert service.to_dict()["wall_placement_mode"] is None

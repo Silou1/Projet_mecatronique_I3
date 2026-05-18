@@ -202,6 +202,13 @@ class QuoridorService:
             self._status = "finished"
             self._winner = winner
 
+    def set_wall_mode(self, orientation: Optional[str]) -> None:
+        """Active ou désactive le mode placement de mur."""
+        with self._lock:
+            if orientation not in (None, "h", "v"):
+                raise ValueError(f"Orientation invalide: {orientation!r}")
+            self._wall_placement_mode = orientation
+
     def _forward_to_plateau_unlocked(self, move: tuple) -> None:
         """Forward best-effort au plateau physique si actif. Suppose le lock acquis."""
         if not self._plateau_mode:
