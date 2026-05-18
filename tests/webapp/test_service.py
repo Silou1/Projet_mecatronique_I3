@@ -140,3 +140,33 @@ class TestControles:
         assert state["difficulty"] == "difficile"
         assert state["speed"] == "rapide"
         assert state["mode"] == "human_vs_ai"
+
+
+class TestTick:
+    def test_tick_once_fait_jouer_ai_quand_son_tour(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="facile", plateau_mode=False)
+        service.apply_user_move({"type": "deplacement", "target": (4, 3)})
+        service._last_ai_move_at = 0.0
+        played = service.tick_once()
+        assert played is True
+        state = service.to_dict()
+        assert state["current_player"] == "j1"
+        assert state["turn_count"] == 2
+
+    def test_tick_once_no_op_si_tour_humain(self, service):
+        service.new_game(mode="human_vs_ai", difficulty="facile", plateau_mode=False)
+        played = service.tick_once()
+        assert played is False
+
+    def test_tick_once_no_op_si_paused(self, service):
+        service.new_game(mode="ai_vs_ai", difficulty="facile", plateau_mode=False)
+        service.pause()
+        service._last_ai_move_at = 0.0
+        played = service.tick_once()
+        assert played is False
+
+    def test_tick_respecte_delai(self, service):
+        service.new_game(mode="ai_vs_ai", difficulty="facile", plateau_mode=False)
+        service._last_ai_move_at = time.monotonic()
+        played = service.tick_once()
+        assert played is False

@@ -234,6 +234,93 @@ class QuoridorService:
         with self._lock:
             self._reset_partie()
 
+    def tick_once(self) -> bool:
+        """Effectue une itération de tick : si c'est au tour d'une IA
+        et que le délai est écoulé, joue le coup IA.
+
+        Returns:
+            True si un coup IA a été joué, False sinon.
+        """
+        from quoridor_engine.core import move_pawn, place_wall
+
+        with self._lock:
+            if self._status != "playing":
+                return False
+            if not self._is_ai_turn_unlocked():
+                return False
+            elapsed = time.monotonic() - self._last_ai_move_at
+            if elapsed < _DELAIS[self._speed]:
+                return False
+            current_ai = (
+                self._ai_j1 if self._state.current_player == PLAYER_ONE else self._ai_j2
+            )
+            self._ai_thinking = True
+            state_snapshot = self._state
+
+        # Réflexion IA HORS du lock (peut prendre 0.1-2s)
+        try:
+            move = current_ai.find_best_move(state_snapshot, verbose=False)
+        except Exception as e:  # noqa: BLE001
+            with self._lock:
+                self._ai_thinking = False
+                self._status = "finished"
+                self._last_error = {
+                    "code": "AI_CRASH",
+                    "message": f"Erreur IA: {e}",
+                }
+            return False
+
+        # Application du coup DANS le lock
+        with self._lock:
+            self._ai_thinking = False
+            move_type, move_data = move
+            try:
+                if move_type == "deplacement":
+                    self._state = move_pawn(
+                        self._state, self._state.current_player, move_data
+                    )
+                else:  # 'mur'
+                    self._state = place_wall(
+                        self._state, self._state.current_player, move_data
+                    )
+            except InvalidMoveError as e:
+                self._last_error = {"code": e.code.value, "message": str(e)}
+                return False
+
+            self._turn_count += 1
+            self._last_ai_move_at = time.monotonic()
+            self._check_game_over_unlocked()
+            if move_type == "deplacement":
+                payload = {"type": "deplacement", "target": list(move_data)}
+            else:
+                payload = {
+                    "type": "mur",
+                    "orientation": move_data[0],
+                    "row": move_data[1],
+                    "col": move_data[2],
+                }
+            self._forward_to_plateau_unlocked((move_type, payload))
+            return True
+
+    def start_tick_thread(self) -> None:
+        """Démarre le thread daemon qui appelle tick_once() en boucle.
+
+        Doit être appelé une seule fois, au démarrage du serveur.
+        """
+        if hasattr(self, "_tick_thread") and self._tick_thread.is_alive():
+            return  # déjà démarré
+
+        def _loop():
+            while True:
+                try:
+                    self.tick_once()
+                except Exception:  # noqa: BLE001 — robustesse maximale du thread
+                    pass
+                time.sleep(0.1)
+
+        self._tick_thread = threading.Thread(target=_loop, daemon=True, name="tick")
+        self._tick_thread.start()
+
     def _forward_to_plateau_unlocked(self, move: tuple) -> None:
         """Forward best-effort au plateau physique si actif. Suppose le lock acquis."""
         if not self._plateau_mode:
