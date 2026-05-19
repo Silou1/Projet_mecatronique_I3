@@ -71,6 +71,44 @@ Au fur et à mesure que les composants sont validés sur breadboard, ils sont li
 - **Commandes série utiles :** `EN ON` / `EN OFF`, `M1 F <n>` / `M1 B <n>`, `SPEED <us>`, `DUTY <pct>`, `STATUS`, `HELP`
 - **Limites connues :** pas de microstepping (full-step uniquement), couple moyen, vibration audible. Acceptable pour la démo.
 
+### 2026-05-20 — CoreXY complet : M1 + M2 + 2 fins de course + homing (validé)
+
+Cette session étend le bring-up M1 seul à la chaîne CoreXY complète. Sketch unifié remplace les deux sketches isolés précédents (qui restent dispos pour debug ciblé).
+
+- **Moteur 2 via L298N #2** — mêmes spécifications électriques que M1 (jumpers ENA/ENB retirés, jumper 5V_EN en place, alim 12 V partagée).
+
+| Pin L298N #2 | GPIO ESP32 | Rôle |
+|---|---|---|
+| IN1 | 16 | phase A+ |
+| IN2 | 17 | phase A− |
+| IN3 | 21 | phase B+ |
+| IN4 | 22 | phase B− |
+| ENA | 19 | PWM canal A |
+| ENB | 23 | PWM canal B |
+
+- **Capteur 2 (fin de course axe Y)** — GPIO 18, `INPUT_PULLUP`, switch entre GPIO et GND, pas de résistance externe (même montage que Capteur 1).
+
+- **Convention CoreXY propre à cette machine (validée expérimentalement) :**
+  - **X pur (vers/depuis Capteur 1)** : M1 et M2 en sens **opposés** (ΔA = −ΔB)
+  - **Y pur (vers/depuis Capteur 2)** : M1 et M2 en **même** sens (ΔA = ΔB)
+
+  C'est l'**inverse** de la convention CoreXY "standard" (ΔA = ΔX + ΔY, ΔB = ΔX − ΔY). Le sens dépend du routage des courroies et de la disposition des poulies sur cette machine ; le câblage électrique des moteurs est laissé tel quel, c'est le code qui s'adapte.
+
+- **Sketch de test :** [firmware/src/bringup_motors_and_limits.cpp](../firmware/src/bringup_motors_and_limits.cpp)
+- **Env PlatformIO :** `bringup_motors_and_limits`
+  - Flash : `pio run -e bringup_motors_and_limits -t upload`
+- **Commandes série utiles :**
+  - `M1 F/B <n>` / `M2 F/B <n>` — un moteur seul (diagonale, **debug uniquement**)
+  - `X F/B <n>` / `Y F/B <n>` — axe pur (les 2 moteurs coordonnés)
+  - `LIMITS` / `LIMITS WATCH` — lecture des fins de course
+  - `HOME` — homing CoreXY : approche Capteur 1, recul 20 pas, puis idem Capteur 2
+  - `EN ON/OFF`, `SPEED <us>`, `DUTY <pct>`, `STATUS`, `HELP`
+- **Comportement HOME validé :**
+  - Pas garde-fou `HOME_PAS_MAX = 4000`
+  - Reculs `HOME_RECUL_PAS = 20` après contact, `HOME_LIBERATION = 50` si capteur déjà LOW au lancement
+  - Course mesurée au premier homing : ~553 pas en X, ~506 pas en Y entre le centre de la table et la butée (utile comme borne basse pour le dimensionnement logiciel ultérieur)
+- **Comportement diagonal de M1/M2 seuls :** documenté dans l'aide du sketch. M1 ou M2 isolé produit un mouvement diagonal (X±Y) — utile pour vérifier qu'un moteur tourne et qu'aucune phase n'est inversée, mais **jamais à utiliser pour homing**.
+
 ## Archive
 
 - [archive/pcb-v2-2026-04-28-ABANDONNEE/](archive/pcb-v2-2026-04-28-ABANDONNEE/) : ancienne PCB v2, audit complet, source EasyEDA, et postmortem
