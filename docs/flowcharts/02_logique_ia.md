@@ -1,6 +1,24 @@
 # 🤖 Logique de l'Intelligence Artificielle
 
-Ce diagramme détaille comment l'IA du Quoridor réfléchit et choisit son coup. Elle utilise l'algorithme **Minimax avec élagage Alpha-Bêta**.
+Ce diagramme détaille comment l'IA du Quoridor réfléchit et choisit son coup. Elle utilise l'algorithme **Minimax avec élagage Alpha-Bêta** et **iterative deepening** sous budget temps.
+
+---
+
+## Boucle Iterative Deepening
+
+```mermaid
+flowchart TD
+    Start[find_best_move state] --> InitBudget[Calcule deadline = now + TIME_BUDGETS difficulty]
+    InitBudget --> Loop{Pour depth = 1 a DEPTH_MAX}
+    Loop --> Search[Lance minimax a cette profondeur]
+    Search --> Timeout{Timeout dans la recherche?}
+    Timeout -- Oui --> ReturnBest[Retourne best_move_finalized]
+    Timeout -- Non --> Save[Memorise best_move_finalized]
+    Save --> CheckBudget{Budget depasse?}
+    CheckBudget -- Oui --> ReturnBest
+    CheckBudget -- Non --> Loop
+    Loop -- depth > DEPTH_MAX --> ReturnBest
+```
 
 ---
 
@@ -27,7 +45,7 @@ flowchart TD
     MORE -->|Oui| LOOP
     MORE -->|Non| CHOOSE
 
-    CHOOSE["🎲 Choisir aléatoirement<br/>parmi les meilleurs coups<br/>(pour varier le jeu)"] --> RETURN(["Jouer le coup choisi"])
+    CHOOSE["Choisir le meilleur coup<br/>par tie-break déterministe<br/>(avancer > mur > centre > ordre canonique)"] --> RETURN(["Jouer le coup choisi"])
 
     style ENTRY fill:#E91E63,color:#fff
     style RETURN fill:#4CAF50,color:#fff
@@ -151,4 +169,4 @@ flowchart LR
 
 ---
 
-> **En résumé :** L'IA imagine les prochains coups à l'avance, suppose que l'adversaire joue au mieux, et choisit le coup qui lui donne le plus d'avantage. Plus la difficulté est élevée, plus elle anticipe de coups (2 à 5 coups d'avance).
+> **En résumé :** L'IA imagine les prochains coups à l'avance via iterative deepening (profondeur croissante sous budget temps), suppose que l'adversaire joue au mieux, et choisit le coup qui lui donne le plus d'avantage de façon déterministe. Plus la difficulté est élevée, plus elle anticipe de coups (2 à 8 coups d'avance).

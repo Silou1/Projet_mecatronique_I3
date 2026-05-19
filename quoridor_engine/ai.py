@@ -722,7 +722,7 @@ class AI:
         ATTENTION :
         -----------
         Cette fonction doit être RAPIDE car elle est appelée pour chaque coup.
-        Elle utilise les distances pré-calculées, pas de BFS additionnel.
+        Pour les murs, fait un mini-BFS sur l'état temporaire pour estimer le rallongement réel du chemin adverse (delta_opp).
         
         Args:
             state: L'état actuel
