@@ -1,32 +1,25 @@
-# Hardware -- PCB Quoridor
+# Hardware — Quoridor mécatronique
 
-Source de vérité pour la carte électronique commandée par Jean (jeanrdc) le **2026-04-28**.
+## État actuel : bring-up breadboard
 
-## Fichiers
+**Date de pivot : 2026-05-19.**
 
-| Fichier | Rôle |
-|---------|------|
-| [PCB_PCB_mecatronique_2026-04-28.json](PCB_PCB_mecatronique_2026-04-28.json) | Export EasyEDA de la PCB commandée -- source de vérité |
-| [AUDIT_PCB_V2.md](AUDIT_PCB_V2.md) | Audit détaillé v2 (mapping pins, anomalies relevées, BOM, comparatif v1/v2) |
+La PCB v2 (commandée 2026-04-28) a été **abandonnée** suite à une erreur de composant (PCA9548A reçu au lieu d'un MCP23017) et plusieurs conflits de pins sur le routage.
 
-## État de la carte
+Le nouveau câblage se fait **sur breadboard**, avec les composants physiques conservés (ESP32-WROOM, 2× A4988, 2× steppers NEMA17, servo, 2× fins de course, alim 12V).
 
-- PCB v2, identique au JSON ci-dessus, **commandée telle quelle**
-- Architecture : ESP32-WROOM (Freenove) + Raspberry Pi via UART, MCP23017 pour 2× A4988 + NEMA 17, servo SG90, LEDs WS2812B, matrice boutons 6×6
-- Anomalies de l'audit : **validées par Jean d'après la datasheet ESP32** (pin 27 = GPIO output-capable, GPIO0 acceptable avec pull-up interne, polarité condo OK, A4988 ENABLE flottant = activé par défaut)
+## Périmètre du bring-up
 
-## Source de vérité ESP32
+- 2× moteurs steppers (chaîne CoreXY) pilotés via 2× A4988
+- 1× servo pour le mécanisme de placement des murs
+- 2× fins de course (un par axe)
 
-Pour toute question sur les GPIO, périphériques, strapping pins, ADC, RTC, capacités output/input, fréquences PWM : consulter le NotebookLM dédié plutôt que les mappings de cartes tierces.
+## Documentation
 
-- **NotebookLM** : `ESP32 Development Board Pinout Reference Map` (3 datasheets ESP32)
-- **ID** : `7d0bccd1-df3f-456d-99a0-1192766043ba`
-- **MCP** : `mcp__notebooklm-mcp__notebook_query`
+- **Spec et mapping pins ESP32** : [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](../docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md) (créée pour la session bring-up)
+- **Postmortem PCB v2** : [archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md](archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md) (raisons d'abandon, lessons learned)
+- **Datasheet ESP32 (source de vérité GPIO)** : NotebookLM `ESP32 Development Board Pinout Reference Map` (id `7d0bccd1-df3f-456d-99a0-1192766043ba`), interrogeable via le MCP `notebooklm-mcp`
 
-## Vérifications physiques à la mise sous tension
+## Archive
 
-Même si Jean a validé sur datasheet, les contrôles suivants restent à faire au premier branchement, en guise de filet de sécurité :
-
-1. **Polarité physique du condensateur 10 µF** : bande blanche (`-`) côté GND. Si inversé, dessouder/retourner avant alimentation.
-2. **GPIO de la pin 27 (LED data)** : flasher un sketch qui toggle GPIO25 et observer le pad. Confirmation finale du mapping.
-3. **GPIO0 (BOUTON1) -- mode boot** : ne pas presser BOUTON1 au démarrage. Si comportement instable, ajouter une résistance pull-up 10 kΩ vers 3.3V en fil volant.
+- [archive/pcb-v2-2026-04-28-ABANDONNEE/](archive/pcb-v2-2026-04-28-ABANDONNEE/) : ancienne PCB v2, audit complet, source EasyEDA, et postmortem

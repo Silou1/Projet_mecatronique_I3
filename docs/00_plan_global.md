@@ -62,7 +62,8 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 
 ### P7 — Validation Plan 1 sur cible 📋
 
-> But : exécuter les 7 scénarios documentés dans [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md), corriger les éventuels bugs résiduels du Plan 1, et marquer le Plan 1 comme validé bout-en-bout.
+> But : exécuter les 7 scénarios FSM Plan 1 sur un DevKit branché, corriger les éventuels bugs résiduels, et marquer le Plan 1 comme validé bout-en-bout.
+> Les scénarios sont décrits dans [docs/superpowers/plans/2026-04-28-firmware-esp32-plan-1-squelette.md](superpowers/plans/2026-04-28-firmware-esp32-plan-1-squelette.md) (Task 9). Le harness `firmware/TESTS_PENDING.md` a été retiré lors du cleanup 2026-05-19 (cf. `firmware/archive_plan1_pcb_v2/`).
 
 - [ ] **P7.1** Scénario 1 — boot nominal vers `DEMO`
 - [ ] **P7.2** Scénario 2 — boot nominal vers `CONNECTED` (`HELLO_ACK`)
@@ -73,7 +74,7 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 - [ ] **P7.7** Scénario 7 — watchdog (provocation contrôlée)
 - [ ] **P7.8** Couverture du spec (Scénario 8) — cocher tous les états et transitions
 - [ ] **P7.9** Identifier et corriger les bugs trouvés (commits de correctifs)
-- [ ] **P7.10** Supprimer [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md), commit `test(firmware): plan 1 valide en bout-en-bout sur cible`
+- [ ] **P7.10** Commit `test(firmware): plan 1 valide en bout-en-bout sur cible`
 
 ### P8 — Protocole UART Plan 2 ✅
 
@@ -90,7 +91,7 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 
 > But : faire dialoguer `quoridor_engine` avec l'ESP32 DevKit via UART. Mode plateau-physique-en-simulation, sans périphériques réels.
 >
-> **Note d'avancement — 2026-05-04 :** P9 est implémentée côté logiciel testable sans matériel : P9.1 à P9.4 et P9.6 sont complètes. Le détail suit [`docs/superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md`](superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md). **P9.5** reste ouverte : tests E2E sur DevKit physique, checklist dans [`firmware/INTEGRATION_TESTS_PENDING.md`](../firmware/INTEGRATION_TESTS_PENDING.md).
+> **Note d'avancement — 2026-05-04 :** P9 est implémentée côté logiciel testable sans matériel : P9.1 à P9.4 et P9.6 sont complètes. Le détail suit [`docs/superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md`](superpowers/plans/2026-05-03-p9-integration-rpi-esp32.md). **P9.5** reste ouverte : tests E2E sur DevKit physique, checklist dans [`firmware/archive_plan1_pcb_v2/INTEGRATION_TESTS_PENDING.md`](../firmware/archive_plan1_pcb_v2/INTEGRATION_TESTS_PENDING.md) (archivée lors du cleanup 2026-05-19 mais toujours valable comme référence des scénarios).
 
 - [x] **P9.1** Adapter [main.py](../main.py) pour offrir un mode « plateau physique » en plus du mode console
 - [x] **P9.2** Implémenter le flux entrant : Python attend `MOVE_REQ` → valide via `QuoridorGame` → renvoie `ACK` ou `NACK`
@@ -101,63 +102,47 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 
 ---
 
-## Bloc PCB
+## Bloc Hardware — bring-up breadboard
 
-> Phases **nécessitant la PCB v2** (réception prévue le 10 mai 2026).
+> **2026-05-19** : PCB v2 abandonnée (postmortem dans [hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md](../hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)). Pivot vers breadboard avec composants conservés.
 
-### P10 — Mise sous tension PCB v2 📋
+### P10 — Bring-up breadboard 🚧
 
-> But : alimenter la PCB pour la première fois, valider que le firmware tourne sur la vraie carte, identifier d'éventuelles divergences avec le DevKit.
-
-- [ ] **P10.1** Vérifications physiques pré-alimentation, cf. [hardware/AUDIT_PCB_V2.md](../hardware/AUDIT_PCB_V2.md) :
-   - polarité du condensateur 10 µF
-   - GPIO0 (BOUTON1) non pressé au boot
-   - GPIO de la pin 27 (data WS2812B) confirmé par toggle
-- [ ] **P10.2** Premier branchement et alimentation
-- [ ] **P10.3** Détection USB et ouverture du Serial Monitor
-- [ ] **P10.4** Flash Plan 1 (déjà validé en P7) sur la PCB
-- [ ] **P10.5** Rejouer scénarios 1 à 3 sur la vraie carte pour vérifier le boot, la FSM et le cycle de jeu simulé
-- [ ] **P10.6** Documenter les éventuelles divergences vs DevKit (mapping pins, comportements UART, etc.)
-
-### P11 — Drivers hardware & calibration 📋
-
-> But : implémenter les drivers réels pour tous les périphériques de la PCB, et calibrer en parallèle ce qui doit l'être (essentiellement les moteurs et le servo).
+> But : valider la chaîne moteurs / servo / fins de course sur breadboard, sans la PCB. Périmètre minimal pour démontrer la mécanique.
 >
-> Ordre des sous-tâches : du plus simple au plus complexe, pour monter en compétence progressivement.
+> Spec et procédure détaillées : [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](superpowers/specs/2026-05-19-bringup-breadboard-design.md).
 
-- [ ] **P11.1** Driver matrice boutons 6×6
-   - Scan ligne/colonne réel
-   - Déparasitage (debounce logiciel)
-   - Test individuel de chaque bouton
-- [ ] **P11.2** Driver LEDs WS2812B (FastLED)
-   - Initialisation FastLED sur GPIO27
-   - Implémentation des animations existantes (`PENDING_FLASH`, `EXECUTING_SPINNER`, etc.)
-   - Calibration luminosité (ne pas tirer trop sur l'alim USB)
-- [ ] **P11.3** Driver MCP23017 (I2C)
-   - Initialisation I2C
-   - Lecture/écriture des registres
-   - Configuration des pins en sortie pour piloter A4988
-- [ ] **P11.4** Drivers A4988 (moteurs pas-à-pas) + calibration mécanique XY
-   - Commandes `step`/`dir` via MCP23017
-   - Routine de homing (capteur fin de course ou butée matérielle ?)
-   - Mapping mm → pas (mesure sur la mécanique 3D réelle)
-   - Coordonnées XY de chaque slot de mur
-   - Vitesse et accélération
-- [ ] **P11.5** Driver servo SG90 + calibration
-   - Commande PWM
-   - Position de repos et position de réinitialisation
-   - Course angulaire pour désengager les loquets
-- [ ] **P11.6** Mettre à jour [05_firmware.md](05_firmware.md) et [07_hardware.md](07_hardware.md) avec les drivers réels
+- [ ] **P10.1** Câblage breadboard : rails 12V / GND, A4988 M1 (+ condo 100 µF), réglage Vref, A4988 M2, servo, 2 fins de course
+- [ ] **P10.2** Sketch de test isolé dans `firmware/test_bringup/` (env `[env:test_bringup]` PlatformIO), piloté par commandes série
+- [ ] **P10.3** Test M1 — rotation 200 pas avant/arrière, vérifier sens et absence de pas perdus
+- [ ] **P10.4** Test M2 — idem
+- [ ] **P10.5** Test servo — positions 0° / 90° / 180°, course angulaire de désengagement des loquets
+- [ ] **P10.6** Test fin de course 1 — appui main → lecture LOW, polarité confirmée
+- [ ] **P10.7** Test fin de course 2 — idem
+- [ ] **P10.8** Mettre à jour [07_hardware.md](07_hardware.md) avec les pins réellement utilisées et les Vref mesurés
+
+### P11 — Drivers firmware intégrés au GameController 📋
+
+> But : porter le sketch bring-up en modules réutilisables (`MotionControl`, `Servo`, `LimitSwitch`) intégrés dans la FSM existante.
+
+- [ ] **P11.1** Réécrire `firmware/src/MotionControl.cpp` pour piloter réellement les 2× A4988 (interface `Command` / `Result` conservée)
+- [ ] **P11.2** Ajouter module servo dans le firmware
+- [ ] **P11.3** Ajouter lecture des fins de course (interrupt-driven ou polling)
+- [ ] **P11.4** Routine de homing complète (recul après détection)
+- [ ] **P11.5** Mapping mm → pas, vitesse, accélération, calibration sur mécanique 3D réelle
+- [ ] **P11.6** Coordonnées XY de chaque slot de mur (table de lookup)
+- [ ] **P11.7** Mettre à jour [05_firmware.md](05_firmware.md) avec l'architecture des nouveaux modules
 
 ### P12 — Logique de jeu complète sur plateau 📋
 
-> But : assembler tous les morceaux. Le flux complet « appui bouton → IA → moteurs → mur monte » fonctionne bout-en-bout sur la PCB et la mécanique 3D.
+> But : assembler tous les morceaux. Le flux complet « commande IA → moteurs → mur monte → servo réinitialise » fonctionne bout-en-bout sur breadboard + mécanique 3D.
 
-- [ ] **P12.1** Flux : appui bouton → ESP32 émet `MOVE_REQ` → Python valide
-- [ ] **P12.2** Sur `ACK`, ESP32 commande déplacement piston (pour pion virtuel via LED) ou push de mur
-- [ ] **P12.3** Tour de l'IA : Python envoie `CMD MOVE` → ESP32 visualise (LEDs + moteurs)
+- [ ] **P12.1** Sur `CMD MOVE` reçu : ESP32 commande déplacement piston via `MotionControl::postCommand`
+- [ ] **P12.2** Sur `CMD WALL` : déplacement + push mur via servo
+- [ ] **P12.3** Tour de l'IA : Python envoie `CMD` → ESP32 exécute
 - [ ] **P12.4** Gestion fin de partie : déclenchement servo de réinitialisation des murs
 - [ ] **P12.5** Mode démo PvIA fluide bout-en-bout
+- [ ] **P12.6** (Optionnel) ajouter scan boutons et LEDs si calendrier le permet
 
 ### P13 — Tests d'intégration & robustesse 📋
 

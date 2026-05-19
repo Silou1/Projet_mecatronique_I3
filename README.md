@@ -45,7 +45,8 @@ Vue d'ensemble complète : [docs/02_architecture.md](docs/02_architecture.md).
 | **Webapp démo** — FastAPI + frontend SVG vanilla, interface navigateur, déploiement RPi | ✅ |
 | Tests d'intégration firmware ↔ Python sur DevKit (P8.6) | 🚧 attente DevKit |
 | Tests E2E partie complète PvIA sur DevKit (P9.5) | 🚧 attente DevKit |
-| Drivers hardware réels + PCB v2 (P10–P14) | 📋 |
+| **PCB v2** — abandonnée 2026-05-19 (postmortem dans [hardware/archive/](hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)) | ⛔ |
+| Bring-up breadboard (2 moteurs A4988 + servo + 2 fins de course) — P10 | 🚧 |
 
 Plan global détaillé : [docs/00_plan_global.md](docs/00_plan_global.md).
 
@@ -53,7 +54,7 @@ Plan global détaillé : [docs/00_plan_global.md](docs/00_plan_global.md).
 
 - 📖 [docs/](docs/) — index complet (architecture, moteur, IA, firmware, hardware, tests, protocole UART)
 - 🎯 [docs/00_plan_global.md](docs/00_plan_global.md) — **ROADMAP maître**
-- 🔧 [hardware/](hardware/) — PCB v2, audit, mapping pins
+- 🔧 [hardware/](hardware/) — bring-up breadboard (PCB v2 archivée)
 - ⚙️ [firmware/](firmware/) — code ESP32 (PlatformIO)
 - 🧪 [tests/](tests/) — suite pytest
 

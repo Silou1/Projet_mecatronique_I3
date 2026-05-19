@@ -7,6 +7,15 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Pivot — Bring-up breadboard (2026-05-19)
+- **PCB v2 abandonnée** : confusion PCA9548A reçu vs MCP23017 spécifié (le PCA9548A est un mux I2C 8 canaux, pas un GPIO expander, donc incapable de piloter STEP/DIR/EN des A4988). Plusieurs conflits de pins ESP32 sur le routage v2 (GPIO27 LED/matrice, GPIO16/17 UART2/matrice, A4988 ENABLE non câblé).
+- **Pivot vers breadboard** avec composants conservés (ESP32, 2× A4988, 2× steppers NEMA17, servo, 2× fins de course, alim 12V).
+- **Postmortem complet** dans [hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md](hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md), incluant lessons learned hardware.
+- **Spec bring-up** dans [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md) : mapping pins ESP32 proposé, procédure de câblage, sketch de test piloté par commandes série.
+- **Code firmware FSM + protocole UART préservés** (validés pytest) : `GameController`, `UartLink`, `main.cpp`, stubs hardware-agnostic. Seul `Pins.h` a été vidé (ancien mapping archivé sous `firmware/archive_plan1_pcb_v2/Pins.h.original`).
+- **Archives créées** : `hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/` (audit + JSON EasyEDA + postmortem), `firmware/archive_plan1_pcb_v2/` (tests harness P8.6/P9.5 et Pins.h original).
+- **Code Python (engine, IA, webapp, tests)** : aucune modification, totalement indépendant du hardware.
+
 ### Ajouté — P9 Intégration logicielle RPi ↔ ESP32 (2026-05-04)
 - `quoridor_engine.NackCode` : enum des codes d'erreur typés alignés sur le protocole UART (`ILLEGAL`, `OUT_OF_BOUNDS`, `WRONG_TURN`, `WALL_BLOCKED`, `NO_WALLS_LEFT`, `INVALID_FORMAT`)
 - `quoridor_engine.GameSession` : classe d'orchestration de partie en mode plateau, avec cycle handshake → game loop → gameover → close et re-handshake automatique sur `ERR` récupérable

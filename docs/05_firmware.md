@@ -9,9 +9,9 @@ Firmware Arduino C++ qui tourne sur l'ESP32-WROOM et contrôle tout le hardware 
 | Phase | État |
 |---|---|
 | **Plan 1 — Squelette + FSM + watchdog** | ✅ Implémenté, compile sans erreur (`pio run` SUCCESS), RAM 6,6%, Flash 21,1% |
-| **Tests d'intégration sur cible** | 🚧 Reportés tant que l'ESP32 / PCB n'est pas branché — voir [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md) |
-| **Plan 2 — Protocole UART réel** | 📋 À écrire |
-| **Plan 3 — Drivers hardware (FastLED, MCP23017, A4988, servo)** | 📋 À écrire |
+| **Tests d'intégration sur cible** | 🚧 Reportés tant qu'un DevKit n'est pas branché — scénarios FSM décrits dans [docs/superpowers/plans/2026-04-28-firmware-esp32-plan-1-squelette.md](superpowers/plans/2026-04-28-firmware-esp32-plan-1-squelette.md) (Task 9) |
+| **Plan 2 — Protocole UART réel** | ✅ Implémenté ([UartLink](../firmware/src/UartLink.cpp), validé pytest avec MockSerial) |
+| **Plan 3 — Drivers hardware** | 🚧 En cours : bring-up breadboard (2 A4988 + servo + 2 fins de course en GPIO direct ESP32). Voir [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](superpowers/specs/2026-05-19-bringup-breadboard-design.md). PCB v2 abandonnée le 2026-05-19 ([postmortem](../hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)). |
 
 ## Architecture des modules
 
@@ -20,10 +20,10 @@ Firmware Arduino C++ qui tourne sur l'ESP32-WROOM et contrôle tout le hardware 
 | **GameController** | [firmware/src/GameController.{cpp,h}](../firmware/src/) | FSM principale, orchestration, watchdog |
 | **UartLink** | [firmware/src/UartLink.{cpp,h}](../firmware/src/) | Serial UART0 vers RPi (texte Plan 1, binaire Plan 2) |
 | **ButtonMatrix** | [firmware/src/ButtonMatrix.{cpp,h}](../firmware/src/) | Scan matrice 6×6, détection intents joueur |
-| **MotionControl** | [firmware/src/MotionControl.{cpp,h}](../firmware/src/) | Tâche FreeRTOS Core 0, queue de commandes (HOMING / MOVE_TO_WALL_SLOT / PUSH_WALL), pilotage A4988 via MCP23017 |
+| **MotionControl** | [firmware/src/MotionControl.{cpp,h}](../firmware/src/) | Tâche FreeRTOS Core 0, queue de commandes (HOMING / MOVE_TO_WALL_SLOT / PUSH_WALL). Stub Plan 1 (sleep + DONE). Pilotage A4988 en GPIO direct ESP32 à implémenter dans P11 (post bring-up breadboard). |
 | **LedDriver** | [firmware/src/LedDriver.{cpp,h}](../firmware/src/) | Interface WS2812B (stub Plan 1, FastLED Plan 3) |
 | **LedAnimator** | [firmware/src/LedAnimator.{cpp,h}](../firmware/src/) | Patterns visuels : `PENDING_FLASH`, `TIMEOUT_FLASH`, `NACK_FLASH`, `ERROR_PATTERN`, `EXECUTING_SPINNER` |
-| **Pins** | [firmware/src/Pins.h](../firmware/src/Pins.h) | Mapping GPIO complet (audité contre PCB v2) |
+| **Pins** | [firmware/src/Pins.h](../firmware/src/Pins.h) | Vidé après abandon PCB v2 (2026-05-19). Garde uniquement `PIN_LED_DEBUG`. Nouveau mapping breadboard dans [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](superpowers/specs/2026-05-19-bringup-breadboard-design.md). Ancien mapping : `firmware/archive_plan1_pcb_v2/Pins.h.original`. |
 
 ## FSM — 7 états
 
