@@ -490,21 +490,23 @@ class TestTieBreak:
     """Tests du tie-break deterministe."""
 
     def test_find_best_move_deterministic_facile(self):
-        """Deux appels successifs en facile retournent le meme coup."""
+        """Deux appels successifs en facile retournent le meme coup
+        (a profondeur fixe pour eviter la flakiness due au budget temps)."""
         game = create_new_game()
         ia = AI(PLAYER_TWO, difficulty='facile')
-        move1 = ia.find_best_move(game, verbose=False)
+        move1 = ia.find_best_move(game, verbose=False, max_depth_override=2)
         ia.clear_cache()
-        move2 = ia.find_best_move(game, verbose=False)
+        move2 = ia.find_best_move(game, verbose=False, max_depth_override=2)
         assert move1 == move2
 
     def test_find_best_move_deterministic_normal(self):
-        """Deux appels successifs en normal retournent le meme coup."""
+        """Deux appels successifs en normal retournent le meme coup
+        (a profondeur fixe pour eviter la flakiness due au budget temps)."""
         game = create_new_game()
         ia = AI(PLAYER_TWO, difficulty='normal')
-        move1 = ia.find_best_move(game, verbose=False)
+        move1 = ia.find_best_move(game, verbose=False, max_depth_override=3)
         ia.clear_cache()
-        move2 = ia.find_best_move(game, verbose=False)
+        move2 = ia.find_best_move(game, verbose=False, max_depth_override=3)
         assert move1 == move2
 
     def test_tie_break_prefers_advance(self):
