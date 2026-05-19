@@ -72,6 +72,39 @@ prévue en P11).
 Le mode console (`--mode console`, défaut) reste inchangé : prompt clavier,
 plateau ASCII, logique console pure.
 
+## Interface web (démo navigateur)
+
+Depuis 2026-05-19, le projet inclut une webapp FastAPI qui sert une interface
+de démonstration accessible via navigateur. Pensée comme **mode démo autonome**
+pour la présentation finale (ne nécessite pas le plateau physique).
+
+### Stack
+
+| Couche | Technologie | Code |
+|---|---|---|
+| API HTTP | FastAPI (port 8000) | [webapp/server.py](../webapp/server.py) |
+| Orchestration | `QuoridorService` singleton thread-safe | [webapp/service.py](../webapp/service.py) |
+| Schémas | Pydantic | [webapp/schemas.py](../webapp/schemas.py) |
+| Bridge UART (optionnel) | wrapper autour de `UartClient` | [webapp/uart_bridge.py](../webapp/uart_bridge.py) |
+| Frontend | HTML5 + SVG inline + JS vanilla, mobile-first | [webapp/static/](../webapp/static/) |
+
+### Modes d'utilisation
+
+- **Autonome** : moteur Python + IA, sans hardware. Cas démo principal.
+- **Hybride** : si ESP32 détecté, les coups sont miroités sur le plateau
+  physique via `UartBridge`. Fallback gracieux (notification `PLATEAU_LOST`)
+  en cas de déconnexion en cours de partie.
+
+### Déploiement
+
+Lancement local : `python -m webapp.server`. Procédure RPi complète dans
+[webapp/README.md](../webapp/README.md).
+
+Polling client `/api/state` toutes les 500 ms, état serveur sérialisé en JSON.
+Animations CSS côté client : placement de murs avec ghost preview au hover
+desktop, animation 200 ms à la pose. Voir
+[docs/superpowers/specs/2026-05-19-walls-ux-improvement-design.md](superpowers/specs/2026-05-19-walls-ux-improvement-design.md).
+
 ## Flux de données typique (cycle de jeu)
 
 1. Le joueur **appuie sur un bouton** de la matrice 6×6 → `ButtonMatrix` détecte l'intent

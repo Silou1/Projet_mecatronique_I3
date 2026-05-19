@@ -9,10 +9,11 @@ Stratégie de tests à deux niveaux : Python (automatisés via pytest) et firmwa
 ### Lancer les tests
 
 ```bash
-pytest                                          # tous (90 tests, ~3,5 min)
+pytest -m "not devkit"                          # tous (278 tests, ~8 s sur Mac)
 pytest --cov=quoridor_engine --cov-report=html  # avec couverture HTML dans htmlcov/
 pytest tests/test_moves.py                      # un fichier précis
 pytest tests/test_ai.py::TestPathfinding -v     # une classe de test
+pytest -m devkit                                # tests hardware (DevKit ESP32 requis)
 ```
 
 ### Couverture actuelle
@@ -25,13 +26,40 @@ pytest tests/test_ai.py::TestPathfinding -v     # une classe de test
 
 ### Fichiers de tests
 
+**Moteur de jeu et IA** (Python pur, sans hardware) :
+
 | Fichier | Tests | Couvre |
 |---|---|---|
-| [tests/test_core.py](../tests/test_core.py) | 10 | Structures de données, immutabilité de `GameState`, constantes |
+| [tests/test_core.py](../tests/test_core.py) | 22 | Structures, immutabilité `GameState`, constantes, `NackCode`, `InvalidMoveError` |
 | [tests/test_moves.py](../tests/test_moves.py) | 14 | Déplacements, sauts, blocage par murs |
-| [tests/test_walls.py](../tests/test_walls.py) | 21 | Pose, validation, blocage de chemin (BFS) |
+| [tests/test_walls.py](../tests/test_walls.py) | 19 | Pose, validation, blocage de chemin (BFS), double-clic |
 | [tests/test_game.py](../tests/test_game.py) | 20 | Orchestration `QuoridorGame`, undo, fin de partie |
 | [tests/test_ai.py](../tests/test_ai.py) | 25 | Minimax, alpha-bêta, cache, performance, cas limites |
+
+**Intégration RPi ↔ ESP32** (mocks UART, pas de hardware) :
+
+| Fichier | Tests | Couvre |
+|---|---|---|
+| [tests/test_uart_client.py](../tests/test_uart_client.py) | 102 | Framing Plan 2, CRC-16, séquencement, retry, codes NACK |
+| [tests/test_game_session.py](../tests/test_game_session.py) | 20 | Boucle P9 RPi↔ESP32, handshake, reconnexion, undo |
+| [tests/test_main_cli.py](../tests/test_main_cli.py) | 4 | Parsing args CLI, mode console vs plateau |
+
+**Webapp** (FastAPI TestClient, sans hardware) :
+
+| Fichier | Tests | Couvre |
+|---|---|---|
+| [tests/webapp/test_schemas.py](../tests/webapp/test_schemas.py) | 10 | Pydantic API payloads |
+| [tests/webapp/test_service.py](../tests/webapp/test_service.py) | 23 | `QuoridorService`, threading, IA tick, transitions |
+| [tests/webapp/test_uart_bridge.py](../tests/webapp/test_uart_bridge.py) | 8 | Bridge UART (mocks) |
+| [tests/webapp/test_api.py](../tests/webapp/test_api.py) | 11 | TestClient FastAPI, 9 routes HTTP |
+
+**Hardware (DevKit physique requis)** :
+
+| Fichier | Tests | Statut |
+|---|---|---|
+| [tests/integration/test_uart_devkit.py](../tests/integration/test_uart_devkit.py) | 8 | Marqueur `@pytest.mark.devkit`, skip par défaut |
+
+**Total exécuté en CI/local** : **278 tests** (8 devkit skippés sans hardware).
 
 ### Bonnes pratiques en place
 
