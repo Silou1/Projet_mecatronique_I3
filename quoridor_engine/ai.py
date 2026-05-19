@@ -54,11 +54,11 @@ from collections import deque
 from dataclasses import replace
 
 from .core import (
-    GameState, 
-    Move, 
+    GameState,
+    Move,
     Coord,
-    PLAYER_ONE, 
-    PLAYER_TWO, 
+    PLAYER_ONE,
+    PLAYER_TWO,
     BOARD_SIZE,
     get_possible_pawn_moves,
     move_pawn,
@@ -69,6 +69,31 @@ from .core import (
     _path_exists,
     _validate_wall_placement
 )
+
+
+# =============================================================================
+# CONSTANTES DE CONFIGURATION
+# =============================================================================
+
+# Budget temps par niveau de difficulté (secondes). Valeurs initiales
+# raisonnables, à calibrer empiriquement après jeu réel. Voir Task 7.
+TIME_BUDGETS = {
+    'facile':    0.5,
+    'normal':    2.0,
+    'difficile': 5.0,
+}
+
+# Profondeur maximale absolue de l'iterative deepening. Garde-fou contre
+# explosion mémoire sur positions triviales avec budget large. En pratique
+# on n'y arrive jamais sur plateau 6x6.
+DEPTH_MAX = 12
+
+# Nombre maximum de murs candidats considérés par tour. Relevé de 20 à 30
+# depuis que le tri par priorité remplace le shuffle aléatoire.
+MAX_WALL_CANDIDATES = 30
+
+# Score absolu d'une victoire/défaite (avant ajustement mate-in-N).
+WIN_SCORE = 20000
 
 
 # =============================================================================
@@ -416,8 +441,6 @@ class AI:
             self.depth = 4   # Bon équilibre vitesse/intelligence
         elif difficulty == 'difficile':
             self.depth = 5   # Lent mais redoutable
-        
-        print(f"IA initialisée pour le joueur {self.player} (niveau: {difficulty}, profondeur: {self.depth})")
 
     def _get_cached_distances(self, state: GameState, player: str) -> Dict[Coord, int]:
         """

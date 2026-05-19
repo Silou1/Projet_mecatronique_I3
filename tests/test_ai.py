@@ -420,6 +420,42 @@ class TestDifferentDifficulties:
             assert move is not None, f"Difficulté {difficulty} n'a pas trouvé de coup"
 
 
+class TestModuleConstants:
+    """Tests des constantes exposées en haut du module ai.py."""
+
+    def test_time_budgets_defined(self):
+        """TIME_BUDGETS expose les 3 niveaux."""
+        from quoridor_engine import ai
+        assert hasattr(ai, 'TIME_BUDGETS')
+        assert set(ai.TIME_BUDGETS.keys()) == {'facile', 'normal', 'difficile'}
+
+    def test_time_budgets_ordered(self):
+        """facile < normal < difficile en budget temps."""
+        from quoridor_engine import ai
+        budgets = ai.TIME_BUDGETS
+        assert budgets['facile'] < budgets['normal'] < budgets['difficile']
+        assert 0.1 <= budgets['facile'] <= 30.0
+        assert 0.1 <= budgets['difficile'] <= 30.0
+
+    def test_depth_max_defined(self):
+        """DEPTH_MAX est défini et raisonnable."""
+        from quoridor_engine import ai
+        assert hasattr(ai, 'DEPTH_MAX')
+        assert 5 <= ai.DEPTH_MAX <= 20
+
+    def test_max_wall_candidates_defined(self):
+        """MAX_WALL_CANDIDATES est défini et supérieur à 20."""
+        from quoridor_engine import ai
+        assert hasattr(ai, 'MAX_WALL_CANDIDATES')
+        assert ai.MAX_WALL_CANDIDATES >= 20
+
+    def test_win_score_defined(self):
+        """WIN_SCORE est défini à 20000."""
+        from quoridor_engine import ai
+        assert hasattr(ai, 'WIN_SCORE')
+        assert ai.WIN_SCORE == 20000
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 
