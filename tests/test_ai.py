@@ -456,6 +456,39 @@ class TestModuleConstants:
         assert ai.WIN_SCORE == 20000
 
 
+class TestWallCandidates:
+    """Tests du tri et du cap des murs candidats."""
+
+    def test_strategic_walls_deterministic(self):
+        """Deux appels successifs retournent la même liste de murs."""
+        game = create_new_game()
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        walls1 = ia._get_strategic_walls(game, PLAYER_ONE)
+        walls2 = ia._get_strategic_walls(game, PLAYER_ONE)
+        assert walls1 == walls2
+
+    def test_strategic_walls_capped_at_max(self):
+        """Le nombre de murs retournés ne dépasse pas MAX_WALL_CANDIDATES."""
+        from quoridor_engine import ai
+        game = create_new_game()
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        walls = ia._get_strategic_walls(game, PLAYER_ONE)
+        assert len(walls) <= ai.MAX_WALL_CANDIDATES
+
+    def test_wall_near_opponent_is_preserved(self):
+        """Un mur immédiatement adjacent à l'adversaire est dans les candidats."""
+        game = GameState(
+            player_positions={PLAYER_ONE: (0, 3), PLAYER_TWO: (3, 3)},
+            walls=frozenset(),
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
+            current_player=PLAYER_ONE
+        )
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        walls = ia._get_strategic_walls(game, PLAYER_ONE)
+        critical_wall = ('h', 3, 2, 2)
+        assert critical_wall in walls, f"Mur critique {critical_wall} eject. Murs retournes: {walls}"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 

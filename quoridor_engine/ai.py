@@ -352,6 +352,32 @@ def _wall_intersects_path(wall: Tuple, path: List[Coord]) -> bool:
     return False
 
 
+def _wall_priority(wall: Tuple, opp_pos: Coord, my_pos: Coord) -> int:
+    """
+    Calcule un score de priorité pour le tri des murs candidats.
+
+    PRINCIPE :
+    ----------
+    Un mur est d'autant plus prioritaire qu'il est PROCHE d'un des deux pions.
+    Distance Manhattan inversée (plus c'est proche, plus le score est haut).
+
+    Pondération : on privilégie les murs près de l'ADVERSAIRE (pour le bloquer)
+    sur les murs près de soi (pour protéger son chemin).
+
+    Args:
+        wall: (orientation, row, col, length)
+        opp_pos: position de l'adversaire
+        my_pos: position du joueur courant
+
+    Returns:
+        Score entier. Plus grand = plus prioritaire.
+    """
+    wall_r, wall_c = wall[1], wall[2]
+    dist_to_opp = abs(wall_r - opp_pos[0]) + abs(wall_c - opp_pos[1])
+    dist_to_me = abs(wall_r - my_pos[0]) + abs(wall_c - my_pos[1])
+    return -(dist_to_opp * 2 + dist_to_me)
+
+
 # =============================================================================
 # CLASSE PRINCIPALE : Intelligence Artificielle
 # =============================================================================
@@ -738,7 +764,7 @@ class AI:
             
             return score
 
-    def _get_strategic_walls(self, state: GameState, player: str, max_walls: int = 20) -> List[Tuple]:
+    def _get_strategic_walls(self, state: GameState, player: str, max_walls: int = None) -> List[Tuple]:
         """
         Génère une liste de murs STRATÉGIQUES à considérer.
         
@@ -756,20 +782,22 @@ class AI:
         La zone "autour" est définie comme un carré de 5x5 cases centré
         sur le joueur (décalage de -2 à +2 en ligne et colonne).
         
-        POURQUOI MÉLANGER ?
+        ORDRE DE PRIORITÉ :
         -------------------
-        On mélange aléatoirement les murs pour :
-        - Varier le jeu (l'IA ne joue pas toujours pareil)
-        - À score égal, choisir différents murs à chaque partie
-        
+        Les murs sont triés par priorité décroissante via _wall_priority :
+        - Distance Manhattan inversée vers l'adversaire (×2) + vers soi
+        - Les murs proches de l'adversaire sont toujours conservés en priorité
+
         Args:
             state: L'état actuel du jeu
             player: Le joueur qui place les murs
-            max_walls: Nombre maximum de murs à retourner (limite le calcul)
+            max_walls: Nombre maximum de murs à retourner (MAX_WALL_CANDIDATES (30 par defaut))
         
         Returns:
             Liste de tuples Wall stratégiques
         """
+        if max_walls is None:
+            max_walls = MAX_WALL_CANDIDATES
         strategic_walls = set()  # Set pour éviter les doublons
         opponent = PLAYER_TWO if player == PLAYER_ONE else PLAYER_ONE
         
@@ -796,9 +824,12 @@ class AI:
                     if 0 <= r < BOARD_SIZE - 1 and 0 <= c < BOARD_SIZE - 1:
                         strategic_walls.add((orientation, r, c, 2))
         
-        # Convertir en liste, mélanger pour varier, et limiter le nombre
+        # Convertir en liste, trier par priorité (murs proches de l'adversaire d'abord)
         strategic_walls = list(strategic_walls)
-        random.shuffle(strategic_walls)
+        strategic_walls.sort(
+            key=lambda w: _wall_priority(w, opp_pos, my_pos),
+            reverse=True
+        )
         return strategic_walls[:max_walls]
 
     def _get_all_possible_moves(self, state: GameState, sort_moves: bool = True) -> List[Move]:
