@@ -93,7 +93,7 @@ class TestEvaluationFunction:
     def test_winning_position_high_score(self):
         """Position gagnante = score maximal."""
         ia = AI(PLAYER_ONE, depth=2)
-        
+
         # J1 a gagné (atteint ligne 0)
         winning_state = GameState(
             player_positions={PLAYER_ONE: (0, 3), PLAYER_TWO: (5, 3)},
@@ -101,14 +101,15 @@ class TestEvaluationFunction:
             player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_ONE
         )
-        
+
         score = ia._evaluate_state(winning_state)
-        assert score == 20000  # Score de victoire avec les nouveaux poids
-    
+        from quoridor_engine import ai
+        assert score == ai.WIN_SCORE
+
     def test_losing_position_low_score(self):
         """Position perdante = score minimal."""
         ia = AI(PLAYER_ONE, depth=2)
-        
+
         # J2 a gagné (atteint ligne 5)
         losing_state = GameState(
             player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (5, 3)},
@@ -116,9 +117,10 @@ class TestEvaluationFunction:
             player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
             current_player=PLAYER_TWO
         )
-        
+
         score = ia._evaluate_state(losing_state)
-        assert score == -20000  # Score de défaite avec les nouveaux poids
+        from quoridor_engine import ai
+        assert score == -ai.WIN_SCORE
     
     def test_closer_to_goal_is_better(self):
         """Plus proche du but = meilleur score."""
@@ -531,6 +533,50 @@ class TestTieBreak:
         only_move = ('deplacement', (4, 3))
         chosen = ia._tie_break(game, [only_move])
         assert chosen == only_move
+
+
+class TestMateInN:
+    """Tests du score mate-in-N (preferer gagner vite, perdre tard)."""
+
+    def test_winning_score_decreases_with_depth(self):
+        """Une victoire lointaine vaut moins qu'une victoire proche."""
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        winning_state = GameState(
+            player_positions={PLAYER_ONE: (0, 3), PLAYER_TWO: (5, 3)},
+            walls=frozenset(),
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
+            current_player=PLAYER_ONE
+        )
+        score_immediate = ia._evaluate_state(winning_state, depth_from_root=0)
+        score_distant = ia._evaluate_state(winning_state, depth_from_root=3)
+        assert score_immediate > score_distant
+        from quoridor_engine import ai
+        assert score_immediate == ai.WIN_SCORE
+        assert score_distant == ai.WIN_SCORE - 3
+
+    def test_losing_score_increases_with_depth(self):
+        """Une defaite lointaine vaut mieux qu'une defaite proche."""
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        losing_state = GameState(
+            player_positions={PLAYER_ONE: (2, 3), PLAYER_TWO: (5, 3)},
+            walls=frozenset(),
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
+            current_player=PLAYER_TWO
+        )
+        score_immediate = ia._evaluate_state(losing_state, depth_from_root=0)
+        score_distant = ia._evaluate_state(losing_state, depth_from_root=3)
+        assert score_distant > score_immediate
+        from quoridor_engine import ai
+        assert score_immediate == -ai.WIN_SCORE
+        assert score_distant == -ai.WIN_SCORE + 3
+
+    def test_non_terminal_score_unchanged_by_depth(self):
+        """Pour un etat non terminal, depth_from_root n'a pas d'effet."""
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        game = create_new_game()
+        score_a = ia._evaluate_state(game, depth_from_root=0)
+        score_b = ia._evaluate_state(game, depth_from_root=5)
+        assert score_a == score_b
 
 
 if __name__ == '__main__':

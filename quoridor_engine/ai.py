@@ -499,9 +499,16 @@ class AI:
             self._path_cache[cache_key] = _reconstruct_path_from_distances(state, start_pos, distances)
         return self._path_cache[cache_key]
 
-    def _evaluate_state(self, state: GameState) -> float:
+    def _evaluate_state(self, state: GameState, depth_from_root: int = 0) -> float:
         """
         FONCTION D'ÉVALUATION HEURISTIQUE AMÉLIORÉE - Le "cerveau" de l'IA.
+
+        Args:
+            state: L'état à évaluer
+            depth_from_root: Nombre de coups joués depuis la racine de la recherche.
+                Utilisé pour le score mate-in-N : une victoire proche vaut plus
+                qu'une victoire lointaine, et une défaite lointaine est préférable
+                à une défaite immédiate.
         """
         # ═══════════════════════════════════════════════════════════════════
         # CRITÈRE 1 : Vérifier si la partie est déjà terminée
@@ -509,26 +516,26 @@ class AI:
         is_over, winner = state.is_game_over()
         if is_over:
             if winner == self.player:
-                return 20000   # VICTOIRE ! Score maximum
+                return WIN_SCORE - depth_from_root   # VICTOIRE ! Préférer gagner tôt
             if winner == self.opponent:
-                return -20000  # DÉFAITE ! Score minimum
-        
+                return -WIN_SCORE + depth_from_root  # DÉFAITE ! Préférer perdre tard
+
         # ═══════════════════════════════════════════════════════════════════
         # CRITÈRE 2 & 3 : Distance et Robustesse
         # ═══════════════════════════════════════════════════════════════════
         # Utiliser le cache pour les distances
         distances_ia = self._get_cached_distances(state, self.player)
         distances_opp = self._get_cached_distances(state, self.opponent)
-        
+
         # Récupérer les métriques de chemin pour les deux joueurs
         L1_ia, _, fragility_ia = _compute_metrics_from_distances(state, state.player_positions[self.player], distances_ia)
         L1_opp, _, fragility_opp = _compute_metrics_from_distances(state, state.player_positions[self.opponent], distances_opp)
-        
+
         # Cas extrêmes : si un joueur est bloqué (ne devrait pas arriver)
         if L1_ia == float('inf'):
-            return -20000  # L'IA est bloquée → catastrophe
+            return -WIN_SCORE + depth_from_root  # L'IA est bloquée → catastrophe
         if L1_opp == float('inf'):
-            return 20000   # L'adversaire est bloqué → victoire assurée
+            return WIN_SCORE - depth_from_root   # L'adversaire est bloqué → victoire assurée
         
         # Score de base : différence de distance (L1)
         # Plus l'adversaire est loin et plus l'IA est proche, mieux c'est
@@ -961,7 +968,7 @@ class AI:
         else:  # 'mur'
             return place_wall(state, player, move_data)
 
-    def _minimax(self, state: GameState, depth: int, alpha: float, beta: float, is_maximizing: bool) -> float:
+    def _minimax(self, state: GameState, depth: int, alpha: float, beta: float, is_maximizing: bool, depth_from_root: int = 0) -> float:
         r"""
         ALGORITHME MINIMAX AVEC ÉLAGAGE ALPHA-BÊTA
         
@@ -1035,9 +1042,11 @@ class AI:
         is_over, _ = state.is_game_over()
         if depth == 0 or is_over:
             # On est à une feuille : évaluer la position
-            eval_score = self._evaluate_state(state)
-            # Stocker dans le cache pour les prochaines fois
-            self.transposition_table[state_hash] = (depth, eval_score)
+            eval_score = self._evaluate_state(state, depth_from_root=depth_from_root)
+            # Les états terminaux ne sont PAS mis en cache : leur score dépend
+            # de depth_from_root (position dans l'arbre), pas seulement de l'état.
+            if not is_over:
+                self.transposition_table[state_hash] = (depth, eval_score)
             return eval_score
 
         # Générer tous les coups possibles depuis cet état
@@ -1055,7 +1064,7 @@ class AI:
                     next_state = self._apply_move(state, move)
                     
                     # Appel RÉCURSIF : après notre coup, c'est à l'adversaire (MIN)
-                    evaluation = self._minimax(next_state, depth - 1, alpha, beta, False)
+                    evaluation = self._minimax(next_state, depth - 1, alpha, beta, False, depth_from_root + 1)
                     
                     # Garder le meilleur score
                     max_eval = max(max_eval, evaluation)
@@ -1087,7 +1096,7 @@ class AI:
                     next_state = self._apply_move(state, move)
                     
                     # Appel RÉCURSIF : après le coup adverse, c'est à nous (MAX)
-                    evaluation = self._minimax(next_state, depth - 1, alpha, beta, True)
+                    evaluation = self._minimax(next_state, depth - 1, alpha, beta, True, depth_from_root + 1)
                     
                     # L'adversaire garde le pire score (pour nous)
                     min_eval = min(min_eval, evaluation)
@@ -1211,7 +1220,7 @@ class AI:
                 temp_state = self._apply_move(state, move)
                 
                 # Lancer Minimax depuis cette position
-                board_value = self._minimax(temp_state, self.depth - 1, alpha, math.inf, False)
+                board_value = self._minimax(temp_state, self.depth - 1, alpha, math.inf, False, depth_from_root=1)
                 
                 # Mettre à jour alpha au niveau racine
                 alpha = max(alpha, board_value)
