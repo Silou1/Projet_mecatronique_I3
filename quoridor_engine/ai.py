@@ -402,14 +402,18 @@ class AI:
     4. Elle évalue chaque position finale avec une fonction heuristique
     5. Elle choisit le coup qui mène à la meilleure position
     
-    PARAMÈTRES DE DIFFICULTÉ :
+    PARAMETRES DE DIFFICULTE :
     --------------------------
-    - Facile (profondeur 2) : L'IA "voit" 2 coups à l'avance → rapide mais prévisible
-    - Normal (profondeur 4) : L'IA "voit" 4 coups à l'avance → équilibré
-    - Difficile (profondeur 5) : L'IA "voit" 5 coups à l'avance → lent mais fort
-    
-    Plus la profondeur est grande, plus l'IA est forte mais plus elle est lente
-    car le nombre de positions à évaluer croît exponentiellement.
+    Les niveaux ne fixent plus une profondeur fixe mais un BUDGET TEMPS
+    par coup (TIME_BUDGETS en haut du module). L'IA utilise iterative
+    deepening : profondeur 1, 2, 3, ... jusqu'a ce que le budget soit
+    ecoule. Profondeur effective typique :
+    - Facile : ~2-3 coups d'avance (budget court)
+    - Normal : ~4-5 coups d'avance (budget moyen)
+    - Difficile : ~6-8 coups d'avance (budget long)
+
+    L'attribut self.depth est conserve pour compatibilite, mais n'est
+    plus utilise dans le mode normal (seulement via max_depth_override).
     
     ATTRIBUTS :
     -----------
@@ -434,14 +438,18 @@ class AI:
             depth: Profondeur de recherche initiale (sera ajustée selon la difficulté)
             difficulty: Niveau de difficulté ('facile', 'normal', 'difficile')
         
-        NOTE SUR LA PROFONDEUR :
-        ------------------------
-        La profondeur contrôle combien de coups l'IA simule à l'avance.
-        - Profondeur 2 : ~100 positions à évaluer
-        - Profondeur 4 : ~10 000 positions à évaluer
-        - Profondeur 6 : ~1 000 000 positions à évaluer
-        
-        C'est pourquoi on utilise l'élagage Alpha-Bêta pour réduire ce nombre.
+        PARAMETRES DE DIFFICULTE :
+        --------------------------
+        Les niveaux ne fixent plus une profondeur fixe mais un BUDGET TEMPS
+        par coup (TIME_BUDGETS en haut du module). L'IA utilise iterative
+        deepening : profondeur 1, 2, 3, ... jusqu'a ce que le budget soit
+        ecoule. Profondeur effective typique :
+        - Facile : ~2-3 coups d'avance (budget court)
+        - Normal : ~4-5 coups d'avance (budget moyen)
+        - Difficile : ~6-8 coups d'avance (budget long)
+
+        L'attribut self.depth est conserve pour compatibilite, mais n'est
+        plus utilise dans le mode normal (seulement via max_depth_override).
         """
         self.player = player
         self.opponent = PLAYER_TWO if player == PLAYER_ONE else PLAYER_ONE
