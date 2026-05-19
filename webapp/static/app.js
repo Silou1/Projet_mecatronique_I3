@@ -91,10 +91,13 @@ function renderIntersections() {
 
 function renderWalls(walls) {
   const layer = document.getElementById("walls-layer");
+  const oldKeys = new Set([...layer.children].map(c => c.dataset.key));
   layer.innerHTML = "";
   for (const w of walls) {
+    const key = `${w.orientation}-${w.row}-${w.col}`;
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("class", "wall");
+    rect.setAttribute("class", "wall" + (oldKeys.has(key) ? "" : " appearing"));
+    rect.dataset.key = key;
     if (w.orientation === "h") {
       // Mur horizontal entre row w.row et w.row+1, couvre cols w.col et w.col+1
       const { x, y } = cellTopLeftXY(w.row + 1, w.col);
