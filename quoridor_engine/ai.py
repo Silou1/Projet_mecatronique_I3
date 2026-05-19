@@ -48,7 +48,8 @@ les mêmes positions plusieurs fois. Accélère significativement l'IA.
 """
 
 import math
-from typing import List, Tuple, Dict
+import time
+from typing import List, Tuple, Dict, Optional
 from collections import deque
 from dataclasses import replace
 
@@ -377,6 +378,11 @@ def _wall_priority(wall: Tuple, opp_pos: Coord, my_pos: Coord) -> int:
     return -(dist_to_opp * 2 + dist_to_me)
 
 
+class SearchTimeout(Exception):
+    """Levée dans _minimax quand le deadline est dépassé."""
+    pass
+
+
 # =============================================================================
 # CLASSE PRINCIPALE : Intelligence Artificielle
 # =============================================================================
@@ -457,15 +463,19 @@ class AI:
         # Compteur pour les statistiques
         self.nodes_explored = 0
         
-        # ═══════════════════════════════════════════════════════════════════
-        # Ajuster la profondeur selon le niveau de difficulté
-        # ═══════════════════════════════════════════════════════════════════
+        # Profondeur conservée pour rétro-compatibilité avec les tests existants
+        # (utilisée seulement si max_depth_override est passé à find_best_move).
+        # La vraie profondeur d'analyse est dictée par TIME_BUDGETS via iterative
+        # deepening (cf. find_best_move).
         if difficulty == 'facile':
-            self.depth = 2   # Rapide mais pas très malin
+            self.depth = 2
         elif difficulty == 'normal':
-            self.depth = 4   # Bon équilibre vitesse/intelligence
+            self.depth = 4
         elif difficulty == 'difficile':
-            self.depth = 5   # Lent mais redoutable
+            self.depth = 5
+
+        # Deadline calculé à chaque find_best_move (cf. _minimax pour la check)
+        self._deadline: float = 0.0
 
     def _get_cached_distances(self, state: GameState, player: str) -> Dict[Coord, int]:
         """
@@ -1024,7 +1034,11 @@ class AI:
         """
         # Compteur pour les statistiques
         self.nodes_explored += 1
-        
+
+        # Check timeout : levé immédiatement si le budget est dépassé
+        if self._deadline > 0 and time.monotonic() > self._deadline:
+            raise SearchTimeout()
+
         # ═══════════════════════════════════════════════════════════════════
         # OPTIMISATION 1 : Vérifier la table de transposition (cache)
         # ═══════════════════════════════════════════════════════════════════
@@ -1179,85 +1193,125 @@ class AI:
 
         return min(candidates, key=sort_key)
 
-    def find_best_move(self, state: GameState, verbose: bool = True) -> Move:
+    def find_best_move(self, state: GameState, verbose: bool = True,
+                       max_depth_override: Optional[int] = None) -> Move:
         """
         POINT D'ENTRÉE PRINCIPAL : Trouve le meilleur coup à jouer.
-        
-        OPTIMISATIONS APPLIQUÉES :
-        --------------------------
-        1. Move Ordering : Les coups sont triés pour améliorer l'élagage
-        2. Alpha-Bêta Pruning : Coupe les branches inutiles
-        3. Table de Transposition : Cache les positions évaluées
-        
-        VARIÉTÉ DU JEU :
-        ----------------
-        Parmi les coups avec le même score, on choisit aléatoirement
-        pour éviter que l'IA joue toujours la même partie.
+
+        Iterative deepening sous budget temps :
+        - Lance minimax à profondeur 1, 2, 3, ... DEPTH_MAX
+        - À chaque profondeur entièrement terminée → mémorise best_move_finalized
+        - Si timeout pendant la recherche → s'arrête et retourne best_move_finalized
+        - Garantie : depth=1 est toujours autorisée à finir, même si budget dépassé
+
+        Args:
+            state: état courant
+            verbose: si True, affiche statistiques
+            max_depth_override: pour les tests, force une profondeur fixe (skip ID)
+
+        Returns:
+            Le meilleur coup trouvé.
         """
-        # Réinitialiser le compteur de positions explorées et les caches
         self.nodes_explored = 0
         self._distance_cache.clear()
         self._path_cache.clear()
-        
-        best_moves: List[Move] = []  # Liste des meilleurs coups (en cas d'égalité)
-        best_value = -math.inf  # On cherche à maximiser
-        
-        # Générer les coups triés par promesse (Move Ordering)
+
+        # Mode test : profondeur fixe, pas d'iterative deepening
+        if max_depth_override is not None:
+            self._deadline = 0.0  # désactivé
+            return self._search_root(state, max_depth_override, verbose)
+
+        # Mode normal : iterative deepening sous budget temps
+        budget = TIME_BUDGETS[self.difficulty]
+        self._deadline = time.monotonic() + budget
+
+        best_move_finalized: Optional[Move] = None
+        completed_depth = 0
+
+        for depth in range(1, DEPTH_MAX + 1):
+            try:
+                # Garantie minimale : depth=1 est toujours autorisée à finir
+                if depth == 1:
+                    saved_deadline = self._deadline
+                    self._deadline = 0.0  # désactive timeout pour depth=1
+                    best_move_at_depth = self._search_root(state, depth, verbose=False)
+                    self._deadline = saved_deadline
+                else:
+                    best_move_at_depth = self._search_root(state, depth, verbose=False)
+                best_move_finalized = best_move_at_depth
+                completed_depth = depth
+                # Si on vient de finir une profondeur ET le budget est dépassé, on s'arrête
+                if time.monotonic() > self._deadline:
+                    break
+            except SearchTimeout:
+                # Profondeur non terminée : jeter le résultat partiel
+                break
+
+        if verbose:
+            budget_used = time.monotonic() - (self._deadline - budget)
+            print(f"IA: depth={completed_depth}, nodes={self.nodes_explored}, "
+                  f"temps={budget_used:.2f}s/{budget:.2f}s")
+
+        if best_move_finalized is None:
+            return self._fallback_move(state)
+        return best_move_finalized
+
+    def _search_root(self, state: GameState, depth: int, verbose: bool) -> Move:
+        """
+        Lance minimax à la profondeur donnée et retourne le meilleur coup.
+
+        Ne fait PAS de gestion de timeout (c'est l'appelant qui décide).
+        Peut lever SearchTimeout si self._deadline > 0 et atteint pendant la recherche.
+
+        Args:
+            state: état racine
+            depth: profondeur de recherche
+            verbose: si True, affiche stats
+
+        Returns:
+            Le meilleur coup à cette profondeur (départagé par tie-break si égalité).
+        """
+        best_moves: List[Move] = []
+        best_value = -math.inf
         possible_moves = self._get_all_possible_moves(state, sort_moves=True)
 
         if verbose:
-            print(f"IA réfléchit... ({len(possible_moves)} coups à évaluer)")
+            print(f"IA réfléchit (depth={depth}, {len(possible_moves)} coups)...")
 
-        # Variable pour Alpha au niveau racine
         alpha = -math.inf
 
-        # ═══════════════════════════════════════════════════════════════════
-        # Évaluer chaque coup au niveau racine
-        # ═══════════════════════════════════════════════════════════════════
         for move in possible_moves:
             try:
-                # Simuler le coup
                 temp_state = self._apply_move(state, move)
-                
-                # Lancer Minimax depuis cette position
-                board_value = self._minimax(temp_state, self.depth - 1, alpha, math.inf, False, depth_from_root=1)
-                
-                # Mettre à jour alpha au niveau racine
+                board_value = self._minimax(
+                    temp_state, depth - 1, alpha, math.inf, False, depth_from_root=1
+                )
                 alpha = max(alpha, board_value)
-                
-                # Est-ce le meilleur coup trouvé jusqu'ici ?
+
                 if board_value > best_value:
                     best_value = board_value
-                    best_moves = [move]  # Nouveau meilleur, réinitialiser la liste
+                    best_moves = [move]
                 elif board_value == best_value:
-                    best_moves.append(move)  # Égalité, ajouter à la liste
-                    
+                    best_moves.append(move)
             except InvalidMoveError:
-                continue  # Coup invalide, passer au suivant
-        
-        if verbose:
-            print(f"IA a exploré {self.nodes_explored} positions (score: {best_value:.1f})")
-        
-        # ═══════════════════════════════════════════════════════════════════
-        # Choisir parmi les meilleurs coups (variété)
-        # ═══════════════════════════════════════════════════════════════════
+                continue
+
         if best_moves:
             return self._tie_break(state, best_moves)
-        
-        # ═══════════════════════════════════════════════════════════════════
-        # FALLBACK : Si aucun coup n'est trouvé (ne devrait pas arriver)
-        # ═══════════════════════════════════════════════════════════════════
+        return self._fallback_move(state)
+
+    def _fallback_move(self, state: GameState) -> Move:
+        """Fallback déterministe si aucun coup minimax n'est trouvé."""
         pawn_moves = get_possible_pawn_moves(state, state.current_player)
         if pawn_moves:
             sorted_moves = sorted(pawn_moves)
             return ('deplacement', sorted_moves[0])
-        else:
-            # NackCode.ILLEGAL utilisé faute de code dédié aux erreurs internes
-            # dans le catalogue UART Plan 2 figé. Ce fallback signale un bug
-            # moteur (aucun coup pion possible alors que la partie continue),
-            # pas un coup illégal joueur ; il ne devrait jamais être émis sur
-            # le wire en production. Voir P9 spec §10 (limitations).
-            raise InvalidMoveError("L'IA ne trouve aucun coup valide !", NackCode.ILLEGAL)
+        # NackCode.ILLEGAL utilisé faute de code dédié aux erreurs internes
+        # dans le catalogue UART Plan 2 figé. Ce fallback signale un bug
+        # moteur (aucun coup pion possible alors que la partie continue),
+        # pas un coup illégal joueur ; il ne devrait jamais être émis sur
+        # le wire en production. Voir P9 spec §10 (limitations).
+        raise InvalidMoveError("L'IA ne trouve aucun coup valide !", NackCode.ILLEGAL)
 
     def clear_cache(self):
         """

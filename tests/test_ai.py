@@ -64,20 +64,20 @@ class TestAIInitialization:
     
     def test_create_ai(self):
         """Créer une IA."""
-        ia = AI(PLAYER_TWO, depth=2, difficulty='facile')  # Force depth=2
-        
+        from quoridor_engine import ai as ai_module
+        ia = AI(PLAYER_TWO, difficulty='facile')
         assert ia.player == PLAYER_TWO
         assert ia.opponent == PLAYER_ONE
-        # La difficulté 'facile' devrait donner depth=2
-        assert ia.depth == 2
-    
+        assert ia.difficulty == 'facile'
+        # depth est conservé pour compatibilité et tests
+        assert hasattr(ia, 'depth')
+
     def test_difficulty_levels(self):
-        """Les niveaux de difficulté ajustent la profondeur."""
-        ia_facile = AI(PLAYER_TWO, difficulty='facile')
-        ia_normal = AI(PLAYER_TWO, difficulty='normal')
-        ia_difficile = AI(PLAYER_TWO, difficulty='difficile')
-        
-        assert ia_facile.depth < ia_normal.depth < ia_difficile.depth
+        """Les niveaux de difficulté ajustent le budget temps."""
+        from quoridor_engine import ai as ai_module
+        # facile < normal < difficile en budget temps
+        budgets = ai_module.TIME_BUDGETS
+        assert budgets['facile'] < budgets['normal'] < budgets['difficile']
     
     def test_transposition_table_exists(self):
         """La table de transposition est initialisée."""
@@ -345,33 +345,28 @@ class TestPerformance:
     """Tests de performance de l'IA."""
     
     def test_ai_completes_in_reasonable_time(self):
-        """L'IA termine son calcul en temps raisonnable (profondeur 2)."""
+        """L'IA respecte son budget temps en difficulté facile."""
         import time
-        
+        from quoridor_engine import ai as ai_module
         game = create_new_game()
-        ia = AI(PLAYER_ONE, difficulty='facile')  # Profondeur 2
-        
+        ia = AI(PLAYER_ONE, difficulty='facile')
         start = time.time()
         ia.find_best_move(game, verbose=False)
         duration = time.time() - start
-        
-        # Devrait prendre moins de 2 secondes en difficulté facile
-        assert duration < 2.0
-    
+        # Tolérance 2x le budget pour overhead
+        assert duration < ai_module.TIME_BUDGETS['facile'] * 2.0
+
     def test_nodes_explored_increases_with_depth(self):
-        """Plus de nœuds explorés avec une profondeur plus grande."""
+        """Difficulté difficile explore plus de nœuds que facile (budget complet)."""
         game = create_new_game()
-        
-        # Utiliser les difficultés pour avoir vraiment des profondeurs différentes
-        ia_shallow = AI(PLAYER_ONE, difficulty='facile')  # depth=2
+        ia_shallow = AI(PLAYER_ONE, difficulty='facile')
         ia_shallow.find_best_move(game, verbose=False)
         nodes_shallow = ia_shallow.nodes_explored
-        
-        ia_deep = AI(PLAYER_ONE, difficulty='normal')  # depth=4
+
+        ia_deep = AI(PLAYER_ONE, difficulty='difficile')
         ia_deep.find_best_move(game, verbose=False)
         nodes_deep = ia_deep.nodes_explored
-        
-        # Profondeur 4 devrait explorer plus de nœuds que profondeur 2
+
         assert nodes_deep > nodes_shallow
 
 
@@ -577,6 +572,57 @@ class TestMateInN:
         score_a = ia._evaluate_state(game, depth_from_root=0)
         score_b = ia._evaluate_state(game, depth_from_root=5)
         assert score_a == score_b
+
+
+class TestIterativeDeepening:
+    """Tests de la boucle iterative deepening."""
+
+    def test_ai_returns_move_within_budget(self):
+        """L'IA retourne toujours un coup, même avec budget très court."""
+        import time
+        game = create_new_game()
+        ia = AI(PLAYER_TWO, difficulty='facile')
+        start = time.monotonic()
+        move = ia.find_best_move(game, verbose=False)
+        duration = time.monotonic() - start
+        assert move is not None
+        # Budget facile = 0.5s, on tolère 2x pour overhead
+        from quoridor_engine import ai
+        assert duration < ai.TIME_BUDGETS['facile'] * 2.0
+
+    def test_max_depth_override_forces_fixed_depth(self):
+        """Le kwarg max_depth_override force un minimax classique déterministe."""
+        game = create_new_game()
+        ia = AI(PLAYER_TWO, difficulty='facile')
+        # Avec override, le résultat doit être strictement reproductible
+        move1 = ia.find_best_move(game, verbose=False, max_depth_override=2)
+        ia.clear_cache()
+        move2 = ia.find_best_move(game, verbose=False, max_depth_override=2)
+        assert move1 == move2
+
+    def test_difficile_explores_more_than_facile(self):
+        """À budget complet, difficile explore plus de nœuds que facile."""
+        game = create_new_game()
+        ia_facile = AI(PLAYER_TWO, difficulty='facile')
+        ia_difficile = AI(PLAYER_TWO, difficulty='difficile')
+        ia_facile.find_best_move(game, verbose=False)
+        ia_difficile.find_best_move(game, verbose=False)
+        assert ia_difficile.nodes_explored > ia_facile.nodes_explored
+
+    def test_search_timeout_returns_best_so_far(self):
+        """Si on timeout au milieu, on retourne le meilleur coup de la
+        dernière profondeur entièrement terminée."""
+        from quoridor_engine import ai
+        game = create_new_game()
+        ia = AI(PLAYER_TWO, difficulty='facile')
+        # Force un budget ridicule pour garantir le timeout après depth 1
+        original_budget = ai.TIME_BUDGETS['facile']
+        ai.TIME_BUDGETS['facile'] = 0.001
+        try:
+            move = ia.find_best_move(game, verbose=False)
+            assert move is not None  # Garantie minimale : depth=1 toujours complétée
+        finally:
+            ai.TIME_BUDGETS['facile'] = original_budget
 
 
 if __name__ == '__main__':
