@@ -758,27 +758,32 @@ class AI:
         
         else:  # 'mur'
             wall = move_data
-            
-            # Score de base pour les murs : 500
-            # Les murs sont généralement moins urgents que les déplacements gagnants
-            score = 500
-            
-            # Bonus si le mur est sur le chemin de l'adversaire
-            # (approximation rapide : le mur est près de l'adversaire)
             opponent = PLAYER_TWO if player == PLAYER_ONE else PLAYER_ONE
-            opp_pos = state.player_positions[opponent]
-            wall_r, wall_c = wall[1], wall[2]
-            
-            # Distance Manhattan entre le mur et l'adversaire
-            dist_to_opponent = abs(wall_r - opp_pos[0]) + abs(wall_c - opp_pos[1])
-            
-            # Plus le mur est proche de l'adversaire, plus il est intéressant
-            if dist_to_opponent <= 1:
-                score += 200  # Très proche
-            elif dist_to_opponent <= 2:
-                score += 100  # Proche
-            
-            return score
+
+            # Score base sur l'IMPACT REEL : combien le mur rallonge le chemin adverse.
+            # Estimation rapide via mini-BFS sur l'etat temporaire.
+            try:
+                temp_walls = state.walls | {wall}
+                temp_state = replace(state, walls=temp_walls)
+                distances_opp_after = _get_all_distances_to_goal(temp_state, opponent)
+                L1_opp_after = distances_opp_after.get(
+                    state.player_positions[opponent], 99
+                )
+                L1_opp_before = distances_opponent.get(
+                    state.player_positions[opponent], 99
+                )
+                delta_opp = L1_opp_after - L1_opp_before
+            except Exception:
+                # Fallback : heuristique de proximite si le BFS echoue
+                opp_pos = state.player_positions[opponent]
+                wall_r, wall_c = wall[1], wall[2]
+                dist_to_opponent = abs(wall_r - opp_pos[0]) + abs(wall_c - opp_pos[1])
+                delta_opp = max(0, 3 - dist_to_opponent)
+
+            # Base 700 + 150 par case de rallongement.
+            # Un mur qui rallonge de 2 cases -> 1000 (equivaut deplacement neutre).
+            # Un mur qui rallonge de 3 cases -> 1150 (passe devant la plupart des deplacements).
+            return 700 + delta_opp * 150
 
     def _get_strategic_walls(self, state: GameState, player: str, max_walls: int = None) -> List[Tuple]:
         """

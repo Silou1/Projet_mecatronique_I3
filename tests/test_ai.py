@@ -625,6 +625,51 @@ class TestIterativeDeepening:
             ai.TIME_BUDGETS['facile'] = original_budget
 
 
+class TestMoveOrdering:
+    """Tests du score de tri des coups (move ordering)."""
+
+    def test_high_impact_wall_outranks_neutral_move(self):
+        """Un mur qui rallonge l'adversaire de 2+ cases passe avant un deplacement neutre."""
+        # PLAYER_ONE at (3,3) - neutral lateral move (3,2) scores 1000 (no improvement)
+        # PLAYER_TWO at (2,0) - wall ('h',2,0,2) blocks direct path, delta_opp=2 -> score=1000
+        game = GameState(
+            player_positions={PLAYER_ONE: (3, 3), PLAYER_TWO: (2, 0)},
+            walls=frozenset(),
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
+            current_player=PLAYER_ONE
+        )
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        distances_self = ia._get_cached_distances(game, PLAYER_ONE)
+        distances_opp = ia._get_cached_distances(game, PLAYER_TWO)
+
+        neutral_move = ('deplacement', (3, 2))
+        blocking_wall = ('mur', ('h', 2, 0, 2))
+
+        score_move = ia._score_move_for_ordering(game, neutral_move, distances_self, distances_opp)
+        score_wall = ia._score_move_for_ordering(game, blocking_wall, distances_self, distances_opp)
+
+        assert score_wall >= score_move, (
+            f"mur impactant score={score_wall}, deplacement neutre score={score_move}"
+        )
+
+    def test_winning_move_still_top_priority(self):
+        """Un coup gagnant a toujours le score le plus eleve."""
+        game = GameState(
+            player_positions={PLAYER_ONE: (1, 3), PLAYER_TWO: (3, 3)},
+            walls=frozenset(),
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
+            current_player=PLAYER_ONE
+        )
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        distances_self = ia._get_cached_distances(game, PLAYER_ONE)
+        distances_opp = ia._get_cached_distances(game, PLAYER_TWO)
+
+        winning_move = ('deplacement', (0, 3))
+        score_winning = ia._score_move_for_ordering(game, winning_move, distances_self, distances_opp)
+
+        assert score_winning == 10000
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 
