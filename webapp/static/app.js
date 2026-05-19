@@ -201,10 +201,16 @@ function renderViews(state) {
   }
 }
 
+let _prevWallMode = null;
+
 function renderWallMode(state) {
   document.body.classList.toggle("wall-placement", !!state.wall_placement_mode);
   document.getElementById("btn-wall-h").classList.toggle("active", state.wall_placement_mode === "h");
   document.getElementById("btn-wall-v").classList.toggle("active", state.wall_placement_mode === "v");
+  if (_prevWallMode !== state.wall_placement_mode) {
+    clearGhost();
+    _prevWallMode = state.wall_placement_mode;
+  }
 }
 
 function renderModal(state) {
@@ -306,8 +312,10 @@ async function handleIntersectionClick(row, col) {
       row,
       col,
     });
+    clearGhost();
     render(next);
   } catch (e) {
+    clearGhost();
     showToast(`Coup impossible : ${e.message}`);
   }
 }
