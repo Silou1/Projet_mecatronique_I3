@@ -168,6 +168,15 @@ html, body {
 
 .wall { fill: url(#wallGrad); }
 
+.ghost-wall {
+  fill: url(#wallGrad);
+  opacity: 0.42;
+  stroke: var(--primary);
+  stroke-width: 1;
+  stroke-dasharray: 3, 2;
+  pointer-events: none;
+}
+
 .intersection {
   fill: var(--primary);
   opacity: 0.85;

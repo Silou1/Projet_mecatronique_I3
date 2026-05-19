@@ -8,6 +8,7 @@ const MARGIN = 30;       // marge autour de la grille
 let state = null;        // dernier state reçu
 let consecutiveErrors = 0;
 let pendingWallMode = null;  // synchro UI optimiste
+const HAS_HOVER = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
 const homeForm = {
   mode: "human_vs_ai",
@@ -71,6 +72,18 @@ function renderIntersections() {
       dot.dataset.row = r;
       dot.dataset.col = c;
       dot.addEventListener("click", () => handleIntersectionClick(r, c));
+      if (HAS_HOVER) {
+        dot.addEventListener("mouseenter", () => {
+          if (!state || !state.wall_placement_mode) return;
+          if (state.current_player !== "j1") return;
+          dot.classList.add("hovered");
+          addGhost(state.wall_placement_mode, r, c);
+        });
+        dot.addEventListener("mouseleave", () => {
+          dot.classList.remove("hovered");
+          clearGhost();
+        });
+      }
       layer.appendChild(dot);
     }
   }
@@ -100,6 +113,31 @@ function renderWalls(walls) {
     rect.setAttribute("rx", "2");
     layer.appendChild(rect);
   }
+}
+
+function addGhost(orientation, row, col) {
+  const layer = document.getElementById("ghost");
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("class", "ghost-wall");
+  if (orientation === "h") {
+    const { x, y } = cellTopLeftXY(row + 1, col);
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y - 3);
+    rect.setAttribute("width", CELL * 2);
+    rect.setAttribute("height", 6);
+  } else {
+    const { x, y } = cellTopLeftXY(row, col + 1);
+    rect.setAttribute("x", x - 3);
+    rect.setAttribute("y", y);
+    rect.setAttribute("width", 6);
+    rect.setAttribute("height", CELL * 2);
+  }
+  rect.setAttribute("rx", "2");
+  layer.replaceChildren(rect);
+}
+
+function clearGhost() {
+  document.getElementById("ghost").replaceChildren();
 }
 
 function renderPawns(players) {
