@@ -77,10 +77,22 @@ L'IA mémorise les évaluations des états déjà rencontrés pour éviter de re
 
 L'IA teste en priorité les coups qui semblent les plus prometteurs (comme avancer vers le but), ce qui permet à l'élagage Alpha-Bêta d'être beaucoup plus efficace.
 
+### Iterative Deepening
+
+L'IA ne fixe pas une profondeur a priori. Elle lance Minimax à profondeur 1, 2, 3, ... et s'arrête quand le budget temps est écoulé. Avantage : on profite du temps disponible sans gaspiller (si la position est simple, on va plus profond ; si elle est complexe, on s'arrête à temps).
+
+### Déterminisme strict
+
+Deux appels successifs sur la même position retournent toujours le même coup. Cela permet une analyse reproductible et facilite le debug.
+
+### Mate-in-N
+
+Entre deux coups gagnants, l'IA préfère celui qui gagne le plus vite. Score victoire = `WIN_SCORE - profondeur_du_mat`. Symétrique pour la défaite (l'IA préfère perdre tard).
+
 ---
 
 ## 🛠️ Résumé Technique
 
 * **Langage** : Python 3
 * **Complexité IA** : O(b^d) réduit par Alpha-Bêta (b=facteur de branchement, d=profondeur).
-* **Profondeur typique** : 4 à 6 coups d'avance selon la difficulté.
+* **Profondeur typique** : 2 à 8 coups d'avance selon le budget temps et la complexité de la position.
