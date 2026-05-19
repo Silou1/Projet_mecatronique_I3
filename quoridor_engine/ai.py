@@ -48,7 +48,6 @@ les mêmes positions plusieurs fois. Accélère significativement l'IA.
 """
 
 import math
-import random
 from typing import List, Tuple, Dict
 from collections import deque
 from dataclasses import replace
@@ -1108,6 +1107,69 @@ class AI:
             self.transposition_table[state_hash] = (depth, min_eval)
             return min_eval
 
+    def _tie_break(self, state: GameState, candidates: List[Move]) -> Move:
+        """
+        Choisit un coup parmi un ensemble de coups à score minimax égal.
+
+        Cascade de critères (premier qui distingue tranche) :
+        1. Type : déplacements considérés avant les murs (cohérent avec critère "avance")
+        2. Pour les déplacements : préférer ceux qui avancent (improvement > 0)
+        3. Pour les déplacements : à improvement égal, préférer la colonne centrale
+        4. Pour les murs : préférer celui qui rallonge le plus l'adversaire (delta_opp)
+        5. Ordre canonique (str du coup) : déterminisme strict en dernier ressort
+
+        Implémentation : on calcule une clé tuple par coup, et on retourne le min().
+
+        Args:
+            state: état courant (pour calculer les distances)
+            candidates: liste des coups à départager (au moins 1)
+
+        Returns:
+            Le coup choisi (déterministe).
+        """
+        if len(candidates) == 1:
+            return candidates[0]
+
+        player = state.current_player
+        opponent = PLAYER_TWO if player == PLAYER_ONE else PLAYER_ONE
+        current_pos = state.player_positions[player]
+        distances_self = self._get_cached_distances(state, player)
+        distances_opp = self._get_cached_distances(state, opponent)
+        current_dist = distances_self.get(current_pos, 99)
+        opp_pos = state.player_positions[opponent]
+        L1_opp_before = distances_opp.get(opp_pos, 99)
+
+        def sort_key(move: Move) -> tuple:
+            """Retourne une clé pour tri ASCENDANT (plus petit = préféré)."""
+            move_type, move_data = move
+            if move_type == 'deplacement':
+                target = move_data
+                target_dist = distances_self.get(target, 99)
+                improvement = current_dist - target_dist  # > 0 = avance
+                center_dist = abs(target[1] - BOARD_SIZE // 2)  # plus petit = plus central
+                # type=0 (déplacements avant murs)
+                # advance_penalty=0 si avance, 1 sinon
+                # -improvement pour que plus grand improvement → plus petite clé
+                # center_dist : plus petit = mieux
+                # str(move) : ordre canonique
+                return (0, 0 if improvement > 0 else 1, -improvement, center_dist, 0, str(move))
+            else:  # 'mur'
+                wall = move_data
+                try:
+                    temp_walls = state.walls | {wall}
+                    temp_state = replace(state, walls=temp_walls)
+                    distances_after = _get_all_distances_to_goal(temp_state, opponent)
+                    L1_after = distances_after.get(opp_pos, 99)
+                    delta_opp = L1_after - L1_opp_before  # > 0 = rallonge l'adversaire
+                except Exception:
+                    delta_opp = 0
+                # type=1 (murs après déplacements)
+                # placeholders pour aligner la longueur du tuple avec celle des déplacements
+                # -delta_opp pour que plus grand delta → plus petite clé
+                return (1, 0, 0, 0, -delta_opp, str(move))
+
+        return min(candidates, key=sort_key)
+
     def find_best_move(self, state: GameState, verbose: bool = True) -> Move:
         """
         POINT D'ENTRÉE PRINCIPAL : Trouve le meilleur coup à jouer.
@@ -1171,15 +1233,15 @@ class AI:
         # Choisir parmi les meilleurs coups (variété)
         # ═══════════════════════════════════════════════════════════════════
         if best_moves:
-            # Choisir aléatoirement parmi les coups avec le même score
-            return random.choice(best_moves)
+            return self._tie_break(state, best_moves)
         
         # ═══════════════════════════════════════════════════════════════════
         # FALLBACK : Si aucun coup n'est trouvé (ne devrait pas arriver)
         # ═══════════════════════════════════════════════════════════════════
         pawn_moves = get_possible_pawn_moves(state, state.current_player)
         if pawn_moves:
-            return ('deplacement', random.choice(pawn_moves))
+            sorted_moves = sorted(pawn_moves)
+            return ('deplacement', sorted_moves[0])
         else:
             # NackCode.ILLEGAL utilisé faute de code dédié aux erreurs internes
             # dans le catalogue UART Plan 2 figé. Ce fallback signale un bug

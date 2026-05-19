@@ -489,6 +489,50 @@ class TestWallCandidates:
         assert critical_wall in walls, f"Mur critique {critical_wall} eject. Murs retournes: {walls}"
 
 
+class TestTieBreak:
+    """Tests du tie-break deterministe."""
+
+    def test_find_best_move_deterministic_facile(self):
+        """Deux appels successifs en facile retournent le meme coup."""
+        game = create_new_game()
+        ia = AI(PLAYER_TWO, difficulty='facile')
+        move1 = ia.find_best_move(game, verbose=False)
+        ia.clear_cache()
+        move2 = ia.find_best_move(game, verbose=False)
+        assert move1 == move2
+
+    def test_find_best_move_deterministic_normal(self):
+        """Deux appels successifs en normal retournent le meme coup."""
+        game = create_new_game()
+        ia = AI(PLAYER_TWO, difficulty='normal')
+        move1 = ia.find_best_move(game, verbose=False)
+        ia.clear_cache()
+        move2 = ia.find_best_move(game, verbose=False)
+        assert move1 == move2
+
+    def test_tie_break_prefers_advance(self):
+        """A score egal, le tie-break prefere un coup qui avance vers le but."""
+        game = GameState(
+            player_positions={PLAYER_ONE: (3, 3), PLAYER_TWO: (0, 0)},
+            walls=frozenset(),
+            player_walls={PLAYER_ONE: 6, PLAYER_TWO: 6},
+            current_player=PLAYER_ONE
+        )
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        advance_move = ('deplacement', (2, 3))
+        backward_move = ('deplacement', (4, 3))
+        chosen = ia._tie_break(game, [advance_move, backward_move])
+        assert chosen == advance_move
+
+    def test_tie_break_single_move_returns_it(self):
+        """Tie-break avec un seul coup retourne ce coup."""
+        game = create_new_game()
+        ia = AI(PLAYER_ONE, difficulty='facile')
+        only_move = ('deplacement', (4, 3))
+        chosen = ia._tie_break(game, [only_move])
+        assert chosen == only_move
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 
