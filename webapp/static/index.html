@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#faf6ee">
+  <title>Quoridor</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- ============ VUE ACCUEIL ============ -->
+  <section id="view-home" class="view">
+    <header class="home-header">
+      <h1>Quoridor</h1>
+      <p class="subtitle">Choisis ton mode</p>
+    </header>
+
+    <div class="home-form">
+      <label class="field-label">Mode</label>
+      <div class="chip-group" data-field="mode">
+        <button class="chip selected" data-value="human_vs_ai">Humain vs IA</button>
+        <button class="chip" data-value="ai_vs_ai">IA vs IA</button>
+      </div>
+
+      <label class="field-label">Difficulté</label>
+      <div class="chip-group" data-field="difficulty">
+        <button class="chip" data-value="facile">Facile</button>
+        <button class="chip selected" data-value="normal">Normal</button>
+        <button class="chip" data-value="difficile">Difficile</button>
+      </div>
+
+      <div id="speed-block" class="hidden">
+        <label class="field-label">Vitesse IA vs IA</label>
+        <div class="chip-group" data-field="speed">
+          <button class="chip" data-value="lent">Lent</button>
+          <button class="chip selected" data-value="normal">Normal</button>
+          <button class="chip" data-value="rapide">Rapide</button>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <label class="field-label">Plateau physique</label>
+        <button id="plateau-toggle" class="toggle" disabled>
+          <span class="toggle-knob"></span>
+        </button>
+        <span id="plateau-hint" class="hint">Plateau non détecté</span>
+      </div>
+
+      <button id="btn-start" class="btn-primary">Commencer la partie →</button>
+    </div>
+  </section>
+
+  <!-- ============ VUE JEU ============ -->
+  <section id="view-game" class="view hidden">
+    <header class="game-bar">
+      <button id="btn-home" class="icon-btn" aria-label="Retour accueil">←</button>
+      <span class="game-title"><strong>Quoridor</strong> · Tour <span id="turn-count">0</span></span>
+      <button id="btn-menu" class="icon-btn" aria-label="Menu">⋯</button>
+    </header>
+
+    <div class="status-bar">
+      <span class="player-info j1"><span class="dot dot-j1"></span>J1 · <span id="j1-walls">6</span> murs</span>
+      <span id="turn-indicator">Ton tour</span>
+      <span class="player-info j2"><span class="dot dot-j2"></span>J2 · <span id="j2-walls">6</span> murs</span>
+    </div>
+
+    <div class="board-wrap">
+      <svg id="board" viewBox="0 0 360 360" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="boardBg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f4e8d2"/>
+            <stop offset="100%" stop-color="#ead9b8"/>
+          </linearGradient>
+          <linearGradient id="cellGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#fbf3df"/>
+            <stop offset="100%" stop-color="#f5ead0"/>
+          </linearGradient>
+          <radialGradient id="pawnBlue" cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stop-color="#5b9fd9"/>
+            <stop offset="100%" stop-color="#1f5f8f"/>
+          </radialGradient>
+          <radialGradient id="pawnRed" cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stop-color="#e57a6c"/>
+            <stop offset="100%" stop-color="#9c2f23"/>
+          </radialGradient>
+          <linearGradient id="wallGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#7a4a22"/>
+            <stop offset="100%" stop-color="#4f2e12"/>
+          </linearGradient>
+          <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+            <feOffset dx="0" dy="2"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <rect width="360" height="360" rx="20" fill="url(#boardBg)"/>
+        <g id="cells"></g>
+        <g id="walls-layer"></g>
+        <g id="ghost"></g>
+        <g id="intersections"></g>
+        <circle id="pawn-j1" class="pawn" r="20" fill="url(#pawnBlue)" filter="url(#softShadow)" cx="180" cy="300"/>
+        <circle id="pawn-j2" class="pawn" r="20" fill="url(#pawnRed)" filter="url(#softShadow)" cx="180" cy="60"/>
+      </svg>
+    </div>
+
+    <div id="game-actions" class="game-actions">
+      <button id="btn-wall-h" class="btn-secondary">Mur H</button>
+      <button id="btn-wall-v" class="btn-secondary">Mur V</button>
+    </div>
+
+    <div id="ai-vs-ai-controls" class="ai-controls hidden">
+      <div class="chip-group" data-field="speed-ingame">
+        <button class="chip" data-value="lent">Lent</button>
+        <button class="chip selected" data-value="normal">Normal</button>
+        <button class="chip" data-value="rapide">Rapide</button>
+      </div>
+      <button id="btn-pause" class="btn-secondary">Pause</button>
+    </div>
+  </section>
+
+  <!-- ============ MODAL FIN DE PARTIE ============ -->
+  <div id="modal-end" class="modal hidden">
+    <div class="modal-card">
+      <div class="trophy">🏆</div>
+      <h2 id="end-winner">J1 gagne en N tours !</h2>
+      <div class="modal-actions">
+        <button id="btn-replay" class="btn-primary">Rejouer</button>
+        <button id="btn-home-from-end" class="btn-secondary">Retour accueil</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TOAST ============ -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- ============ OVERLAY RECONNEXION ============ -->
+  <div id="overlay-reconnect" class="overlay hidden">
+    <div class="overlay-content">Reconnexion…</div>
+  </div>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
