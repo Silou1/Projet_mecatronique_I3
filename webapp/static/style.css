@@ -34,6 +34,8 @@ html, body {
 
 .hidden { display: none !important; }
 
+#intersections { display: none; }
+
 /* === Accueil === */
 .home-header { text-align: center; margin: 40px 0 30px; }
 .home-header h1 { font-size: 32px; font-weight: 700; margin: 0; }
@@ -167,10 +169,25 @@ html, body {
 .wall { fill: url(#wallGrad); }
 
 .intersection {
-  fill: var(--primary); opacity: 0.35; cursor: pointer;
-  transition: opacity 0.15s;
+  fill: var(--primary);
+  opacity: 0.85;
+  stroke: var(--bg);
+  stroke-width: 1.5;
+  cursor: pointer;
+  animation: pulse-target 1.8s ease-in-out infinite;
+  transition: r 0.15s, stroke-width 0.15s;
 }
-.intersection:active { opacity: 0.8; }
+.intersection.hovered {
+  r: 11;
+  opacity: 1;
+  animation-play-state: paused;
+}
+.intersection:active { opacity: 1; }
+
+@keyframes pulse-target {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.65; }
+}
 
 .game-actions {
   display: flex; gap: 10px; justify-content: center;

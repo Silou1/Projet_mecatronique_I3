@@ -67,7 +67,7 @@ function renderIntersections() {
       // → on stocke l'orientation au moment du clic
       dot.setAttribute("cx", x + CELL);
       dot.setAttribute("cy", y);
-      dot.setAttribute("r", 7);
+      dot.setAttribute("r", 9);
       dot.dataset.row = r;
       dot.dataset.col = c;
       dot.addEventListener("click", () => handleIntersectionClick(r, c));
