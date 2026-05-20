@@ -1,112 +1,96 @@
 # Tests
 
-Stratégie de tests à deux niveaux : Python (automatisés via pytest) et firmware (scénarios manuels via Serial Monitor en attendant l'automation).
+La suite de tests utilise pytest. Le marqueur `devkit` isole les tests qui nécessitent un ESP32 physiquement branché.
 
-## Tests Python — `pytest`
-
-> **Référence détaillée** : [tests/README.md](../tests/README.md) — découpage par classe de test, statistiques par module.
-
-### Lancer les tests
+## Lancer la suite de tests
 
 ```bash
-pytest -m "not devkit"                          # tous (278 tests, ~8 s sur Mac)
-pytest --cov=quoridor_engine --cov-report=html  # avec couverture HTML dans htmlcov/
-pytest tests/test_moves.py                      # un fichier précis
-pytest tests/test_ai.py::TestPathfinding -v     # une classe de test
-pytest -m devkit                                # tests hardware (DevKit ESP32 requis)
+# Tous les tests sauf ceux qui nécessitent un ESP32 branché (recommandé en dev)
+pytest -m "not devkit"
+
+# Tous les tests, y compris hardware
+pytest
+
+# Couverture avec rapport HTML
+pytest --cov=quoridor_engine --cov=webapp --cov-report=html
+
+# Un fichier précis
+pytest tests/test_moves.py -v
+
+# Un test précis
+pytest tests/test_moves.py::TestPawnMovement::test_basic_move
 ```
 
-### Couverture actuelle
+Le rapport HTML est généré dans `htmlcov/index.html`.
 
-| Module | Couverture |
+## Structure des tests
+
+### Tests du moteur de jeu (`tests/`)
+
+| Fichier | Couverture |
 |---|---|
-| `quoridor_engine/core.py` | 75 % |
-| `quoridor_engine/ai.py` | 92 % |
-| **Total** | **82 %** |
+| `test_core.py` | Structures de base : `GameState`, constantes, création |
+| `test_moves.py` | Validation des déplacements de pion (orthogonaux, sauts) |
+| `test_walls.py` | Validation des murs (chevauchement, blocage de chemin) |
+| `test_game.py` | Scénarios de partie complets, undo |
+| `test_ai.py` | Comportement de l'IA, déterminisme, mate-in-N, performance |
+| `test_main_cli.py` | CLI console (smoke test du parser de commandes) |
 
-### Fichiers de tests
+### Tests de la webapp (`tests/webapp/`)
 
-**Moteur de jeu et IA** (Python pur, sans hardware) :
+| Fichier | Couverture |
+|---|---|
+| `test_api.py` | Routes FastAPI (HTTP) |
+| `test_service.py` | Couche service, intégration moteur + transport |
+| `test_uart_bridge.py` | Transport série avec `serial.Serial` mocké |
+| `test_schemas.py` | Modèles Pydantic |
 
-| Fichier | Tests | Couvre |
-|---|---|---|
-| [tests/test_core.py](../tests/test_core.py) | 22 | Structures, immutabilité `GameState`, constantes, `NackCode`, `InvalidMoveError` |
-| [tests/test_moves.py](../tests/test_moves.py) | 14 | Déplacements, sauts, blocage par murs |
-| [tests/test_walls.py](../tests/test_walls.py) | 19 | Pose, validation, blocage de chemin (BFS), double-clic |
-| [tests/test_game.py](../tests/test_game.py) | 20 | Orchestration `QuoridorGame`, undo, fin de partie |
-| [tests/test_ai.py](../tests/test_ai.py) | 25 | Minimax, alpha-bêta, cache, performance, cas limites |
+### Tests hardware (`tests/integration/`)
 
-**Intégration RPi ↔ ESP32** (mocks UART, pas de hardware) :
+| Fichier | Couverture |
+|---|---|
+| `test_uart_devkit.py` | Tests d'intégration avec ESP32 physiquement branché (marqueur `devkit`) |
 
-| Fichier | Tests | Couvre |
-|---|---|---|
-| [tests/test_uart_client.py](../tests/test_uart_client.py) | 102 | Framing Plan 2, CRC-16, séquencement, retry, codes NACK |
-| [tests/test_game_session.py](../tests/test_game_session.py) | 20 | Boucle P9 RPi↔ESP32, handshake, reconnexion, undo |
-| [tests/test_main_cli.py](../tests/test_main_cli.py) | 4 | Parsing args CLI, mode console vs plateau |
+## Marqueur `devkit`
 
-**Webapp** (FastAPI TestClient, sans hardware) :
+Les tests dans `tests/integration/test_uart_devkit.py` portent le marqueur pytest `devkit`. Ils nécessitent un ESP32-WROOM réellement branché en USB-C au Mac.
 
-| Fichier | Tests | Couvre |
-|---|---|---|
-| [tests/webapp/test_schemas.py](../tests/webapp/test_schemas.py) | 10 | Pydantic API payloads |
-| [tests/webapp/test_service.py](../tests/webapp/test_service.py) | 23 | `QuoridorService`, threading, IA tick, transitions |
-| [tests/webapp/test_uart_bridge.py](../tests/webapp/test_uart_bridge.py) | 8 | Bridge UART (mocks) |
-| [tests/webapp/test_api.py](../tests/webapp/test_api.py) | 11 | TestClient FastAPI, 9 routes HTTP |
+Sans ce matériel, ils sont ignorés. Par défaut, `pytest -m "not devkit"` est recommandé en développement sans plateau.
 
-**Hardware (DevKit physique requis)** :
+Ils valident que les commandes de base (`PING`, lecture des `LIMITS`, etc.) fonctionnent sur le canal série réel.
 
-| Fichier | Tests | Statut |
-|---|---|---|
-| [tests/integration/test_uart_devkit.py](../tests/integration/test_uart_devkit.py) | 8 | Marqueur `@pytest.mark.devkit`, skip par défaut |
+## Couverture cible
 
-**Total exécuté en CI/local** : **278 tests** (8 devkit skippés sans hardware).
+- Globale : ~80 %.
+- `quoridor_engine/ai.py` : ~90 %+.
+- `quoridor_engine/core.py` : ~75 %+.
 
-### Bonnes pratiques en place
+La couverture inférieure de `core.py` vient des branches d'erreur (cas extrêmes des sauts par-dessus un pion adverse)
+qui sont couvertes par les tests d'intégration mais difficiles à mesurer en couverture pure.
 
-- Chaque test est indépendant (pas d'état partagé)
-- Docstrings sur chaque test
-- Tests groupés par classe selon le concept
-- Couverture des cas nominaux **et** des erreurs
+## Bonnes pratiques
 
-## Tests firmware — scénarios manuels
+- **Indépendance** : chaque test crée son propre état initial. Pas de fixtures globales mutables.
+- **Docstrings claires** : décrire le scénario testé en une phrase.
+- **Regroupement par classe `TestX`** : pour la lisibilité du rapport pytest.
+- **Cas nominal + cas d'erreur** : couvrir au minimum la voie heureuse et un cas qui doit échouer.
 
-> **Statut** : 🚧 *Non automatisés. Procédure complète dans [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md).*
+## Tests hardware manuels (récap)
 
-7 scénarios à exécuter via Serial Monitor (115200 bauds, fin de ligne `LF`) dès que l'ESP32 / PCB est branché :
+Avec un DevKit ESP32 branché en USB-C :
 
-1. **Boot nominal vers `DEMO`** — reset, ne rien taper, vérifier la séquence
-2. **Boot nominal vers `CONNECTED`** — taper `HELLO_ACK` dans les 3 s
-3. **Cycle de jeu simulé complet** — `BTN`, `ACK`, `NACK`, `CMD MOVE`
-4. **Perte UART** — silence 4 s → transition `ERROR` avec code `UART_LOST`
-5. **Escalade timeout intent** — 3 timeouts consécutifs → `ERROR`
-6. **Récupération depuis `ERROR`** — taper `RESET` → reboot
-7. **Watchdog** — provocation contrôlée (modification non commitée du code), vérifier reboot ~5 s
-
-Si tous les scénarios passent, supprimer [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md) et committer `test(firmware): plan 1 valide en bout-en-bout sur cible`.
-
-### Automation future
-
-Un script Python qui rejoue les scénarios via `pyserial` est envisagé. Voir Phase P10 dans [00_plan_global.md](00_plan_global.md).
-
-## Intégration continue
-
-📋 **Aucune CI configurée actuellement.** Décision : reportée à la fin du projet (les badges du README qui mentionnaient GitHub Actions et Codecov étaient erronés et ont été retirés).
-
-Quand on l'ajoutera, la base sera :
-
-```yaml
-# .github/workflows/tests.yml
-name: Tests
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-      - run: pip install -r requirements.txt
-      - run: pytest --cov=quoridor_engine
+```bash
+pytest -m devkit
 ```
+
+Doit valider :
+
+- Handshake `PING` / `PONG`.
+- Lecture des fins de course (`LIMITS`).
+- Que le moniteur série répond aux commandes envoyées par pyserial.
+
+Si ces tests échouent, vérifier :
+
+- Le sketch est bien flashé (`pio run -t upload`).
+- Le port série est bien `/dev/tty.usbserial-*` ou `/dev/tty.usbmodem*`.
+- Aucune autre application n'utilise le port (fermer `pio device monitor` avant de lancer pytest).

@@ -1,146 +1,202 @@
 # Architecture globale
 
-Vue d'ensemble du projet : deux processeurs, un canal de communication, une séparation nette des responsabilités.
+Vue d'ensemble du projet : deux machines, un canal de communication, une séparation nette des
+responsabilités. Le Mac fait tourner toute la logique logicielle ; l'ESP32 pilote le hardware.
 
-## Schéma
+## Vue d'ensemble
 
 ```
-┌─────────────────────────────────────────┐         ┌────────────────────────────────────┐
-│         Raspberry Pi 3/4                │         │          ESP32-WROOM                │
-│         (Python 3.10+)                  │  UART0  │       (Arduino C++ / FreeRTOS)      │
-│                                         │ 115200  │                                     │
-│  ┌──────────────────┐   ┌────────────┐  │  bauds  │  ┌────────────────┐                 │
-│  │ quoridor_engine/ │   │  main.py   │  │ ◄──────►│  │ GameController │  FSM 7 états    │
-│  │  - core.py       │   │  (UI       │  │         │  │  (orchestration│                 │
-│  │  - ai.py         │   │   console) │  │         │  └────────┬───────┘                 │
-│  └──────────────────┘   └────────────┘  │         │           │                         │
-│         │                                │         │           ├─► UartLink              │
-│         └─► moteur jeu, IA Minimax      │         │           ├─► ButtonMatrix (6×6)    │
-│             logique pure, immuable       │         │           ├─► MotionControl         │
-│                                         │         │           │   (FreeRTOS Core 0)     │
-│                                         │         │           ├─► LedDriver / Animator   │
-│                                         │         │           └─► (watchdog 5 s)        │
-└─────────────────────────────────────────┘         └────────────────────────────────────┘
-                                                                       │
-                                                                       │ I2C, GPIO, PWM
-                                                                       ▼
-                                            ┌───────────────────────────────────────────────────────────┐
-                                            │  Hardware (breadboard, PCB v2 abandonnée)                 │
-                                            │  - 2× NEMA 17 + L298N (full-step, ENA/ENB PWM)            │
-                                            │  - Servo (rotation/reset murs)                            │
-                                            │  - 2× fins de course (CoreXY)                             │
-                                            │  - LEDs WS2812 et boutons : côté RPi (split GPIO)         │
-                                            └───────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  Mac (Python 3.12)                                             │
+│                                                                │
+│  ┌─────────────────────┐   ┌────────────────────────────────┐  │
+│  │  quoridor_engine/   │   │  webapp/                       │  │
+│  │  - core.py          │◄──│  - server.py  (FastAPI :8000)  │  │
+│  │  - ai.py            │   │  - service.py (orchestration)  │  │
+│  │  (moteur + IA)      │   │  - uart_bridge.py (optionnel)  │  │
+│  └─────────────────────┘   └──────────────┬─────────────────┘  │
+│                                           │ USB-série (actuel)  │
+│                                           │ Wi-Fi AP (phase 5)  │
+└───────────────────────────────────────────┼────────────────────┘
+                                            │ 115200 bauds
+                              ┌─────────────▼─────────────────┐
+                              │  ESP32-WROOM                  │
+                              │  bringup_l298n_complet.cpp    │
+                              │  (sketch monolithique)        │
+                              │  - CoreXY (2× NEMA17 + L298N) │
+                              │  - Servo (levée mur)          │
+                              │  - 2× fins de course (homing) │
+                              └─────────────┬─────────────────┘
+                                            │ GPIO, PWM
+                                            ▼
+                              ┌─────────────────────────────┐
+                              │  Plateau physique Quoridor  │
+                              │  - Piston CoreXY (chariot)  │
+                              │  - Servo 0°/180° (murs)     │
+                              │  - Breadboard + alim 12 V   │
+                              └─────────────────────────────┘
 ```
 
-## Répartition des responsabilités
+Le Mac est le seul cerveau du jeu : règles, IA, état de partie, interface utilisateur.
+L'ESP32 est un actionneur intelligent : il reçoit des commandes texte et traduit chaque
+instruction en mouvement physique (déplacement du chariot, levée de mur).
 
-| Couche | Rôle | Technologie | Code |
-|---|---|---|---|
-| **Moteur jeu** | Règles, état, validation, undo | Python pur, immutable | [quoridor_engine/core.py](../quoridor_engine/core.py) |
-| **Intelligence** | Choix du meilleur coup | Minimax + alpha-bêta + cache | [quoridor_engine/ai.py](../quoridor_engine/ai.py) |
-| **Interface** | UI console ou mode plateau physique | Python | [main.py](../main.py) |
-| **Orchestration plateau** | Boucle P9 RPi ↔ ESP32 | Python | [quoridor_engine/game_session.py](../quoridor_engine/game_session.py) |
-| **Communication** | Protocole UART Plan 2 RPi ↔ ESP32 | UART0 série | [quoridor_engine/uart_client.py](../quoridor_engine/uart_client.py) + [firmware/src/UartLink.{cpp,h}](../firmware/src/) |
-| **Orchestration firmware** | FSM, watchdog, multitâche | Arduino + FreeRTOS | [firmware/src/GameController.{cpp,h}](../firmware/src/) |
-| **Drivers hardware** | I2C, moteurs pas-à-pas, LEDs adressables, servo | PlatformIO + libs Arduino | [firmware/src/MotionControl.{cpp,h}](../firmware/src/), `LedDriver`, etc. |
+## Composants logiciels
 
-### Couche d'orchestration plateau (P9)
+### `quoridor_engine/`
 
-Depuis P9, [main.py](../main.py) accepte un argument `--mode plateau` qui
-remplace le prompt console par un dialogue UART avec l'ESP32. La logique
-d'orchestration vit dans [quoridor_engine/game_session.py](../quoridor_engine/game_session.py)
-(classe `GameSession`).
+Moteur de jeu pur Python, sans aucune dépendance à l'interface ou au hardware.
 
-Cycle de vie d'une partie en mode plateau :
+- **`core.py`** : `GameState` (dataclass immuable), règles Quoridor 6×6, validation des coups,
+  pathfinding BFS anti-blocage. Chaque coup retourne un nouvel état (permet undo et arbre IA).
+- **`ai.py`** : Minimax avec élagage Alpha-Bêta et table de transposition. Choisit le meilleur
+  coup pour le joueur IA à partir de l'état courant.
 
-1. `main.py --mode plateau --port /dev/ttyUSB0` ouvre `serial.Serial(...)`.
-2. `GameSession.run()` appelle `uart.connect(timeout=15.0)` (handshake HELLO/HELLO_ACK).
-3. La boucle de jeu alterne :
-   - tour `j1` (humain) : `_await_player_intent` lit `MOVE_REQ`/`WALL_REQ` du firmware,
-     valide via `QuoridorGame.play_move`, répond `ACK` ou `NACK <code>` (cf. `NackCode`).
-   - tour `j2` (IA) : `_send_ai_move` calcule le coup, envoie `CMD MOVE`/`CMD WALL`,
-     bloque jusqu'au `DONE`.
-4. Fin de partie : `CMD GAMEOVER <winner>` envoyée puis `uart.close()`.
+### `webapp/`
 
-**Robustesse aux déconnexions** : le client UART détecte les pertes de session
-(`ERR UART_LOST` reçu après silence UART côté firmware), envoie `CMD_RESET`,
-puis ré-établit le handshake. Limitation P9 acceptée : la position physique des
-pions et l'état des LEDs sont perdus à chaque reboot ESP32 (re-synchronisation
-prévue en P11).
+Interface de démonstration servie par FastAPI sur le port 8000. Accès depuis n'importe quel
+navigateur sur le réseau local (iPhone, PC, Mac).
 
-Le mode console (`--mode console`, défaut) reste inchangé : prompt clavier,
-plateau ASCII, logique console pure.
+| Fichier | Rôle |
+|---|---|
+| `server.py` | Point d'entrée FastAPI + uvicorn. Routes API + `GET /` sert le HTML. |
+| `service.py` | `QuoridorService` singleton thread-safe. État partie, tick IA, orchestration. |
+| `uart_bridge.py` | Passerelle optionnelle vers l'ESP32. Détection auto au démarrage. |
+| `schemas.py` | Modèles Pydantic pour les payloads et réponses JSON. |
+| `static/` | Frontend : HTML5 + CSS3 + JS vanilla + SVG inline. Zéro framework, zéro build. |
 
-## Interface web (démo navigateur)
+Le frontend interroge `/api/state` toutes les 500 ms (polling HTTP, sans WebSocket — choix
+fiabilité). Animations CSS sur les transitions pions et murs.
 
-Depuis 2026-05-19, le projet inclut une webapp FastAPI qui sert une interface
-de démonstration accessible via navigateur. Pensée comme **mode démo autonome**
-pour la présentation finale (ne nécessite pas le plateau physique).
+### `firmware/src/bringup_l298n_complet.cpp`
 
-### Stack
+Sketch ESP32 monolithique. Aucune refonte prévue ; des commandes supplémentaires pourront
+être ajoutées en phase 5 (Wi-Fi).
 
-| Couche | Technologie | Code |
-|---|---|---|
-| API HTTP | FastAPI (port 8000) | [webapp/server.py](../webapp/server.py) |
-| Orchestration | `QuoridorService` singleton thread-safe | [webapp/service.py](../webapp/service.py) |
-| Schémas | Pydantic | [webapp/schemas.py](../webapp/schemas.py) |
-| Bridge UART (optionnel) | wrapper autour de `UartClient` | [webapp/uart_bridge.py](../webapp/uart_bridge.py) |
-| Frontend | HTML5 + SVG inline + JS vanilla, mobile-first | [webapp/static/](../webapp/static/) |
+Responsabilités du sketch :
+- **Homing** : déplacement jusqu'aux fins de course (X=GPIO13, Y=GPIO18, INPUT_PULLUP),
+  définition de l'origine bas-gauche.
+- **GOTO** : déplacement CoreXY en pas (calibration : 100 pas = 2 cm, 1 mm = 5 pas).
+- **LEVER / BAISSER** : servo GPIO4, 0° = levé, 180° = repos.
+- **WALL** : commande haut niveau — calcule la position physique du mur via les matrices
+  `MURS_H` / `MURS_V`, enchaîne GOTO + LEVER + BAISSER pour chaque case concernée.
+- **PING** : réponse PONG (handshake et détection de présence de l'ESP32).
 
-### Modes d'utilisation
+Pinout :
+- M1 : IN1=14, IN2=27, IN3=26, IN4=25, ENA=33, ENB=32
+- M2 : IN1=16, IN2=17, IN3=21, IN4=22, ENA=19, ENB=23
+- Convention X : M1 et M2 sens opposés. Convention Y : M1 et M2 même sens.
 
-- **Autonome** : moteur Python + IA, sans hardware. Cas démo principal.
-- **Hybride** : si ESP32 détecté, les coups sont miroités sur le plateau
-  physique via `UartBridge`. Fallback gracieux (notification `PLATEAU_LOST`)
-  en cas de déconnexion en cours de partie.
+Voir `docs/hardware/pinout.md`, `docs/hardware/calibration.md` et
+`docs/hardware/positions-murs.md` pour les détails mesurés.
 
-### Déploiement
+## Transport ESP32 ↔ Mac
 
-Lancement local : `python -m webapp.server`. Procédure RPi complète dans
-[webapp/README.md](../webapp/README.md).
+### USB-série (mode actuel, validé)
 
-Polling client `/api/state` toutes les 500 ms, état serveur sérialisé en JSON.
-Animations CSS côté client : placement de murs avec ghost preview au hover
-desktop, animation 200 ms à la pose. Voir
-[docs/superpowers/specs/2026-05-19-walls-ux-improvement-design.md](superpowers/specs/2026-05-19-walls-ux-improvement-design.md).
+Câble USB-C direct entre le Mac et l'ESP32. Côté Mac : `/dev/tty.usbserial-*` (détection
+automatique par `uart_bridge.py`). Baudrate 115200. Ce mode est utilisé en développement
+et constitue le fallback fiable pour la démo.
 
-## Flux de données typique (cycle de jeu)
+### Wi-Fi en mode AP (cible phase 5, prévu, non implémenté)
 
-1. Le joueur **appuie sur un bouton** de la matrice 6×6 → `ButtonMatrix` détecte l'intent
-2. `GameController` passe en `BUTTON_INTENT_PENDING`, allume une LED de feedback (`PENDING_FLASH`)
-3. L'ESP32 envoie `MOVE_REQ <ligne> <col>` sur UART au RPi
-4. Le RPi (Python) **valide le coup** via `quoridor_engine` et répond `ACK` ou `NACK`
-5. Si `ACK`, l'ESP32 passe en `EXECUTING` → commande motrice (déplacement piston XY, push mur)
-6. À la fin, l'ESP32 émet `DONE` → retour à l'état `CONNECTED`
-7. Le RPi calcule le coup de l'IA si on est en mode joueur vs IA, et envoie `CMD MOVE <ligne> <col>` ou `CMD WALL <h|v> <ligne> <col>`
+L'ESP32 crée un point d'accès Wi-Fi nommé `Quoridor-ESP32`. Le Mac s'y connecte comme
+client et joint l'ESP32 via son IP fixe (ex. `192.168.4.1`). Le protocole d'application
+est identique à l'USB-série (même format texte, même baudrate logique). Pas de refonte
+firmware requise : seule la couche transport change.
 
-Détails de la FSM dans [05_firmware.md](05_firmware.md). Détails du protocole UART dans [06_protocole_uart.md](06_protocole_uart.md).
+### Protocole d'application (commun aux deux transports)
 
-## Principes de conception
+Texte brut ligne par ligne (`\n`), encodage UTF-8. Sans framing binaire ni CRC.
+Debuggable directement au moniteur série.
 
-1. **Séparation moteur / interface** : `quoridor_engine` ne sait rien de la console ni du hardware. Permet de tester unitairement et de réutiliser dans une GUI ou un plateau physique.
-2. **Immutabilité de `GameState`** : chaque coup retourne un nouvel état. Permet l'undo, l'arbre de recherche de l'IA, et la sérialisation triviale.
-3. **FSM explicite côté firmware** : 7 états, transitions documentées, pas de `if` cachés. Voir [05_firmware.md](05_firmware.md).
-4. **Watchdog côté ESP32** : 5 secondes. Tout blocage déclenche un reboot propre.
-5. **Pas de logique de jeu dans le firmware** : l'ESP32 valide *le moins possible*. C'est le RPi qui tranche, parce que c'est lui qui a le moteur Quoridor complet.
+| Commande Mac → ESP32 | Réponse ESP32 |
+|---|---|
+| `PING` | `PONG` |
+| `WALL <H\|V> <row> <col>` | `WALL OK <H\|V> <row> <col> raised=<n>` |
+| `GOTO <x> <y>` | `OK` ou `ERR <msg>` |
+| `HOME` | `OK` |
+| `LEVER` | `OK` |
+| `BAISSER` | `OK` |
+
+`raised=<n>` : nombre de cases physiquement manipulées (1 ou 2 selon le mur).
+
+## Modes d'exécution
+
+### Mode dev (sessions de codage actuelles)
+
+Le Mac est connecté à Internet via tethering USB de l'iPhone (Personal Hotspot).
+L'ESP32 est connecté en USB-C au Mac. La webapp tourne sur `http://localhost:8000`,
+accessible depuis Safari Mac. L'iPhone fournit Internet, pas le réseau ESP32.
+
+### Mode démo (cible vendredi)
+
+L'iPhone est débranché du Mac et se connecte au Wi-Fi `Quoridor-ESP32` de l'ESP32.
+Le Mac est aussi sur ce réseau Wi-Fi. L'iPhone accède à la webapp via l'IP du Mac sur
+le réseau ESP32 (typiquement `192.168.4.2:8000`). Aucun accès Internet requis.
+
+Si le Wi-Fi est instable lors de la démo, fallback immédiat sur USB-C direct : la
+webapp et l'`uart_bridge.py` détectent automatiquement `/dev/tty.usbserial-*` au boot.
+
+### Mode autonome
+
+Aucun ESP32 connecté. La webapp tourne en local sur le Mac, le moteur Python gère
+intégralement l'état de partie et l'IA. Les murs sont posés visuellement dans
+l'interface SVG, sans action physique. C'est le mode de démo minimum (P0).
+
+## Flux d'un coup (avec plateau physique)
+
+1. Le joueur clique dans la webapp (déplacement de pion ou pose de mur).
+2. La webapp valide via `quoridor_engine` : déplacement légal, mur non bloquant (BFS).
+3. Si déplacement de pion : mise à jour de l'état interne seulement (pas de commande ESP32).
+4. Si pose de mur : la webapp envoie `WALL <H|V> <row> <col>` à l'ESP32 via `uart_bridge.py`.
+5. L'ESP32 calcule la position physique depuis les matrices `MURS_H` / `MURS_V`.
+6. L'ESP32 enchaîne : `GOTO` jusqu'à la 1re case → `LEVER` → `BAISSER`. Si le mur occupe
+   2 cases physiques, répète GOTO + LEVER + BAISSER pour la 2e case.
+7. L'ESP32 répond `WALL OK <H|V> <row> <col> raised=<n>`.
+8. La webapp met à jour l'affichage SVG (confirmation visuelle).
+
+Si l'ESP32 ne répond pas dans le délai ou renvoie `ERR`, la webapp affiche une
+notification `PLATEAU_LOST` et continue en mode autonome (fallback gracieux).
+
+## Décisions clés
+
+### Pourquoi le Mac comme cerveau
+
+Souplesse maximale de développement : Python natif, Claude Code, pytest, debug facile.
+Pas de mise au point d'un système embarqué intermédiaire à configurer. Performance
+largement suffisante pour l'IA Minimax sur un plateau 6×6. Facilite les ajustements
+de dernière minute (J-2 d'une démo).
+
+### Pourquoi l'ESP32
+
+Wi-Fi natif intégré (utile pour la phase 5 sans câble). GPIO suffisants pour le CoreXY
+(2× L298N, 4 entrées chacun) + servo + 2 capteurs. Communauté Arduino mature,
+flashage trivial via USB-C. Pas de PSRAM requise pour ce sketch.
+
+### Pourquoi un protocole texte
+
+Debuggable directement au moniteur série sans outil externe. Lisible dans les logs
+webapp. Évolutif sans recompilation (ajout de commandes en phase 5). Aucune dépendance
+à une librairie de framing propriétaire. Identique sur USB-série et Wi-Fi TCP.
 
 ## Stack technique
 
 | Domaine | Choix |
 |---|---|
-| Langage RPi | Python 3.10+ |
-| Bibliothèques RPi | `colorama` (couleurs console), `pyserial` (UART), `pytest` (tests) |
-| Langage ESP32 | Arduino C++ (PlatformIO, framework Arduino sur ESP-IDF) |
-| Multitâche ESP32 | FreeRTOS (tâche moteurs sur Core 0, FSM sur Core 1) |
-| Communication | UART0 à 115200 bauds (partage l'USB pour debug) |
-| Format protocole | Trames texte Plan 2 avec CRC-16, seq/ack et retry CMD |
-| PCB | EasyEDA, fabriquée 2026-04-28, v2 |
+| Langage Mac | Python 3.12 |
+| Framework API | FastAPI 0.110+, uvicorn (standard) |
+| Bibliothèques Python | `pyserial` (USB-série), `pytest` (tests), `colorama` (console) |
+| Frontend | HTML5 + CSS3 + JS vanilla + SVG inline (zéro build) |
+| Langage ESP32 | Arduino C++ (PlatformIO, framework Arduino) |
+| Communication actuelle | USB-série 115200 bauds, `/dev/tty.usbserial-*` |
+| Communication cible | Wi-Fi mode AP, mêmes commandes texte sur TCP |
+| Format protocole | Texte brut ligne par ligne, sans framing binaire |
 
 ## Pour aller plus loin
 
 - [03_moteur_jeu.md](03_moteur_jeu.md) — API et concepts du moteur Python
-- [04_ia.md](04_ia.md) — Détails de l'IA Minimax
-- [05_firmware.md](05_firmware.md) — FSM, watchdog, modules ESP32
-- [07_hardware.md](07_hardware.md) — PCB et électronique
-- [jeu/comprendre_le_code.md](jeu/comprendre_le_code.md) — Vue pédagogique de l'architecture
+- [04_ia.md](04_ia.md) — Détails de l'IA Minimax (Alpha-Bêta, heuristique)
+- [hardware/pinout.md](hardware/pinout.md) — Pinout complet ESP32 et L298N
+- [hardware/calibration.md](hardware/calibration.md) — Calibration pas ↔ mm
+- [hardware/positions-murs.md](hardware/positions-murs.md) — Matrices MURS_H / MURS_V
