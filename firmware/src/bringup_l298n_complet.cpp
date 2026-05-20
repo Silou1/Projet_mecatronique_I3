@@ -590,6 +590,48 @@ static void demo_lever_murs(int n) {
 }
 
 // ============================================================================
+// Levee de mur Quoridor (helper appele par la commande WALL)
+// ============================================================================
+//
+// Convention Quoridor :
+//   Mur H (h, row, col) : separe rangs row et row+1, occupe cols col et col+1
+//   Mur V (v, row, col) : separe cols col et col+1, occupe rangs row et row+1
+//   Domaine : row, col dans [0..4]
+//
+// Mapping vers la matrice firmware :
+//   Mur H -> MURS_H[4-row][col] et MURS_H[4-row][col+1]
+//   Mur V -> MURS_V[5-row][col] et MURS_V[4-row][col]
+//
+// Pour chaque case mesuree : GOTO + LEVER + BAISSER. Les cases _NA sont sautees.
+
+static constexpr uint32_t WALL_DELAI_LEVE_MS   = 400;
+static constexpr uint32_t WALL_DELAI_BAISSE_MS = 400;
+
+static void wall_lever_case(int32_t x, int32_t y) {
+  goto_xy(x, y);
+  servo.write(SERVO_LEVER_DEG);
+  delay(WALL_DELAI_LEVE_MS);
+  servo.write(SERVO_REPOS_DEG);
+  delay(WALL_DELAI_BAISSE_MS);
+}
+
+static int wall_lever(char orientation, int row, int col) {
+  int raised = 0;
+  int32_t x, y;
+
+  if (orientation == 'H') {
+    int j = 4 - row;
+    if (position_mur_h(col, j, x, y))     { wall_lever_case(x, y); raised++; }
+    if (position_mur_h(col + 1, j, x, y)) { wall_lever_case(x, y); raised++; }
+  } else {  // 'V'
+    int i = col;
+    if (position_mur_v(i, 5 - row, x, y)) { wall_lever_case(x, y); raised++; }
+    if (position_mur_v(i, 4 - row, x, y)) { wall_lever_case(x, y); raised++; }
+  }
+  return raised;
+}
+
+// ============================================================================
 // Affichage
 // ============================================================================
 
@@ -610,6 +652,8 @@ static void afficher_aide() {
   Serial.println("  SPEED <us>        delai entre pas (500..10000)");
   Serial.println("  DUTY <pct>        PWM en % (10..60)");
   Serial.println("  STATUS            etat actuel");
+  Serial.println("  PING              repond PONG (handshake webapp)");
+  Serial.println("  WALL <H|V> <r> <c>  lever mur Quoridor (r,c dans [0..4])");
   Serial.println("  HELP              cette aide");
 }
 
@@ -664,6 +708,7 @@ static void traiter(String s) {
   if (s.length() == 0) return;
 
   if (s == "HELP")        { afficher_aide();  return; }
+  if (s == "PING")        { Serial.println("PONG"); return; }
   if (s == "STATUS")      { afficher_status(); return; }
   if (s == "LIMITS")      {
     Serial.print("X="); Serial.print(digitalRead(PIN_LIMIT_X) == LOW ? "LOW " : "HIGH");
@@ -685,6 +730,34 @@ static void traiter(String s) {
     long v = s.substring(5).toInt();
     if (v <= 0) { Serial.println("DEMO N : N doit etre > 0"); return; }
     demo_lever_murs((int)v);
+    return;
+  }
+
+  if (s.startsWith("WALL ")) {
+    String r = s.substring(5); r.trim();
+    if (r.length() < 5 || (r.charAt(0) != 'H' && r.charAt(0) != 'V')) {
+      Serial.println("WALL ERR orientation : H ou V attendu");
+      return;
+    }
+    char orient = r.charAt(0);
+    String reste = r.substring(2); reste.trim();
+    int sp = reste.indexOf(' ');
+    if (sp < 0) {
+      Serial.println("WALL ERR syntaxe : WALL <H|V> <row> <col>");
+      return;
+    }
+    int row = reste.substring(0, sp).toInt();
+    int col = reste.substring(sp + 1).toInt();
+    if (row < 0 || row > 4 || col < 0 || col > 4) {
+      Serial.print("WALL ERR borne : row="); Serial.print(row);
+      Serial.print(" col="); Serial.print(col);
+      Serial.println(" hors [0..4]");
+      return;
+    }
+    int raised = wall_lever(orient, row, col);
+    Serial.print("WALL OK "); Serial.print(orient);
+    Serial.print(" "); Serial.print(row); Serial.print(" "); Serial.print(col);
+    Serial.print(" raised="); Serial.println(raised);
     return;
   }
 

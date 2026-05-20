@@ -54,19 +54,21 @@ def test_open_and_handshake_serial_open_exception_returns_none():
 
 # ---------- UartBridge.forward_move() ----------
 
-def test_forward_wall_h_writes_correct_line():
+def test_forward_wall_h_writes_swapped_v():
+    """Mur 'h' engine -> 'V' firmware (inversion conventionnelle plateau)."""
     fake = MagicMock()
     b = UartBridge(fake)
     b.forward_move(("mur", {"orientation": "h", "row": 2, "col": 3}))
-    fake.write.assert_called_with(b"WALL H 2 3\n")
+    fake.write.assert_called_with(b"WALL V 2 3\n")
     fake.flush.assert_called()
 
 
-def test_forward_wall_v_uppercase():
+def test_forward_wall_v_writes_swapped_h():
+    """Mur 'v' engine -> 'H' firmware (inversion conventionnelle plateau)."""
     fake = MagicMock()
     b = UartBridge(fake)
     b.forward_move(("mur", {"orientation": "v", "row": 0, "col": 4}))
-    fake.write.assert_called_with(b"WALL V 0 4\n")
+    fake.write.assert_called_with(b"WALL H 0 4\n")
 
 
 def test_forward_pawn_is_noop():

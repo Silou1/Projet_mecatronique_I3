@@ -66,6 +66,14 @@ class QuoridorService:
                 self._ai_j2 = AI(player=PLAYER_TWO, difficulty=difficulty)
             self._status = "playing"
             self._last_ai_move_at = time.monotonic()
+            # Re-home le plateau physique au debut de chaque partie pour repartir
+            # d'un etat connu (chariot a l'origine).
+            if (
+                plateau_mode
+                and self._uart_bridge is not None
+                and self._uart_bridge.available
+            ):
+                self._uart_bridge.send_home()
 
     def to_dict(self) -> dict:
         """Sérialise l'état pour /api/state."""

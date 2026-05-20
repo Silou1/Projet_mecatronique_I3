@@ -111,7 +111,10 @@ class UartBridge:
         move_type, payload = move
         try:
             if move_type == "mur":
-                orientation = payload["orientation"].upper()
+                # Inversion H<->V : le plateau physique a une convention d'orientation
+                # inverse de celle de l'engine Quoridor (mesure manuelle de la matrice).
+                _SWAP = {"H": "V", "V": "H"}
+                orientation = _SWAP[payload["orientation"].upper()]
                 row = int(payload["row"])
                 col = int(payload["col"])
                 line = f"WALL {orientation} {row} {col}\n"
@@ -124,6 +127,20 @@ class UartBridge:
                 log.warning("UartBridge: type de coup inconnu %r, ignore.", move_type)
         except Exception as e:  # noqa: BLE001
             log.warning("UartBridge: forward echoue (%s), desactivation mirroring.", e)
+            self.available = False
+
+    def send_home(self) -> None:
+        """Envoie une commande HOME au plateau pour ré-homing au début d'une partie.
+
+        No-op si indisponible. En cas d'erreur, désactive le bridge.
+        """
+        if not self.available:
+            return
+        try:
+            self._serial.write(b"HOME\n")
+            self._serial.flush()
+        except Exception as e:  # noqa: BLE001
+            log.warning("UartBridge: HOME echoue (%s), desactivation mirroring.", e)
             self.available = False
 
     def close(self) -> None:
