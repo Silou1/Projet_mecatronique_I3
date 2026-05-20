@@ -1,65 +1,100 @@
 """Tests de UartBridge (utilise des mocks, pas de hardware requis)."""
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch, MagicMock
 
-import pytest
-
-from webapp.uart_bridge import UartBridge, init
+from webapp.uart_bridge import UartBridge, init, _open_and_handshake
 
 
-class TestInit:
-    def test_init_sans_port_retourne_none(self):
-        with patch("webapp.uart_bridge._find_devkit_port", return_value=None):
-            assert init() is None
+# ---------- init() ----------
 
-    def test_init_avec_erreur_uart_retourne_none(self):
-        with patch("webapp.uart_bridge._find_devkit_port", return_value="/dev/null"), \
-             patch("webapp.uart_bridge._open_client", side_effect=Exception("boom")):
-            assert init() is None
-
-    def test_init_succes_retourne_bridge(self):
-        fake_client = MagicMock()
-        with patch("webapp.uart_bridge._find_devkit_port", return_value="/dev/null"), \
-             patch("webapp.uart_bridge._open_client", return_value=fake_client):
-            bridge = init()
-            assert bridge is not None
-            assert bridge.available is True
+def test_init_no_port_returns_none():
+    with patch("webapp.uart_bridge._find_devkit_port", return_value=None):
+        assert init() is None
 
 
-class TestForwardMove:
-    def test_forward_deplacement_envoie_pawn(self):
-        fake_client = MagicMock()
-        bridge = UartBridge(fake_client)
-        move = ("deplacement", {"type": "deplacement", "target": [4, 3]})
-        bridge.forward_move(move)
-        fake_client.send_cmd.assert_called_once_with("PAWN", "4 3")
+def test_init_handshake_failure_returns_none():
+    with patch("webapp.uart_bridge._find_devkit_port", return_value="/dev/null"), \
+         patch("webapp.uart_bridge._open_and_handshake", return_value=None):
+        assert init() is None
+
+
+def test_init_handshake_success_returns_bridge():
+    fake_serial = MagicMock()
+    with patch("webapp.uart_bridge._find_devkit_port", return_value="/dev/null"), \
+         patch("webapp.uart_bridge._open_and_handshake", return_value=fake_serial):
+        bridge = init()
+        assert bridge is not None
         assert bridge.available is True
 
-    def test_forward_mur_envoie_wall(self):
-        fake_client = MagicMock()
-        bridge = UartBridge(fake_client)
-        move = ("mur", {"type": "mur", "orientation": "h", "row": 2, "col": 3})
-        bridge.forward_move(move)
-        fake_client.send_cmd.assert_called_once_with("WALL", "h 2 3")
-        assert bridge.available is True
 
-    def test_forward_erreur_desactive_disponibilite(self):
-        fake_client = MagicMock()
-        fake_client.send_cmd.side_effect = Exception("uart dead")
-        bridge = UartBridge(fake_client)
-        bridge.forward_move(("deplacement", {"type": "deplacement", "target": [4, 3]}))
-        assert bridge.available is False
+# ---------- _open_and_handshake() ----------
 
-    def test_forward_no_op_quand_indisponible(self):
-        fake_client = MagicMock()
-        bridge = UartBridge(fake_client)
-        bridge.available = False
-        bridge.forward_move(("deplacement", {"type": "deplacement", "target": [4, 3]}))
-        fake_client.send_cmd.assert_not_called()
+def test_open_and_handshake_pong_received():
+    fake_serial = MagicMock()
+    fake_serial.readline.return_value = b"PONG\n"
+    with patch("webapp.uart_bridge.serial.Serial", return_value=fake_serial):
+        result = _open_and_handshake("/dev/null")
+        assert result is fake_serial
+        fake_serial.write.assert_called_with(b"PING\n")
 
-    def test_forward_type_inconnu_no_op(self):
-        """Un type de coup inconnu ne doit ni lever ni désactiver le bridge."""
-        fake_client = MagicMock()
-        bridge = UartBridge(fake_client)
-        bridge.forward_move(("blabla", {}))
-        fake_client.send_cmd.assert_not_called()
-        assert bridge.available is True
+
+def test_open_and_handshake_no_pong_returns_none_and_closes():
+    fake_serial = MagicMock()
+    fake_serial.readline.return_value = b""
+    with patch("webapp.uart_bridge.serial.Serial", return_value=fake_serial), \
+         patch("webapp.uart_bridge.PING_TIMEOUT_S", 0.05):
+        result = _open_and_handshake("/dev/null")
+        assert result is None
+        fake_serial.close.assert_called()
+
+
+def test_open_and_handshake_serial_open_exception_returns_none():
+    with patch("webapp.uart_bridge.serial.Serial", side_effect=OSError("boom")):
+        assert _open_and_handshake("/dev/null") is None
+
+
+# ---------- UartBridge.forward_move() ----------
+
+def test_forward_wall_h_writes_correct_line():
+    fake = MagicMock()
+    b = UartBridge(fake)
+    b.forward_move(("mur", {"orientation": "h", "row": 2, "col": 3}))
+    fake.write.assert_called_with(b"WALL H 2 3\n")
+    fake.flush.assert_called()
+
+
+def test_forward_wall_v_uppercase():
+    fake = MagicMock()
+    b = UartBridge(fake)
+    b.forward_move(("mur", {"orientation": "v", "row": 0, "col": 4}))
+    fake.write.assert_called_with(b"WALL V 0 4\n")
+
+
+def test_forward_pawn_is_noop():
+    fake = MagicMock()
+    b = UartBridge(fake)
+    b.forward_move(("deplacement", {"target": [4, 2]}))
+    fake.write.assert_not_called()
+
+
+def test_forward_serial_exception_deactivates():
+    fake = MagicMock()
+    fake.write.side_effect = OSError("port mort")
+    b = UartBridge(fake)
+    b.forward_move(("mur", {"orientation": "h", "row": 0, "col": 0}))
+    assert b.available is False
+
+
+def test_forward_when_unavailable_is_noop():
+    fake = MagicMock()
+    b = UartBridge(fake)
+    b.available = False
+    b.forward_move(("mur", {"orientation": "h", "row": 0, "col": 0}))
+    fake.write.assert_not_called()
+
+
+def test_forward_unknown_move_type_does_not_crash():
+    fake = MagicMock()
+    b = UartBridge(fake)
+    b.forward_move(("inconnu", {}))
+    fake.write.assert_not_called()
+    assert b.available is True

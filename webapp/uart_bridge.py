@@ -1,23 +1,30 @@
-"""Wrapper optionnel autour de UartClient pour mirrorer les coups sur le plateau.
+"""Wrapper texte brut autour de pyserial pour mirroir les coups au plateau.
 
-Detection au boot : si un port est trouvé et le handshake passe, le bridge est
-actif. Sinon, init() retourne None et la web app reste 100 % autonome.
+Detection au boot : ouvre le port serie du DevKit ESP32 et fait un PING/PONG.
+Si PONG recu dans le delai, le bridge est actif. Sinon, init() retourne None
+et la webapp reste en mode autonome.
 
-Erreur en cours de partie : log + désactivation locale (available=False). Pas
-de tentative de reconnexion (cf. spec §10.4).
+Erreur en cours de partie : log + desactivation locale (available=False).
+Pas de tentative de reconnexion (cf. spec demo § 10.4).
 """
 from __future__ import annotations
 
 import glob
 import logging
 import platform
+import time
 from typing import Optional
+
+import serial
 
 log = logging.getLogger(__name__)
 
+PING_TIMEOUT_S = 5.0
+PING_RETRY_INTERVAL_S = 0.5
+
 
 def _find_devkit_port() -> Optional[str]:
-    """Cherche le port série du DevKit/PCB ESP32.
+    """Cherche le port serie du DevKit ESP32.
 
     Mac : /dev/cu.usbserial-*
     Linux/RPi : /dev/ttyUSB* puis /dev/ttyAMA*
@@ -32,69 +39,89 @@ def _find_devkit_port() -> Optional[str]:
     return ports[0] if ports else None
 
 
-def _open_client(port: str):
-    """Ouvre un UartClient et fait le handshake. Lève une exception si KO."""
-    from quoridor_engine import UartClient
-    client = UartClient(port)
-    client.connect()
-    return client
+def _open_and_handshake(port: str) -> Optional[serial.Serial]:
+    """Ouvre le port et fait un PING/PONG. Retourne serial ouvert ou None."""
+    try:
+        s = serial.Serial(port, 115200, timeout=PING_RETRY_INTERVAL_S, write_timeout=1.0)
+    except Exception as e:  # noqa: BLE001
+        log.warning("UartBridge: ouverture port %s echouee : %s", port, e)
+        return None
+
+    deadline = time.monotonic() + PING_TIMEOUT_S
+    while time.monotonic() < deadline:
+        try:
+            s.reset_input_buffer()
+            s.write(b"PING\n")
+            s.flush()
+            line = s.readline()
+            if b"PONG" in line:
+                return s
+        except Exception as e:  # noqa: BLE001
+            log.warning("UartBridge: PING echoue (%s)", e)
+            try:
+                s.close()
+            except Exception:  # noqa: BLE001
+                pass
+            return None
+
+    log.info("UartBridge: aucun PONG recu sur %s apres %.1fs.", port, PING_TIMEOUT_S)
+    try:
+        s.close()
+    except Exception:  # noqa: BLE001
+        pass
+    return None
 
 
 def init() -> Optional["UartBridge"]:
-    """Tente de détecter et d'ouvrir le port UART.
-
-    Returns:
-        UartBridge si succès, None sinon.
-    """
+    """Tente de detecter et d'ouvrir le port UART."""
     port = _find_devkit_port()
     if port is None:
         log.info("UartBridge: aucun port detecte, mode autonome.")
         return None
-    try:
-        client = _open_client(port)
-    except Exception as e:  # noqa: BLE001
-        log.warning("UartBridge: handshake echoue sur %s (%s), mode autonome.", port, e)
+    s = _open_and_handshake(port)
+    if s is None:
         return None
     log.info("UartBridge: connecte sur %s.", port)
-    return UartBridge(client)
+    return UartBridge(s)
 
 
 class UartBridge:
-    """Mirror best-effort des coups vers le firmware ESP32.
+    """Mirror best-effort des coups vers le firmware ESP32 (texte brut).
 
-    En cas d'erreur (timeout, port mort, etc.), `available` passe à False
+    En cas d'erreur (timeout, port mort, etc.), `available` passe a False
     et les forwards suivants sont no-op silencieux.
     """
 
-    def __init__(self, client):
-        self._client = client
+    def __init__(self, serial_obj: serial.Serial):
+        self._serial = serial_obj
         self.available: bool = True
 
     def forward_move(self, move: tuple) -> None:
-        """Envoie un coup au plateau. No-op si indisponible.
+        """Envoie un coup au plateau. No-op si indisponible ou si deplacement de pion.
 
-        En cas d'erreur, log et désactive `available`. Ne lève PAS.
+        En cas d'erreur, log et desactive `available`. Ne leve PAS.
 
         Args:
-            move: tuple (move_type, payload) où :
-                  - move_type == 'deplacement' : payload['target'] = [row, col]
+            move: tuple (move_type, payload) ou :
+                  - move_type == 'deplacement' : no-op (pas de systeme pion physique)
                   - move_type == 'mur' : payload['orientation'], ['row'], ['col']
         """
         if not self.available:
             return
         move_type, payload = move
         try:
-            if move_type == "deplacement":
-                r, c = payload["target"]
-                self._client.send_cmd("PAWN", f"{r} {c}")
-            elif move_type == "mur":
-                self._client.send_cmd(
-                    "WALL",
-                    f"{payload['orientation']} {payload['row']} {payload['col']}",
-                )
+            if move_type == "mur":
+                orientation = payload["orientation"].upper()
+                row = int(payload["row"])
+                col = int(payload["col"])
+                line = f"WALL {orientation} {row} {col}\n"
+                self._serial.write(line.encode("ascii"))
+                self._serial.flush()
+            elif move_type == "deplacement":
+                # No-op : pas de systeme physique de deplacement de pion pour ce demo.
+                return
             else:
                 log.warning("UartBridge: type de coup inconnu %r, ignore.", move_type)
-                return
         except Exception as e:  # noqa: BLE001
             log.warning("UartBridge: forward echoue (%s), desactivation mirroring.", e)
             self.available = False
@@ -102,7 +129,6 @@ class UartBridge:
     def close(self) -> None:
         """Ferme proprement la connexion UART."""
         try:
-            if hasattr(self._client, "close"):
-                self._client.close()
+            self._serial.close()
         except Exception:  # noqa: BLE001
             pass
