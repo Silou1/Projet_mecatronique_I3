@@ -149,10 +149,10 @@ class TestConstants:
 
 
 class TestNackCode:
-    """Tests de l'enum NackCode aligné sur le catalogue NACK du protocole UART §4.4."""
+    """Tests de l'enum NackCode (codes d'erreur du moteur de jeu)."""
 
     def test_nack_code_values_aligned_with_uart_protocol(self):
-        """NackCode.X.value doit correspondre exactement aux codes du spec UART §4.4."""
+        """NackCode.X.value doit correspondre aux libellés canoniques."""
         assert NackCode.ILLEGAL.value == "ILLEGAL"
         assert NackCode.OUT_OF_BOUNDS.value == "OUT_OF_BOUNDS"
         assert NackCode.WRONG_TURN.value == "WRONG_TURN"

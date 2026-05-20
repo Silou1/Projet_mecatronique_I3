@@ -45,19 +45,13 @@ Le rapport HTML est généré dans `htmlcov/index.html`.
 | `test_uart_bridge.py` | Transport série avec `serial.Serial` mocké |
 | `test_schemas.py` | Modèles Pydantic |
 
-### Tests hardware (`tests/integration/`)
+### Tests hardware
 
-| Fichier | Couverture |
-|---|---|
-| `test_uart_devkit.py` | Tests d'intégration avec ESP32 physiquement branché (marqueur `devkit`) |
+Aucun test hardware automatisé n'est enregistré aujourd'hui. Un harnais de tests d'intégration sur DevKit ESP32 (handshake `PING`/`PONG`, levée de murs `WALL`, etc.) sera ajouté à la phase 5, en cohérence avec le protocole texte stable.
 
 ## Marqueur `devkit`
 
-Les tests dans `tests/integration/test_uart_devkit.py` portent le marqueur pytest `devkit`. Ils nécessitent un ESP32-WROOM réellement branché en USB-C au Mac.
-
-Sans ce matériel, ils sont ignorés. Par défaut, `pytest -m "not devkit"` est recommandé en développement sans plateau.
-
-Ils valident que les commandes de base (`PING`, lecture des `LIMITS`, etc.) fonctionnent sur le canal série réel.
+Le marqueur pytest `devkit` reste défini dans `pyproject.toml` pour les futurs tests hardware. Sans test enregistré sous ce marqueur, `pytest -m "not devkit"` et `pytest` produisent le même résultat aujourd'hui.
 
 ## Couverture cible
 
@@ -66,7 +60,7 @@ Ils valident que les commandes de base (`PING`, lecture des `LIMITS`, etc.) fonc
 - `quoridor_engine/core.py` : ~75 %+.
 
 La couverture inférieure de `core.py` vient des branches d'erreur (cas extrêmes des sauts par-dessus un pion adverse)
-qui sont couvertes par les tests d'intégration mais difficiles à mesurer en couverture pure.
+difficiles à mesurer en couverture pure.
 
 ## Bonnes pratiques
 
@@ -75,22 +69,17 @@ qui sont couvertes par les tests d'intégration mais difficiles à mesurer en co
 - **Regroupement par classe `TestX`** : pour la lisibilité du rapport pytest.
 - **Cas nominal + cas d'erreur** : couvrir au minimum la voie heureuse et un cas qui doit échouer.
 
-## Tests hardware manuels (récap)
+## Tests hardware manuels (en attendant le harnais automatisé)
 
-Avec un DevKit ESP32 branché en USB-C :
+Avec un DevKit ESP32 branché en USB-C, on peut valider à la main :
 
-```bash
-pytest -m devkit
-```
+- Ouvrir un moniteur série (`pio device monitor -b 115200`).
+- Taper `PING`, attendre `PONG`.
+- Taper `LIMITS`, vérifier la lecture des fins de course X et Y.
+- Taper `STATUS`, vérifier la position courante et l'état des drivers.
 
-Doit valider :
+En cas de souci :
 
-- Handshake `PING` / `PONG`.
-- Lecture des fins de course (`LIMITS`).
-- Que le moniteur série répond aux commandes envoyées par pyserial.
-
-Si ces tests échouent, vérifier :
-
-- Le sketch est bien flashé (`pio run -t upload`).
-- Le port série est bien `/dev/tty.usbserial-*` ou `/dev/tty.usbmodem*`.
-- Aucune autre application n'utilise le port (fermer `pio device monitor` avant de lancer pytest).
+- Vérifier que le sketch est bien flashé (`pio run -t upload`).
+- Vérifier le port série (`ls /dev/tty.usbserial-* /dev/tty.usbmodem*`).
+- S'assurer qu'aucune autre application ne tient le port (fermer `pio device monitor` avant pyserial).

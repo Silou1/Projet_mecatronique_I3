@@ -30,10 +30,6 @@ pio device monitor -b 115200 # moniteur série (terminateur LF)
 
 PlatformIO est installé dans `~/.platformio/penv`. CLI uniquement — aucune extension Cursor/VS Code requise.
 
-Les envs de diagnostic disponibles (non production) :
-`bringup_l298n_indep`, `bringup_motors_and_limits`, `bringup_motor1_l298n`,
-`bringup_servo`, `bringup_limit_switch`.
-
 ---
 
 ## Mapping GPIO

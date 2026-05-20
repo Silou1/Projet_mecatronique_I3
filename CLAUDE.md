@@ -1,65 +1,79 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guide pour Claude Code (claude.ai/code) sur le projet Quoridor.
 
-## Project Overview
+## Vue d'ensemble
 
-Quoridor board game engine in Python (ICAM mechatronics project, Year 3). 6x6 board, 2 players, 6 walls each. Dual-processor architecture:
-- **Raspberry Pi 3/4** : runs the AI and game engine (Python)
-- **ESP32-WROOM** (Freenove) : controls all hardware via Arduino C++ (motors, servo, end-stops). Module = WROOM (no PSRAM, GPIO16/17 available).
-- **Webapp démo** (`webapp/`) : interface navigateur servie par FastAPI sur RPi (port 8000), frontend SVG vanilla. Mode autonome (moteur Python + IA) ou hybride avec plateau physique via UART (fallback gracieux si ESP32 non connecté). Voir [webapp/README.md](webapp/README.md).
-- Communication: UART0 TX/RX (serial, direct cable, 115200 bauds)
-- **Hardware state (2026-05-20)** : PCB v2 **abandonnée** (erreur de composant et conflits pins, détails dans le postmortem). Pivot vers **breadboard** avec les composants conservés (2× L298N, 2× steppers NEMA17, servo, 2× fins de course, alim 12V). Bring-up **validé le 2026-05-20** : CoreXY + servo + capteurs + matrices murs (18/60 positions mesurées). Sketch de production : [firmware/src/bringup_l298n_complet.cpp](firmware/src/bringup_l298n_complet.cpp). Détails : [hardware/README.md](hardware/README.md), postmortem dans [hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md](hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md), spec breadboard dans `docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md`, validation dans [docs/superpowers/specs/2026-05-20-bringup-breadboard-validation.md](docs/superpowers/specs/2026-05-20-bringup-breadboard-validation.md).
-- **ESP32 datasheet questions** : query the dedicated NotebookLM `ESP32 Development Board Pinout Reference Map` (id `7d0bccd1-df3f-456d-99a0-1192766043ba`) via the `notebooklm-mcp` MCP -- it is the source of truth for GPIO, peripherals, strapping pins, ADC, RTC, PWM. Do NOT rely on third-party board pinouts (Freenove DevKitC) which may diverge from the SoC datasheet.
+Jeu Quoridor 6×6 sur plateau mécatronique. Projet pédagogique ICAM 3A (équipe de 6).
 
-## Commands
+**Architecture (après pivot 2026-05-20)** :
+- **Mac (Python)** : webapp FastAPI port 8000 + IA Minimax + moteur de jeu. Tourne sur le Mac
+  de l'utilisateur. Internet via tethering USB iPhone pendant le développement.
+- **ESP32-WROOM (Arduino C++)** : sketch monolithique unique
+  [`firmware/src/bringup_l298n_complet.cpp`](firmware/src/bringup_l298n_complet.cpp).
+  CoreXY + servo + capteurs fins de course.
+- **Transport** : USB-série actuel (validé), Wi-Fi en mode AP (cible phase 5,
+  *prévu, non implémenté à ce jour*).
+- **Protocole** : texte ligne par ligne, identique USB/Wi-Fi : `PING`/`PONG`,
+  `WALL <H|V> <r> <c>`, `OK`/`ERR`.
+
+**État hardware (2026-05-20)** : breadboard (PCB v2 abandonnée, postmortem dans
+[`hardware/archive/`](hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)).
+Bring-up validé : 18/60 positions de murs mesurées (à revalider physiquement,
+voir [`docs/hardware/positions-murs.md`](docs/hardware/positions-murs.md)).
+
+## Commandes
 
 ```bash
-# Run the game
+# Webapp (mode autonome ou hybride si ESP32 branché)
+python -m webapp.server
+
+# CLI console (sans plateau physique)
 python main.py
 
-# Run all tests (~3.5 min)
-pytest
-
-# Run tests with coverage
-pytest --cov=quoridor_engine --cov-report=html
-
-# Run a specific test file
-pytest tests/test_moves.py
-
-# Run a single test
-pytest tests/test_moves.py::TestClassName::test_name -v
+# Tests
+pytest                               # toute la suite
+pytest -m "not devkit"               # même chose tant qu'aucun test devkit n'est enregistré
+pytest --cov=quoridor_engine         # couverture
+pytest tests/test_moves.py -v        # un fichier
 ```
 
-## Architecture
+## Architecture du repo
 
 ```
-main.py                  → Console UI (display, input parsing, game loop)
+main.py                  → CLI console
 quoridor_engine/
-  __init__.py            → Public exports: QuoridorGame, GameState, InvalidMoveError, AI
-  core.py                → Game logic: GameState (frozen dataclass), rules, move validation, BFS pathfinding
-  ai.py                  → AI: Minimax + Alpha-Beta pruning, heuristic evaluation, transposition table
-tests/
-  test_core.py           → GameState creation, basic structures
-  test_moves.py          → Pawn movement validation
-  test_walls.py          → Wall placement validation
-  test_game.py           → Full game scenarios
-  test_ai.py             → AI behavior and performance
+  core.py                → règles, GameState (frozen dataclass), NackCode, InvalidMoveError
+  ai.py                  → Minimax + Alpha-Bêta + iterative deepening + transposition
+webapp/
+  server.py              → FastAPI port 8000
+  service.py             → couche service entre API et moteur
+  uart_bridge.py         → transport USB-série actuel (pyserial)
+  schemas.py             → modèles Pydantic
+firmware/src/
+  bringup_l298n_complet.cpp  → sketch ESP32 de production
+docs/                    → documentation projet (entrée : docs/README.md)
+  hardware/              → INVARIANTS : pinout, positions murs, calibration
+tests/                   → pytest (moteur, IA, webapp)
+hardware/                → archive PCB v2 (postmortem)
 ```
 
-**Data flow:** `main.py` (UI) calls `QuoridorGame` (facade in `core.py`) which manages `GameState` (immutable) and delegates to module-level functions (`move_pawn`, `place_wall`, `get_possible_pawn_moves`, `_path_exists`, etc.). AI reads `GameState` via `game.get_current_state()`.
+## Code style
 
-**Key design decisions:**
-- `GameState` is a frozen dataclass — every move returns a new state (enables undo via history list and AI tree search)
-- Walls stored as `FrozenSet[Wall]` for O(1) lookup and hashability (used by AI transposition table)
-- `QuoridorGame` is the facade class; game logic lives in module-level functions in `core.py`
-- Move format: `('deplacement', (row, col))` or `('mur', ('h'|'v', row, col, 2))`
-- Players: `'j1'` (starts row 5, goes to row 0) and `'j2'` (starts row 0, goes to row 5)
-- Board coordinates: (0,0) top-left to (5,5) bottom-right
+- Français pour les noms de variables, commentaires, docstrings, prose markdown.
+- Anglais pour les noms de classes Python (PascalCase) et les termes très consacrés
+  (FastAPI, CoreXY, Minimax).
+- PEP 8, indentation 4 espaces, max 100 chars/ligne (code) ou 120 (markdown).
+- Type hints utilisés partout.
 
-## Code Style
+## Workflow git
 
-- Language: French for variable names, comments, and docstrings. English for class names.
-- Naming: `snake_case` for variables/functions, `PascalCase` for classes, `UPPER_SNAKE_CASE` for constants
-- PEP 8, 4-space indentation, max 100 chars per line
-- Type hints used throughout
+- Une seule branche : `main`. Pas de feature branches. Pas de PR.
+- Commits locaux phase par phase. Push direct vers `origin/main` après validation.
+
+## Référence ESP32
+
+Pour toute question sur les GPIO, périphériques, strapping pins, ADC, RTC, PWM :
+interroger le NotebookLM `ESP32 Development Board Pinout Reference Map`
+(id `7d0bccd1-df3f-456d-99a0-1192766043ba`) via le MCP `notebooklm-mcp`. Ne pas se fier
+aux pinouts third-party (Freenove DevKitC) qui peuvent diverger du SoC.

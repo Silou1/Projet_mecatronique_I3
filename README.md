@@ -1,81 +1,48 @@
-# Quoridor Interactif
+# Quoridor mécatronique
 
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+Jeu de plateau Quoridor 6×6 piloté par ordinateur, avec plateau physique
+où les murs sont levés par un piston monté sur chariot CoreXY.
 
-> Plateau Quoridor physique interactif où un joueur humain affronte une intelligence artificielle.
-> Architecture **Raspberry Pi (Python / IA) ↔ ESP32 (firmware C++)** via UART.
->
-> Projet mécatronique ICAM 2025-2026 — Année 3
-
----
+Projet pédagogique mécatronique — ICAM 2025-2026, année 3.
 
 ## Démarrage rapide
 
 ```bash
 git clone https://github.com/Silou1/Projet_mecatronique_I3.git
 cd Projet_mecatronique_I3
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+
+# Webapp (jeu dans le navigateur)
+python -m webapp.server
+# → http://localhost:8000
+
+# CLI console (sans plateau physique)
 python main.py
 ```
 
-Choisir **1** (Joueur vs Joueur) ou **2** (Joueur vs IA, 3 niveaux). Plus de détails : [docs/01_demarrage.md](docs/01_demarrage.md).
-
-## Architecture
-
-| Couche | Rôle | Technologie |
-|---|---|---|
-| **Raspberry Pi 3/4** | Moteur de jeu, IA Minimax, orchestration | Python 3.10+ |
-| **ESP32-WROOM** | Firmware temps réel : FSM, moteurs, LEDs, boutons | Arduino C++ + FreeRTOS |
-| **UART0 @ 115200 bauds** | Communication entre les deux processeurs | Série |
-
-Vue d'ensemble complète : [docs/02_architecture.md](docs/02_architecture.md).
-
-## État du projet
-
-| Phase | État |
-|---|---|
-| Moteur de jeu Python (règles, validation, undo) | ✅ |
-| IA Minimax + alpha-bêta | ✅ |
-| Interface console | ✅ |
-| Tests Python (278 tests, ≥ 99 % sur le module UART) | ✅ |
-| Firmware ESP32 — squelette + FSM (Plan 1) | ✅ |
-| **Protocole UART Plan 2** — design, code Python (`uart_client.py`), refactor firmware (`UartLink`) | ✅ |
-| **Intégration logicielle RPi ↔ ESP32** — `GameSession`, mode `--mode plateau` (P9.1–P9.4, P9.6) | ✅ |
-| **Webapp démo** — FastAPI + frontend SVG vanilla, interface navigateur, déploiement RPi | ✅ |
-| Tests d'intégration firmware ↔ Python sur DevKit (P8.6) | 🚧 attente DevKit |
-| Tests E2E partie complète PvIA sur DevKit (P9.5) | 🚧 attente DevKit |
-| **PCB v2** — abandonnée 2026-05-19 (postmortem dans [hardware/archive/](hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)) | ⛔ |
-| Bring-up breadboard (CoreXY L298N + servo + capteurs + matrices murs) — P10 | ✅ 2026-05-20 |
-| Intégration RPi ↔ ESP32 (UART0, refonte UartLink) — P11 | 📋 |
-
-Plan global détaillé : [docs/00_plan_global.md](docs/00_plan_global.md).
-
 ## Documentation
 
-- 📖 [docs/](docs/) — index complet (architecture, moteur, IA, firmware, hardware, tests, protocole UART)
-- 🎯 [docs/00_plan_global.md](docs/00_plan_global.md) — **ROADMAP maître**
-- 🔧 [hardware/](hardware/) — bring-up breadboard (PCB v2 archivée)
-- ⚙️ [firmware/](firmware/) — code ESP32 (PlatformIO)
-- 🧪 [tests/](tests/) — suite pytest
+Index complet : [`docs/README.md`](docs/README.md).
+
+- [Présentation du projet](docs/01_projet.md)
+- [Architecture Mac ↔ ESP32](docs/02_architecture.md)
+- [Démarrage et dépannage](docs/03_demarrage.md)
+- [Moteur de jeu + IA](docs/04_engine.md)
+- [Webapp](docs/05_webapp.md)
+- [Firmware ESP32](docs/06_firmware.md)
+- [Protocole de communication](docs/07_protocole.md)
+- [Tests](docs/08_tests.md)
+- [Invariants hardware](docs/hardware/) — ne pas modifier sans accord
 
 ## Tests
 
 ```bash
-pytest -m "not devkit"                          # 278 tests (moteur/IA + UART + GameSession + CLI + webapp), ~8 s
-pytest --cov=quoridor_engine --cov-report=html  # couverture
+pytest -m "not devkit"
 ```
-
-Plus : [docs/08_tests.md](docs/08_tests.md).
-
-## Contribution
-
-Conventions de code et de commits dans [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Équipe
 
-Projet mené par une équipe de 6 étudiants ICAM 3A. Développeur principal : **Silouane Chaumais** ([@Silou1](https://github.com/Silou1)).
-
-## License
-
-MIT — voir [LICENSE](LICENSE).
+Projet mené par une équipe de 6 étudiants ICAM 3A. Dépôt :
+[github.com/Silou1/Projet_mecatronique_I3](https://github.com/Silou1/Projet_mecatronique_I3).

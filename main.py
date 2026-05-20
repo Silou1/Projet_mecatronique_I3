@@ -547,50 +547,18 @@ def display_ai_move(move: Move, thinking_time: float):
 
 def parse_args():
     """Parse les arguments CLI du point d'entrée Quoridor."""
-    parser = argparse.ArgumentParser(description="Quoridor - moteur Python.")
-    parser.add_argument(
-        "--mode",
-        choices=["console", "plateau"],
-        default="console",
-        help="console = prompt clavier ; plateau = dialogue UART avec ESP32",
-    )
-    parser.add_argument(
-        "--port",
-        help="Port serie pour le mode plateau (ex /dev/ttyUSB0)",
-    )
+    parser = argparse.ArgumentParser(description="Quoridor - moteur Python (CLI console).")
     parser.add_argument(
         "--difficulty",
         choices=["facile", "normal", "difficile"],
-        help="Niveau de l'IA (default: normal en plateau, prompt en console)",
+        help="Niveau de l'IA (sinon demande interactive).",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Mode verbeux (logs trames + etat). Hors demo.",
+        help="Mode verbeux.",
     )
-
-    args = parser.parse_args()
-    if args.mode == "plateau" and not args.port:
-        parser.error("--port requis en mode plateau")
-    return args
-
-
-def run_plateau(args):
-    """Mode plateau physique : orchestration UART avec l'ESP32 (P9)."""
-    import serial
-    from quoridor_engine import GameSession, UartClient
-
-    ser = serial.Serial(args.port, baudrate=115200, timeout=0.05)
-    uart = UartClient(ser)
-    game = QuoridorGame()
-    ai = AI(player="j2", difficulty=args.difficulty or "normal")
-    session = GameSession(game, ai, uart, debug=args.debug)
-
-    try:
-        session.run()
-    except Exception as exc:
-        print(f"[ERREUR] {exc}", file=sys.stderr)
-        sys.exit(1)
+    return parser.parse_args()
 
 
 def run_console(args=None):
@@ -780,12 +748,8 @@ def run_console(args=None):
 
 
 def main():
-    """Point d'entrée CLI : dispatch console ou plateau."""
-    args = parse_args()
-    if args.mode == "console":
-        run_console(args)
-    else:
-        run_plateau(args)
+    """Point d'entrée CLI : lance le mode console."""
+    run_console(parse_args())
 
 
 # =============================================================================
