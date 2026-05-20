@@ -537,6 +537,59 @@ static void goto_xy(int32_t x_cible, int32_t y_cible) {
 }
 
 // ============================================================================
+// DEMO : N murs aleatoires parmi les mesures, levee + redescente a chaque arret
+// ============================================================================
+
+static constexpr uint32_t DEMO_DELAI_LEVE_MS    = 400;
+static constexpr uint32_t DEMO_DELAI_BAISSE_MS  = 400;
+
+static void demo_lever_murs(int n) {
+  if (!position_connue) {
+    Serial.println("DEMO refuse : HOME requis.");
+    return;
+  }
+
+  int liste[MUR_NB_TOTAL];
+  int nb = 0;
+  for (int idx = 0; idx < MUR_NB_TOTAL; ++idx) {
+    bool th; int i, j; int32_t x, y;
+    if (decode_index_tour(idx, th, i, j, x, y)) liste[nb++] = idx;
+  }
+  if (nb == 0) {
+    Serial.println("DEMO refuse : aucun mur mesure.");
+    return;
+  }
+
+  // Fisher-Yates avec esp_random (RNG hardware ESP32).
+  for (int i = nb - 1; i > 0; --i) {
+    int k = (int)(esp_random() % (uint32_t)(i + 1));
+    int tmp = liste[i]; liste[i] = liste[k]; liste[k] = tmp;
+  }
+
+  int total = (n < nb) ? n : nb;
+  Serial.print("=== DEMO : "); Serial.print(total);
+  Serial.print(" murs aleatoires parmi "); Serial.print(nb); Serial.println(" mesures ===");
+
+  for (int k = 0; k < total; ++k) {
+    bool th; int i, j; int32_t x, y;
+    decode_index_tour(liste[k], th, i, j, x, y);
+
+    Serial.print("DEMO "); Serial.print(k + 1); Serial.print("/"); Serial.print(total);
+    Serial.print(" : "); Serial.print(th ? "MUR H (" : "MUR V (");
+    Serial.print(i); Serial.print(", "); Serial.print(j);
+    Serial.print(")  -> ("); Serial.print(x); Serial.print(", "); Serial.print(y);
+    Serial.println(")");
+
+    goto_xy(x, y);
+    servo.write(SERVO_LEVER_DEG);
+    delay(DEMO_DELAI_LEVE_MS);
+    servo.write(SERVO_REPOS_DEG);
+    delay(DEMO_DELAI_BAISSE_MS);
+  }
+  Serial.println("=== DEMO terminee ===");
+}
+
+// ============================================================================
 // Affichage
 // ============================================================================
 
@@ -550,6 +603,7 @@ static void afficher_aide() {
   Serial.println("  M2 F/B <n>        moteur 2 seul (debug, INVALIDE position)");
   Serial.println("  LEVER | BAISSER   servo 0 deg / 180 deg");
   Serial.println("  SERVO <angle>     angle 0..180");
+  Serial.println("  DEMO [N]          N murs aleatoires parmi mesures, leve+baisse (defaut 10)");
   Serial.println("  LIMITS            lecture X et Y");
   Serial.println("  LIMITS WATCH      lecture continue (Enter pour sortir)");
   Serial.println("  EN ON | EN OFF    active/coupe les 2 drivers");
@@ -626,6 +680,13 @@ static void traiter(String s) {
   if (s == "NEXT" || s == "N") { tour_suivant(); return; }
   if (s == "STOP")   { tour_stop(); return; }
   if (s == "LIST")   { afficher_liste(); return; }
+  if (s == "DEMO")   { demo_lever_murs(10); return; }
+  if (s.startsWith("DEMO ")) {
+    long v = s.substring(5).toInt();
+    if (v <= 0) { Serial.println("DEMO N : N doit etre > 0"); return; }
+    demo_lever_murs((int)v);
+    return;
+  }
 
   if (s.startsWith("MUR ")) {
     String r = s.substring(4); r.trim();
