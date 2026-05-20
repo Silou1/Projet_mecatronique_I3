@@ -1,5 +1,11 @@
 # Spec — Bring-up hardware breadboard
 
+> **Status : CLOSED** — Bring-up validé le 2026-05-20.
+>
+> Voir [2026-05-20-bringup-breadboard-validation.md](2026-05-20-bringup-breadboard-validation.md) pour l'état final.
+>
+> Ce design est conservé à titre historique. Notable : la migration de drivers a fait des allers-retours (A4988 → L298N → DRV8825 → L298N final). Les sketches DRV8825 sont archivés dans `firmware/src/archive/drv8825-2026-05-20/`. Les modules Plan 2 sont archivés dans `firmware/archive_plan1_pcb_v2/src_plan2/`.
+
 > **Date** : 2026-05-19
 > **Statut** : design figé, prêt pour implémentation dans une nouvelle session
 > **Branche** : à créer (ex. `feat/bringup-breadboard`) depuis `cleanup/reset-bringup-breadboard`

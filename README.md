@@ -46,7 +46,8 @@ Vue d'ensemble complète : [docs/02_architecture.md](docs/02_architecture.md).
 | Tests d'intégration firmware ↔ Python sur DevKit (P8.6) | 🚧 attente DevKit |
 | Tests E2E partie complète PvIA sur DevKit (P9.5) | 🚧 attente DevKit |
 | **PCB v2** — abandonnée 2026-05-19 (postmortem dans [hardware/archive/](hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)) | ⛔ |
-| Bring-up breadboard (2 moteurs A4988 + servo + 2 fins de course) — P10 | 🚧 |
+| Bring-up breadboard (CoreXY L298N + servo + capteurs + matrices murs) — P10 | ✅ 2026-05-20 |
+| Intégration RPi ↔ ESP32 (UART0, refonte UartLink) — P11 | 📋 |
 
 Plan global détaillé : [docs/00_plan_global.md](docs/00_plan_global.md).
 

@@ -8,65 +8,40 @@ Firmware Arduino C++ qui tourne sur l'ESP32-WROOM et contrôle tout le hardware 
 
 | Phase | État |
 |---|---|
-| **Plan 1 — Squelette + FSM + watchdog** | ✅ Implémenté, compile sans erreur (`pio run` SUCCESS), RAM 6,6%, Flash 21,1% |
-| **Tests d'intégration sur cible** | 🚧 Reportés tant qu'un DevKit n'est pas branché — scénarios FSM décrits dans [docs/superpowers/plans/2026-04-28-firmware-esp32-plan-1-squelette.md](superpowers/plans/2026-04-28-firmware-esp32-plan-1-squelette.md) (Task 9) |
-| **Plan 2 — Protocole UART réel** | ✅ Implémenté ([UartLink](../firmware/src/UartLink.cpp), validé pytest avec MockSerial) |
-| **Plan 3 — Drivers hardware** | 🚧 En cours : bring-up breadboard (2 A4988 + servo + 2 fins de course en GPIO direct ESP32). Voir [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](superpowers/specs/2026-05-19-bringup-breadboard-design.md). PCB v2 abandonnée le 2026-05-19 ([postmortem](../hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)). |
+| **Plan 1 — Squelette + FSM + watchdog (PCB v2)** | ⛔ Archivé 2026-05-20 (`firmware/archive_plan1_pcb_v2/src_plan2/`). PCB v2 abandonnée. |
+| **Plan 2 — Protocole UART** | ⛔ Archivé 2026-05-20 (`firmware/archive_plan1_pcb_v2/src_plan2/UartLink.*`). Sera réutilisé en P11. |
+| **Bring-up breadboard L298N (CoreXY + servo + matrices murs)** | ✅ Validé 2026-05-20. Sketch de production : [bringup_l298n_complet.cpp](../firmware/src/bringup_l298n_complet.cpp). Spec validation : [2026-05-20-bringup-breadboard-validation.md](superpowers/specs/2026-05-20-bringup-breadboard-validation.md). |
+| **Plan 3 — Intégration RPi ↔ ESP32 via UART** | 📋 À faire (P11). |
 
-## Architecture des modules
+## Architecture (état au 2026-05-20)
 
-| Module | Fichier(s) | Rôle |
-|---|---|---|
-| **GameController** | [firmware/src/GameController.{cpp,h}](../firmware/src/) | FSM principale, orchestration, watchdog |
-| **UartLink** | [firmware/src/UartLink.{cpp,h}](../firmware/src/) | Serial UART0 vers RPi (texte Plan 1, binaire Plan 2) |
-| **ButtonMatrix** | [firmware/src/ButtonMatrix.{cpp,h}](../firmware/src/) | Scan matrice 6×6, détection intents joueur |
-| **MotionControl** | [firmware/src/MotionControl.{cpp,h}](../firmware/src/) | Tâche FreeRTOS Core 0, queue de commandes (HOMING / MOVE_TO_WALL_SLOT / PUSH_WALL). Stub Plan 1 (sleep + DONE). Pilotage A4988 en GPIO direct ESP32 à implémenter dans P11 (post bring-up breadboard). |
-| **LedDriver** | [firmware/src/LedDriver.{cpp,h}](../firmware/src/) | Interface WS2812B (stub Plan 1, FastLED Plan 3) |
-| **LedAnimator** | [firmware/src/LedAnimator.{cpp,h}](../firmware/src/) | Patterns visuels : `PENDING_FLASH`, `TIMEOUT_FLASH`, `NACK_FLASH`, `ERROR_PATTERN`, `EXECUTING_SPINNER` |
-| **Pins** | [firmware/src/Pins.h](../firmware/src/Pins.h) | Vidé après abandon PCB v2 (2026-05-19). Garde uniquement `PIN_LED_DEBUG`. Nouveau mapping breadboard dans [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](superpowers/specs/2026-05-19-bringup-breadboard-design.md). Ancien mapping : `firmware/archive_plan1_pcb_v2/Pins.h.original`. |
+Le firmware courant n'est plus structuré en modules `.h/.cpp`. Le bring-up breadboard a abouti à des sketches monolithiques dans `firmware/src/` qui pilotent directement CoreXY + servo + capteurs. C'est l'état "production validée" qui sert de référence pour la suite (Plan 3).
 
-## FSM — 7 états
+| Sketch | Rôle |
+|---|---|
+| [bringup_l298n_complet.cpp](../firmware/src/bringup_l298n_complet.cpp) | **Production validée** : HOME auto, GOTO, LEVER/BAISSER, MUR H/V, TOUR, STATUS, matrices `MURS_H` + `MURS_V` |
+| [bringup_l298n_indep.cpp](../firmware/src/bringup_l298n_indep.cpp) | Contrôle bas niveau indépendant (M1/M2/servo/capteurs) — diagnostic |
+| [bringup_motors_and_limits.cpp](../firmware/src/bringup_motors_and_limits.cpp) | CoreXY + capteurs sans servo (jalon intermédiaire) |
+| [bringup_motor1_l298n.cpp](../firmware/src/bringup_motor1_l298n.cpp) | Test M1 isolé |
+| [bringup_servo.cpp](../firmware/src/bringup_servo.cpp) | Test servo isolé |
+| [bringup_limit_switch.cpp](../firmware/src/bringup_limit_switch.cpp) | Test fin de course isolé |
 
-```
-                          ┌──────┐
-                          │ BOOT │  selfTest, homing
-                          └──┬───┘
-                             ▼
-                   ┌──────────────────┐
-                   │   WAITING_RPI    │  émet HELLO toutes les 200 ms
-                   └────┬─────────┬───┘
-                        │         │ HELLO_ACK reçu
-              timeout 3s│         ▼
-                        ▼   ┌───────────┐
-                   ┌────────│ CONNECTED │◄─────────┐
-                   │ DEMO   └────┬──────┘          │
-                   │ (terminal)  │                 │
-                   └─────────────┤                 │
-                                 ▼                 │
-                  ┌───────────────────────────┐    │
-                  │  BUTTON_INTENT_PENDING    │    │
-                  │  (3 timeouts → ERROR)     │    │
-                  └────────┬──────────────────┘    │
-                           │ ACK                   │
-                           ▼                       │
-                   ┌────────────┐  DONE            │
-                   │ EXECUTING  │──────────────────┘
-                   └────────────┘
-                                                  ┌──────────┐
-                  UART_LOST ou 3 timeouts ────────►│  ERROR   │
-                                                  └────┬─────┘
-                                                       │ RESET
-                                                       ▼
-                                                    BOOT
-```
+### Modules Plan 2 archivés
 
-Détails complets des transitions dans [superpowers/specs/2026-04-28-firmware-esp32-architecture-globale-design.md](superpowers/specs/2026-04-28-firmware-esp32-architecture-globale-design.md) §2.4.
+L'architecture modules (`GameController`, `UartLink`, `MotionControl`, `ButtonMatrix`, `LedDriver`, `LedAnimator`) est dans [firmware/archive_plan1_pcb_v2/src_plan2/](../firmware/archive_plan1_pcb_v2/src_plan2/). Raisons de l'archivage :
+
+1. **PCB v2 abandonnée** (2026-05-19) : mapping `Pins.h` invalide.
+2. **Split GPIO** (2026-05-20) : RPi pilote désormais les 36 boutons + 36 LEDs WS2812 (`ButtonMatrix`, `LedDriver`, `LedAnimator` ESP32 obsolètes).
+3. **`MotionControl` était un stub** (sleep + DONE), jamais validé sur cible. À refaire en Plan 3 sur la base du sketch `bringup_l298n_complet.cpp`.
+4. **`UartLink`** reste pertinent (protocole Plan 2 validé en pytest avec MockSerial). Sera la base de Plan 3.
+
+## FSM Plan 2 (archivée)
+
+La FSM 7 états (`BOOT`, `WAITING_RPI`, `DEMO`, `CONNECTED`, `BUTTON_INTENT_PENDING`, `EXECUTING`, `ERROR_STATE`) est documentée dans [firmware/archive_plan1_pcb_v2/src_plan2/GameController.cpp](../firmware/archive_plan1_pcb_v2/src_plan2/GameController.cpp) et [superpowers/specs/2026-04-28-firmware-esp32-architecture-globale-design.md](superpowers/specs/2026-04-28-firmware-esp32-architecture-globale-design.md). À reprendre/adapter en Plan 3.
 
 ## Multitâche FreeRTOS
 
-- **Core 1 (par défaut)** : `loop()` Arduino → FSM `GameController`, UART, scan boutons, animations LED
-- **Core 0** : tâche `MotionControl` dédiée → consomme une queue de commandes motrices, ne bloque jamais la FSM principale
-- **Synchronisation** : queues FreeRTOS (commandes + résultats) entre les deux cores
+Architecture Plan 2 archivée. Le sketch `bringup_l298n_complet.cpp` actuel tourne en monothread (boucle Arduino classique) car les mouvements moteurs bloquent volontairement (génération de pas par `delayMicroseconds`). À refactoriser en Plan 3 si besoin (queue de commandes côté Core 0 pour ne pas bloquer la réception UART sur Core 1).
 
 ## Watchdog
 
@@ -78,31 +53,35 @@ Détails complets des transitions dans [superpowers/specs/2026-04-28-firmware-es
 
 ```bash
 cd firmware
-pio run                                  # compile
-pio run -t upload                        # flash via USB
-pio device monitor                       # ouvrir le moniteur série (115200 bauds, LF)
-```
 
-Configuration moniteur : 115200 bauds, fin de ligne `LF` (pas `CRLF`). Filtre `direct` déjà fixé dans `platformio.ini`.
+# Sketch de production (par défaut)
+pio run                                          # ou : pio run -e esp32dev
+pio run -t upload                                # flash
+pio device monitor                               # 115200 bauds, LF
+
+# Sketch de production explicite (équivalent)
+pio run -e bringup_l298n_complet -t upload
+pio device monitor -e bringup_l298n_complet
+
+# Autres envs disponibles : bringup_limit_switch, bringup_servo,
+# bringup_motor1_l298n, bringup_motors_and_limits, bringup_l298n_indep
+```
 
 ## Tests d'intégration
 
-7 scénarios manuels via Serial Monitor sont décrits dans [firmware/TESTS_PENDING.md](../firmware/TESTS_PENDING.md) :
+Les tests manuels Plan 1 (7 scénarios FSM) sont obsolètes (PCB v2 + Plan 2 archivés). Les tests d'intégration Plan 3 (UART RPi ↔ ESP32 breadboard) seront définis dans la spec P11 à venir. Le harness pytest `tests/integration/test_uart_devkit.py` (8 scénarios validés en MockSerial) reste utilisable.
 
-1. Boot nominal vers `DEMO`
-2. Boot nominal vers `CONNECTED` (`HELLO_ACK`)
-3. Cycle de jeu simulé complet (`BTN`, `ACK`, `NACK`, `CMD MOVE`)
-4. Perte UART en `CONNECTED` (3 s de silence)
-5. Escalade timeout intent (3 timeouts → `ERROR`)
-6. Récupération depuis `ERROR` (`RESET`)
-7. Watchdog (provocation contrôlée, **modification non commitée**)
+## Mapping GPIO (validé 2026-05-20)
 
-À exécuter dès que l'ESP32 est branché. Si tous passent, supprimer `TESTS_PENDING.md` et faire un commit `test(firmware): plan 1 valide en bout-en-bout sur cible`.
+Source de vérité : commentaires d'entête de [firmware/src/bringup_l298n_complet.cpp](../firmware/src/bringup_l298n_complet.cpp). Détaillé dans [07_hardware.md](07_hardware.md) et [docs/superpowers/specs/2026-05-20-bringup-breadboard-validation.md](superpowers/specs/2026-05-20-bringup-breadboard-validation.md).
 
-## Mapping GPIO
+| Fonction | GPIO |
+|---|---|
+| M1 (L298N #1) IN1/IN2/IN3/IN4/ENA/ENB | 14, 27, 26, 25, 33, 32 |
+| M2 (L298N #2) IN1/IN2/IN3/IN4/ENA/ENB | 16, 17, 21, 22, 19, 23 |
+| Capteur fin de course X | 13 (INPUT_PULLUP) |
+| Capteur fin de course Y | 18 (INPUT_PULLUP) |
+| Servo SG90 (Signal) | 4 |
+| LED debug intégrée | 2 |
 
-Source de vérité : [firmware/src/Pins.h](../firmware/src/Pins.h), audité contre la PCB v2 — voir [hardware/AUDIT_PCB_V2.md](../hardware/AUDIT_PCB_V2.md).
-
-⚠️ **UART2 (GPIO16/17) n'est PAS disponible** sur cette carte : ces pins sont consommées par la matrice boutons. Le lien RPi utilise donc **UART0** (partagée avec l'USB de debug).
-
-Pour toute question sur les capacités d'un GPIO ESP32, consulter le NotebookLM dédié (cf. [hardware/README.md](../hardware/README.md)) plutôt que des mappings de cartes tierces.
+Pour toute question sur les capacités d'un GPIO ESP32, consulter le NotebookLM dédié (cf. [hardware/README.md](../hardware/README.md)).

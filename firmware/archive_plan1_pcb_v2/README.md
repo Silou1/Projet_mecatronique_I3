@@ -21,7 +21,23 @@ Voir [../../hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md](../../h
 
 ## Ce qui n'a PAS été archivé (reste actif dans `firmware/src/`)
 
-- `main.cpp`, `GameController.{cpp,h}`, `UartLink.{cpp,h}` : code mature hardware-agnostic, conservé.
-- `MotionControl.{cpp,h}`, `ButtonMatrix.{cpp,h}`, `LedDriver.{cpp,h}`, `LedAnimator.{cpp,h}` : stubs hardware-agnostic, conservés. Seront enrichis dans la session bring-up breadboard ou ultérieures.
-- `Pins.h` : vidé (garde uniquement `PIN_LED_DEBUG`). Les pins du nouveau câblage seront définis dans la spec bring-up.
 - `tests_devkit/_uart_helpers.py` : helpers Python génériques (crc16, find_devkit_port, etc.), conservés.
+
+## src_plan2/ — Code firmware Plan 2 (ajouté 2026-05-20)
+
+Lors de la clôture de la session bring-up breadboard (2026-05-20), l'architecture Plan 2 a été archivée ici. Raisons :
+
+1. **PCB v2 abandonnée** : le mapping `Pins.h` et toute la structure modules (matrice boutons + LEDs WS2812 pilotées par ESP32) étaient câblés pour la PCB v2.
+2. **Split GPIO décidé le 2026-05-20** : le RPi pilote désormais les 36 boutons + 36 LEDs WS2812. L'ESP32 ne pilote plus que CoreXY + servo + capteurs. Donc `ButtonMatrix`, `LedDriver`, `LedAnimator` côté ESP32 sont obsolètes.
+3. **`GameController` et `MotionControl`** étaient stubs (sleep + DONE). À refaire en s'appuyant sur la logique validée dans `bringup_l298n_complet.cpp`.
+4. **`UartLink`** reste pertinent : protocole UART Plan 2 (framing + CRC-16 + seq/ack). Sera réutilisé comme base pour Plan 3 (intégration RPi ↔ ESP32 sur breadboard), avec adaptations.
+
+### Contenu de `src_plan2/`
+
+- `main.cpp` : entrée Plan 2 (WDT 5 s + init modules + loop FSM)
+- `Pins.h` : header vide post-abandon PCB v2 (seulement `PIN_LED_DEBUG`)
+- `ButtonMatrix.{cpp,h}` : scan 6x6 boutons (sera côté RPi désormais)
+- `LedDriver.{cpp,h}` + `LedAnimator.{cpp,h}` : WS2812 + patterns (côté RPi désormais)
+- `GameController.{cpp,h}` : FSM 7 états (BOOT/WAITING_RPI/DEMO/CONNECTED/...)
+- `MotionControl.{cpp,h}` : interface Command/Result FreeRTOS (stub, jamais validé sur cible)
+- `UartLink.{cpp,h}` : **à réutiliser pour Plan 3** (protocole UART validé en pytest)

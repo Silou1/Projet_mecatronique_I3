@@ -24,13 +24,13 @@ Vue d'ensemble du projet : deux processeurs, un canal de communication, une sép
                                                                        │
                                                                        │ I2C, GPIO, PWM
                                                                        ▼
-                                            ┌────────────────────────────────────────────┐
-                                            │  Hardware (breadboard, PCB v2 abandonnée)  │
-                                            │  - 2× moteur NEMA 17 + A4988 (GPIO direct) │
-                                            │  - Servo (rotation/reset murs)             │
-                                            │  - 2× fins de course (CoreXY)              │
-                                            │  - LEDs et boutons : à recâbler ulterieur. │
-                                            └────────────────────────────────────────────┘
+                                            ┌───────────────────────────────────────────────────────────┐
+                                            │  Hardware (breadboard, PCB v2 abandonnée)                 │
+                                            │  - 2× NEMA 17 + L298N (full-step, ENA/ENB PWM)            │
+                                            │  - Servo (rotation/reset murs)                            │
+                                            │  - 2× fins de course (CoreXY)                             │
+                                            │  - LEDs WS2812 et boutons : côté RPi (split GPIO)         │
+                                            └───────────────────────────────────────────────────────────┘
 ```
 
 ## Répartition des responsabilités

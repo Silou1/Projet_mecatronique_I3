@@ -106,32 +106,32 @@ Ordre de travail temporaire : **P8.1 → P8.2 → P8.4 → P8.3 → P8.5**, puis
 
 > **2026-05-19** : PCB v2 abandonnée (postmortem dans [hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md](../hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)). Pivot vers breadboard avec composants conservés.
 
-### P10 — Bring-up breadboard 🚧
+### P10 — Bring-up breadboard ✅
 
 > But : valider la chaîne moteurs / servo / fins de course sur breadboard, sans la PCB. Périmètre minimal pour démontrer la mécanique.
 >
-> Spec et procédure détaillées : [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](superpowers/specs/2026-05-19-bringup-breadboard-design.md).
+> **✅ Validé le 2026-05-20** : CoreXY + servo + capteurs + matrices murs (sketch [firmware/src/bringup_l298n_complet.cpp](../firmware/src/bringup_l298n_complet.cpp)). Détails dans [docs/superpowers/specs/2026-05-20-bringup-breadboard-validation.md](superpowers/specs/2026-05-20-bringup-breadboard-validation.md). La spec design initiale est dans [docs/superpowers/specs/2026-05-19-bringup-breadboard-design.md](superpowers/specs/2026-05-19-bringup-breadboard-design.md) (CLOSED).
 
-- [ ] **P10.1** Câblage breadboard : rails 12V / GND, A4988 M1 (+ condo 100 µF), réglage Vref, A4988 M2, servo, 2 fins de course
-- [ ] **P10.2** Sketch de test isolé dans `firmware/test_bringup/` (env `[env:test_bringup]` PlatformIO), piloté par commandes série
-- [ ] **P10.3** Test M1 — rotation 200 pas avant/arrière, vérifier sens et absence de pas perdus
-- [ ] **P10.4** Test M2 — idem
-- [ ] **P10.5** Test servo — positions 0° / 90° / 180°, course angulaire de désengagement des loquets
-- [ ] **P10.6** Test fin de course 1 — appui main → lecture LOW, polarité confirmée
-- [ ] **P10.7** Test fin de course 2 — idem
-- [ ] **P10.8** Mettre à jour [07_hardware.md](07_hardware.md) avec les pins réellement utilisées et les Vref mesurés
+- [x] **P10.1** Câblage breadboard : rails 12V / GND, L298N M1 (+ condo 100 µF), réglage Vref, L298N M2, servo, 2 fins de course
+- [x] **P10.2** Sketch de test isolé dans `firmware/test_bringup/` (env `[env:test_bringup]` PlatformIO), piloté par commandes série
+- [x] **P10.3** Test M1 — rotation 200 pas avant/arrière, vérifier sens et absence de pas perdus
+- [x] **P10.4** Test M2 — idem
+- [x] **P10.5** Test servo — positions 0° / 90° / 180°, course angulaire de désengagement des loquets
+- [x] **P10.6** Test fin de course 1 — appui main → lecture LOW, polarité confirmée
+- [x] **P10.7** Test fin de course 2 — idem
+- [x] **P10.8** Mettre à jour [07_hardware.md](07_hardware.md) avec les pins réellement utilisées et les Vref mesurés
+- [x] **P10.9** Calibration X/Y validée : 100 pas full-step = 2 cm pile (1 cm = 50 pas, 1 mm = 5 pas)
+- [x] **P10.10** Matrices murs `MURS_H[5][6]` + `MURS_V[6][5]` implémentées (60 positions, 18 mesurées le 2026-05-20)
 
-### P11 — Drivers firmware intégrés au GameController 📋
+### P11 — Intégration RPi ↔ ESP32 (UART) 📋
 
-> But : porter le sketch bring-up en modules réutilisables (`MotionControl`, `Servo`, `LimitSwitch`) intégrés dans la FSM existante.
+> But : connecter RPi (Python + webapp) ↔ ESP32 (firmware breadboard validé) via UART0. Refondre UartLink (archivé dans firmware/archive_plan1_pcb_v2/src_plan2/) pour intégrer la logique GOTO/LEVER/HOME validée dans `bringup_l298n_complet.cpp`. Porter les matrices murs en table de lookup. Réécrire `MotionControl` et `GameController` sur la base du sketch de production.
 
-- [ ] **P11.1** Réécrire `firmware/src/MotionControl.cpp` pour piloter réellement les 2× A4988 (interface `Command` / `Result` conservée)
-- [ ] **P11.2** Ajouter module servo dans le firmware
-- [ ] **P11.3** Ajouter lecture des fins de course (interrupt-driven ou polling)
-- [ ] **P11.4** Routine de homing complète (recul après détection)
-- [ ] **P11.5** Mapping mm → pas, vitesse, accélération, calibration sur mécanique 3D réelle
-- [ ] **P11.6** Coordonnées XY de chaque slot de mur (table de lookup)
-- [ ] **P11.7** Mettre à jour [05_firmware.md](05_firmware.md) avec l'architecture des nouveaux modules
+- [ ] **P11.1** Refonte `UartLink` côté ESP32 sur la base de `firmware/archive_plan1_pcb_v2/src_plan2/UartLink.cpp` (framing + CRC-16 + seq/ack OK, à adapter au nouveau firmware breadboard)
+- [ ] **P11.2** Nouveau `main.cpp` qui reprend la logique de `bringup_l298n_complet.cpp` mais avec UART au lieu de commandes série humaines
+- [ ] **P11.3** Portage matrices `MURS_H` + `MURS_V` en table de lookup, complétion des 42 positions manquantes par mesure physique
+- [ ] **P11.4** Tests d'intégration `test_uart_devkit.py` côté Python (déjà existant, à adapter)
+- [ ] **P11.5** Mise à jour [05_firmware.md](05_firmware.md) avec la nouvelle architecture
 
 ### P12 — Logique de jeu complète sur plateau 📋
 

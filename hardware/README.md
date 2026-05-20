@@ -4,9 +4,9 @@
 
 **Date de pivot : 2026-05-19.**
 
-La PCB v2 (commandée 2026-04-28) a été **abandonnée** suite à une erreur de composant (PCA9548A reçu au lieu d'un MCP23017) et plusieurs conflits de pins sur le routage.
+La PCB v2 (commandée 2026-04-28) a été **abandonnée** suite à une erreur de composant et plusieurs conflits de pins sur le routage (détails dans le postmortem ci-dessous).
 
-Le nouveau câblage se fait **sur breadboard**, avec les composants physiques conservés (ESP32-WROOM, 2× A4988, 2× steppers NEMA17, servo, 2× fins de course, alim 12V).
+Le nouveau câblage se fait **sur breadboard**, avec les composants physiques conservés (ESP32-WROOM, 2× L298N, 2× steppers NEMA17, servo, 2× fins de course, alim 12V).
 
 ## Périmètre du bring-up
 
@@ -16,7 +16,7 @@ Le nouveau câblage se fait **sur breadboard**, avec les composants physiques co
 
 ### Pivot driver moteur 2026-05-20 — DRV8825 → L298N
 
-Lors du bring-up moteur 1, les drivers DRV8825 (reçus en remplacement des A4988 du spec initial) n'ont jamais pu être réglés : Vref bloqué à 0 V malgré câblage conforme, plusieurs tentatives infructueuses. Pivot vers **L298N** (pont en H générique) le jour de la démo. Pilotage en PWM sur ENA/ENB pour limiter le courant moyen (le L298N n'a pas de régulation interne contrairement au DRV8825).
+Lors du bring-up moteur 1, les drivers DRV8825 (reçus en remplacement des drivers stepper du spec initial) n'ont jamais pu être réglés : Vref bloqué à 0 V malgré câblage conforme, plusieurs tentatives infructueuses. Pivot vers **L298N** (pont en H générique) le jour de la démo. Pilotage en PWM sur ENA/ENB pour limiter le courant moyen (le L298N n'a pas de régulation interne contrairement au DRV8825).
 
 Compromis assumé : pas de microstepping, vitesse max plus basse, le L298N chauffe à fort DUTY. Acceptable pour la démo P0.
 
@@ -148,23 +148,86 @@ Sketch d'intégration qui combine CoreXY + 2 fins de course + servo, avec tracki
 
 - **Cycle de test cible :** `EN ON` → `HOME` → `GOTO x y` → `LEVER` → `BAISSER`. Validé manuellement le 2026-05-20 : les déplacements X et Y sont précis au pas près, le servo passe correctement de 180° à 0° et inversement.
 
+### 2026-05-20 — Moteur 1 via DRV8825 (validé, isolé)
+
+Reprise du bring-up DRV8825 après avoir analysé un montage qui fonctionne sur le même hardware (autre groupe ICAM). Les deux hypothèses sur l'échec précédent ont été **confirmées** : pont `SLP–RST` manquant **et** alim `VDD` logique non câblée. En les corrigeant + en ajoutant un condo 100 µF sur VMOT, le driver fonctionne du premier coup.
+
+Périmètre de cette validation : **un seul moteur (M1) en isolation**. Le CoreXY complet et le sketch d'intégration `bringup_full` tournent **encore en L298N** ; la migration des deux drivers + réintégration CoreXY est l'étape suivante.
+
+- **Pins ESP32 (3 GPIO/moteur) :**
+
+| Pin DRV8825 | GPIO ESP32 | Note |
+|---|---|---|
+| STEP | 14 | impulsion = 1 pas (front montant) |
+| DIR | 27 | sens de rotation |
+| EN | 26 | **actif LOW** (LOW = driver alimenté) |
+| VDD | 3V3 ESP32 | alim logique, **obligatoire** (oublié à la 1re tentative) |
+| SLP | 3V3 (via pont avec RST) | doit être HIGH pour réveiller le driver |
+| RST | 3V3 (via pont avec SLP) | doit être HIGH pour activer les sorties |
+| M0 / M1 / M2 | non connectés | full step (200 pas/tour) |
+
+- **Câblage puissance :**
+  - VMOT → rail +12 V avec **condo électrolytique 100 µF** entre VMOT et GND au plus près du driver (**obligatoire** : sans lui les pics de flyback claquent le DRV8825).
+  - GND logique + GND alim 12 V + GND ESP32 tous sur le même rail.
+  - 1A / 1B → bobine A du NEMA17, 2A / 2B → bobine B.
+  - **Ne jamais débrancher le moteur sous tension** (idem, tue le driver).
+
+- **Calibration Vref (point critique) :**
+  - Formule DRV8825 : `Vref = I_bobine × 5 × R_sense`. Avec R100 (= 0,1 Ω) sur ce module : `Vref = I × 0,5`.
+  - À mesurer **moteur débranché, 12 V actif**, multimètre entre la vis du potentiomètre et GND.
+  - **Point de départ sûr : Vref = 0,25 V (~0,5 A par bobine)**, largement suffisant pour faire tourner un NEMA17 à vide.
+  - Maximum recommandé pour ce module sans flux d'air forcé : 0,5 V (~1 A par bobine). Au-delà, le driver entre en thermal shutdown.
+
+- **Sketch de test :** [firmware/src/bringup_motor1.cpp](../firmware/src/bringup_motor1.cpp) (existait depuis la 1re tentative, pin EN corrigé 33 → 26 pour ce câblage)
+- **Env PlatformIO :** `bringup_motor1`
+  - Flash : `pio run -e bringup_motor1 -t upload`
+
+- **Commandes série utiles :**
+  - `EN ON` / `EN OFF` — active / coupe le driver (important pour la thermique, voir ci-dessous)
+  - `M1 F <n>` / `M1 B <n>` — n pas dans un sens ou l'autre (200 = 1 tour complet)
+  - `SPEED <us>` — demi-période STEP en µs, défaut 1000 (= 500 Hz). Plage 50–10000.
+  - `STATUS`, `HELP`
+
+- **Gestion thermique (le DRV8825 chauffe vite) :**
+  - **Couper EN entre les mouvements** (`EN OFF` après chaque pas). Au repos, le driver maintient le courant dans les bobines = dissipation continue. Pour le firmware d'intégration, prévoir une coupure automatique de EN après ~500 ms d'immobilité.
+  - **Ventilation forcée** : un petit fan 5 V dirigé sur le heatsink fait gagner 20–30 °C.
+  - **Microstepping** (1/4 ou 1/8) lisse le profil de courant et diminue les pics thermiques — à câbler sur M0/M1/M2 lors de la phase d'intégration CoreXY.
+  - Pour un usage prolongé à Vref > 0,3 V sans ventilation, la thermique devient le facteur limitant.
+
+- **À valider lors de l'intégration CoreXY DRV8825 (étape suivante) :**
+  - Comportement à 2 moteurs avec alim 12 V partagée (les pics de courant des deux drivers peuvent se cumuler).
+  - Calibration `100 pas = 2 cm` mesurée en L298N : devrait rester identique en full-step DRV8825 (même moteur, même mécanique, même nombre de pas/tour), à reconfirmer.
+  - Comportement HOME — le profil de courant DRV8825 est plus carré que le L298N PWM, donc le moteur perd moins de pas à basse vitesse.
+
 ### Pistes pour la prochaine itération driver moteur
 
-Le L298N fonctionne mais a deux défauts mesurés à l'usage : **bruit audible élevé** et **mouvement saccadé** (pas de microstepping en full-step). Pour la suite, on envisage de retenter le DRV8825 avec une approche plus rigoureuse, après avoir analysé un montage qui fonctionne sur le même hardware (autre groupe ICAM).
+**Statut au 2026-05-20 :** DRV8825 validé sur M1 isolé (voir section ci-dessus). Reste à faire pour finaliser la migration :
 
-**Hypothèses sur la cause de l'échec DRV8825 du 2026-05-20** (Vref bloqué à 0V) :
+- Câbler le 2ᵉ DRV8825 sur M2 (STEP=16, DIR=17, EN=21) et libérer les pins L298N #2 (22, 19, 23, 25, 32, 33).
+- Adapter `bringup_motors_and_limits.cpp` et `bringup_full.cpp` au pilotage 2-fils-par-pas (STEP/DIR/EN) au lieu de la séquence full-step 4 phases + PWM utilisée pour le L298N.
+- Implémenter la coupure auto de EN après immobilité (gestion thermique).
+- Câbler M0/M1/M2 vers 3V3/GND selon la table de vérité DRV8825 pour activer le microstepping (cible : 1/4 ou 1/8 pour le silence et la fluidité).
 
-1. **Pont SLP–RST manquant.** Sur le DRV8825, `SLP` et `RST` sont actifs au niveau bas. Si l'un des deux est laissé flottant ou tiré à GND, le driver reste en sleep et le Vref lu est à 0V même quand on tourne le potentiomètre. Le pontage `SLP–RST` (ou les deux à +3.3V) est obligatoire.
-2. **VDD logique non câblé.** Le DRV8825 a deux alims séparées : `VMOT` (12V puissance) et `VDD` (3.3V logique). Sans VDD, la logique interne ne tourne pas et le Vref reste à 0V.
-
-**Architecture cible (minimum) :** 3 GPIO ESP par moteur (`STEP`, `DIR`, `EN`), microstepping fixé par cavaliers `M0/M1/M2` vers GND ou +3.3V, `SLP+RST` pontés à +3.3V. Économie GPIO substantielle vs L298N (6 GPIO/moteur).
-
-**Avantages attendus :** silence (microstepping fluide), moins de consommation, plus de couple par ampère, libère 8 GPIO ESP au total.
-
-**Prérequis avant cette refonte :**
-- Équerres pour stabiliser le plateau (commandées, en attente).
-- Vérifier physiquement le câblage SLP-RST, VDD, Vref sur un seul driver d'abord, avant de remettre tout le CoreXY en jeu.
+**Avantages déjà observés (sur M1) :** silence quasi total vs L298N, mouvement fluide sans saccades, libération de 3 GPIO par moteur (6 au total pour le CoreXY).
 
 ## Archive
 
 - [archive/pcb-v2-2026-04-28-ABANDONNEE/](archive/pcb-v2-2026-04-28-ABANDONNEE/) : ancienne PCB v2, audit complet, source EasyEDA, et postmortem
+
+## Sketch de production validé (2026-05-20)
+
+Le sketch [firmware/src/bringup_l298n_complet.cpp](../firmware/src/bringup_l298n_complet.cpp) est le sketch de référence à jour. Il intègre :
+
+- HOME automatique au boot (capteurs X et Y, recul 20 pas)
+- Commandes série : `X F/B <n>`, `Y F/B <n>` (CoreXY), `GOTO <x> <y>`, `LEVER`, `BAISSER`, `MUR H/V <i> <j>`, `TOUR`, `NEXT`, `STOP`, `LIST`, `STATUS`
+- Matrices murs `MURS_H[5][6]` et `MURS_V[6][5]` (60 positions, 18 mesurées au 2026-05-20)
+- Convention CoreXY validée : X = M1+M2 sens opposés, Y = M1+M2 même sens
+- Convention servo : 180° = REPOS, 0° = MUR LEVÉ
+- Calibration : 100 pas = 2 cm pile (X et Y)
+
+Flash :
+```bash
+cd firmware && pio run -e bringup_l298n_complet -t upload && pio device monitor -e bringup_l298n_complet
+```
+
+Tout le contexte validé : [docs/superpowers/specs/2026-05-20-bringup-breadboard-validation.md](../docs/superpowers/specs/2026-05-20-bringup-breadboard-validation.md).
