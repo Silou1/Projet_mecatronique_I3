@@ -109,6 +109,62 @@ Cette session étend le bring-up M1 seul à la chaîne CoreXY complète. Sketch 
   - Course mesurée au premier homing : ~553 pas en X, ~506 pas en Y entre le centre de la table et la butée (utile comme borne basse pour le dimensionnement logiciel ultérieur)
 - **Comportement diagonal de M1/M2 seuls :** documenté dans l'aide du sketch. M1 ou M2 isolé produit un mouvement diagonal (X±Y) — utile pour vérifier qu'un moteur tourne et qu'aucune phase n'est inversée, mais **jamais à utiliser pour homing**.
 
+### 2026-05-20 — Servo SG90 + intégration complète (validé)
+
+Sketch d'intégration qui combine CoreXY + 2 fins de course + servo, avec tracking de position et commande `GOTO`. C'est le sketch utilisé pour préparer le cycle complet de placement d'un mur.
+
+- **Servo SG90 (piston mécanisme de placement des murs)**
+
+| Fil servo | Vers | Note |
+|---|---|---|
+| Signal (orange) | GPIO 4 ESP32 | PWM 50 Hz, signal 3.3V OK pour SG90 |
+| V+ (rouge) | rail +5V alim **externe** dédiée | pas le 5V de l'ESP32 |
+| GND (marron) | GND alim externe **ET** GND ESP32 | masse commune obligatoire |
+
+- **Convention mécanique servo :**
+  - **180° = position de REPOS** (piston bas, plateau en sécurité)
+  - **0° = MUR LEVÉ** (piston haut)
+  - Toute autre position au boot **casse le mécanisme**.
+
+- **Sécurité boot :** dans le sketch `bringup_full`, l'init servo est la **toute première** opération de `setup()` (avant `Serial.begin`, avant l'init moteurs). La fenêtre entre l'alimentation de l'ESP32 et la mise en signal PWM à 180° est de l'ordre de 50 ms. Pendant cette fenêtre le servo n'a pas de couple mais ne bouge pas tout seul.
+
+- **Règle opérationnelle :** toujours faire `BAISSER` avant de couper l'alimentation. Comme ça la position physique à l'instant de la coupure = 180°, et au prochain boot le code réécrit 180° par-dessus 180° → aucun mouvement.
+
+- **Calibration mécanique (validée 2026-05-20) :**
+  - **100 pas = 2 cm pile** sur X et Y (full-step, `SPEED=8000 us`, `DUTY=60 %`, L298N + NEMA17)
+  - Donc **1 pas = 0.2 mm**, **1 cm = 50 pas**, **1 mm = 5 pas**
+  - Conversion à utiliser pour donner les positions des murs en cm puis convertir en pas pour `GOTO`
+
+- **Sketch de test :** [firmware/src/bringup_full.cpp](../firmware/src/bringup_full.cpp)
+- **Env PlatformIO :** `bringup_full` (dépend de `madhephaestus/ESP32Servo`)
+  - Flash : `pio run -e bringup_full -t upload`
+
+- **Commandes série spécifiques à l'intégration :**
+  - `GOTO <x> <y>` — déplacement absolu (en pas, depuis l'origine HOME). Sequentiel X puis Y. Bornes logicielles `GOTO_X_MAX = 700`, `GOTO_Y_MAX = 700`.
+  - `LEVER` — servo → 0° (lève un mur)
+  - `BAISSER` — servo → 180° (position de repos)
+  - `SERVO <angle>` — angle arbitraire 0..180 (debug)
+  - + toutes les commandes du sketch `bringup_motors_and_limits` (HOME, X/Y F/B, M1/M2 F/B, LIMITS, EN, SPEED, DUTY, STATUS, HELP)
+
+- **Cycle de test cible :** `EN ON` → `HOME` → `GOTO x y` → `LEVER` → `BAISSER`. Validé manuellement le 2026-05-20 : les déplacements X et Y sont précis au pas près, le servo passe correctement de 180° à 0° et inversement.
+
+### Pistes pour la prochaine itération driver moteur
+
+Le L298N fonctionne mais a deux défauts mesurés à l'usage : **bruit audible élevé** et **mouvement saccadé** (pas de microstepping en full-step). Pour la suite, on envisage de retenter le DRV8825 avec une approche plus rigoureuse, après avoir analysé un montage qui fonctionne sur le même hardware (autre groupe ICAM).
+
+**Hypothèses sur la cause de l'échec DRV8825 du 2026-05-20** (Vref bloqué à 0V) :
+
+1. **Pont SLP–RST manquant.** Sur le DRV8825, `SLP` et `RST` sont actifs au niveau bas. Si l'un des deux est laissé flottant ou tiré à GND, le driver reste en sleep et le Vref lu est à 0V même quand on tourne le potentiomètre. Le pontage `SLP–RST` (ou les deux à +3.3V) est obligatoire.
+2. **VDD logique non câblé.** Le DRV8825 a deux alims séparées : `VMOT` (12V puissance) et `VDD` (3.3V logique). Sans VDD, la logique interne ne tourne pas et le Vref reste à 0V.
+
+**Architecture cible (minimum) :** 3 GPIO ESP par moteur (`STEP`, `DIR`, `EN`), microstepping fixé par cavaliers `M0/M1/M2` vers GND ou +3.3V, `SLP+RST` pontés à +3.3V. Économie GPIO substantielle vs L298N (6 GPIO/moteur).
+
+**Avantages attendus :** silence (microstepping fluide), moins de consommation, plus de couple par ampère, libère 8 GPIO ESP au total.
+
+**Prérequis avant cette refonte :**
+- Équerres pour stabiliser le plateau (commandées, en attente).
+- Vérifier physiquement le câblage SLP-RST, VDD, Vref sur un seul driver d'abord, avant de remettre tout le CoreXY en jeu.
+
 ## Archive
 
 - [archive/pcb-v2-2026-04-28-ABANDONNEE/](archive/pcb-v2-2026-04-28-ABANDONNEE/) : ancienne PCB v2, audit complet, source EasyEDA, et postmortem
