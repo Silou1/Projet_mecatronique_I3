@@ -49,3 +49,31 @@ class Transport(ABC):
 
         Ex: 'wifi 192.168.4.1:3333' ou 'serial /dev/cu.usbserial-110'.
         """
+
+
+class NullTransport(Transport):
+    """Transport qui ne fait rien. Mode autonome explicite.
+
+    Sert à éviter les Optional[Transport] partout dans le service.
+    Toute tentative d'écriture lève TransportError.
+    """
+
+    def open(self) -> None:
+        pass
+
+    def write_line(self, line: str) -> None:
+        raise TransportError("NullTransport : écriture impossible en mode autonome")
+
+    def read_line(self, timeout: float = 1.0) -> str | None:
+        return None
+
+    def close(self) -> None:
+        pass
+
+    @property
+    def is_alive(self) -> bool:
+        return False
+
+    @property
+    def description(self) -> str:
+        return "none (mode autonome)"
