@@ -44,3 +44,66 @@ class TestEngineToStripIndex:
         idx = engine_to_strip_index(row, col)
         row_phys_calc = idx // 6
         assert row_phys_calc == expected_row_phys
+
+
+from quoridor_engine.core import create_new_game, move_pawn, PLAYER_ONE, PLAYER_TWO
+from webapp.leds import (
+    LedColor, RenderOptions, render_state,
+    COLOR_OFF, COLOR_PLAYER_ONE, COLOR_PLAYER_TWO, COLOR_LEGAL_MOVE,
+)
+
+
+class TestRenderState:
+    """Conversion GameState -> liste de 36 LedColor (frame)."""
+
+    def test_partie_initiale_pions_seuls(self):
+        """Au depart : J1 en bas-centre (LED 3) bleu, J2 en haut-centre (LED 32) rouge."""
+        state = create_new_game()
+        frame = render_state(state, RenderOptions(show_legal_moves=False))
+
+        assert len(frame) == 36
+        assert frame[3] == COLOR_PLAYER_ONE   # J1 bas-centre
+        assert frame[32] == COLOR_PLAYER_TWO  # J2 haut-centre
+        # Toutes les autres LEDs eteintes
+        for idx, color in enumerate(frame):
+            if idx in (3, 32):
+                continue
+            assert color == COLOR_OFF, f"LED {idx} devrait etre eteinte"
+
+    def test_apres_un_coup_j1(self):
+        """J1 bouge de (5,3) a (4,3) -> LED 8 (4,3) bleu, LED 3 eteinte."""
+        state = create_new_game()
+        state = move_pawn(state, PLAYER_ONE, (4, 3))
+
+        frame = render_state(state, RenderOptions(show_legal_moves=False))
+        assert frame[3] == COLOR_OFF
+        assert frame[8] == COLOR_PLAYER_ONE
+        assert frame[32] == COLOR_PLAYER_TWO
+
+    def test_coups_legaux_actives(self):
+        """Avec show_legal_moves=True, les cases atteignables apparaissent en cyan."""
+        state = create_new_game()
+        # J1 demarre en (5,3). Cases atteignables : (4,3), (5,2), (5,4).
+        # Index strip : (4,3)=LED 8, (5,2)=LED 2, (5,4)=LED 4.
+        frame = render_state(state, RenderOptions(show_legal_moves=True))
+
+        assert frame[3] == COLOR_PLAYER_ONE  # pion J1
+        assert frame[8] == COLOR_LEGAL_MOVE  # case (4,3) atteignable
+        assert frame[2] == COLOR_LEGAL_MOVE  # case (5,2)
+        assert frame[4] == COLOR_LEGAL_MOVE  # case (5,4)
+
+    def test_coups_legaux_desactives_par_defaut(self):
+        """RenderOptions par defaut : pas de coups legaux."""
+        state = create_new_game()
+        frame = render_state(state, RenderOptions())  # defaut
+        # Aucune LED ne devrait etre COLOR_LEGAL_MOVE
+        assert COLOR_LEGAL_MOVE not in frame
+
+    def test_pion_ecrase_coup_legal_si_meme_case(self):
+        """Robustesse : si un pion et un coup legal sont au meme idx,
+        c'est la couleur du pion qui gagne (peint en dernier)."""
+        state = create_new_game()
+        frame = render_state(state, RenderOptions(show_legal_moves=True))
+        # Le pion J1 en (5,3)=LED 3 n'est pas dans ses propres coups legaux
+        # donc frame[3] reste COLOR_PLAYER_ONE.
+        assert frame[3] == COLOR_PLAYER_ONE

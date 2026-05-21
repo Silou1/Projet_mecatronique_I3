@@ -29,3 +29,56 @@ def engine_to_strip_index(row: int, col: int) -> int:
     if row_phys % 2 == 0:           # rangee paire : gauche -> droite
         return row_phys * 6 + col
     return row_phys * 6 + (5 - col)  # rangee impaire : droite -> gauche
+
+
+from dataclasses import dataclass
+from quoridor_engine.core import GameState, get_possible_pawn_moves, PLAYER_ONE, PLAYER_TWO
+
+
+@dataclass(frozen=True)
+class LedColor:
+    """Couleur RGB d'une LED, composantes 0-255 (nominales avant attenuation firmware)."""
+    r: int
+    g: int
+    b: int
+
+
+# Palette (valeurs nominales, le firmware applique setBrightness(102) = 40%)
+COLOR_OFF        = LedColor(0,   0,   0  )  # fond eteint
+COLOR_PLAYER_ONE = LedColor(0,   0,   255)  # J1 humain : bleu
+COLOR_PLAYER_TWO = LedColor(255, 0,   0  )  # J2 IA : rouge
+COLOR_LEGAL_MOVE = LedColor(0,   64,  64 )  # coups legaux : cyan dim (P1 bonus)
+
+
+@dataclass(frozen=True)
+class RenderOptions:
+    """Options de rendu (extensibles pour scope futur)."""
+    show_legal_moves: bool = False
+
+
+def render_state(state: GameState, opts: RenderOptions) -> list[LedColor]:
+    """Convertit un GameState en frame complete de 36 couleurs.
+
+    Fonction pure : sortie totalement determinee par les inputs, pas de side effect.
+
+    Args:
+        state: etat de la partie en cours
+        opts: options de rendu (P0/P1 toggles)
+
+    Returns:
+        Liste de 36 LedColor, index = position sur le strip serpentin.
+    """
+    frame: list[LedColor] = [COLOR_OFF] * 36
+
+    # P1 (bonus) : coups legaux peints EN PREMIER (ecrases par les pions ensuite)
+    if opts.show_legal_moves:
+        for row, col in get_possible_pawn_moves(state, state.current_player):
+            frame[engine_to_strip_index(row, col)] = COLOR_LEGAL_MOVE
+
+    # P0 : pions peints EN DERNIER pour ecraser tout coup legal au meme endroit
+    r1, c1 = state.player_positions[PLAYER_ONE]
+    r2, c2 = state.player_positions[PLAYER_TWO]
+    frame[engine_to_strip_index(r1, c1)] = COLOR_PLAYER_ONE
+    frame[engine_to_strip_index(r2, c2)] = COLOR_PLAYER_TWO
+
+    return frame
