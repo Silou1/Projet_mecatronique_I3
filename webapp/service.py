@@ -40,6 +40,7 @@ class QuoridorService:
             transport.open()
         self._plateau = PlateauBridge(transport=transport)
         self._led_renderer = LedRenderer(bridge=self._plateau)
+        self._plateau.add_on_reconnect_callback(self._led_renderer.on_reconnect)
         self._startup_error = startup_error
         self._lock = threading.Lock()
         # Réglages persistés entre parties (cf. spec §9.7)

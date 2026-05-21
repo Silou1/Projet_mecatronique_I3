@@ -62,6 +62,9 @@ class PlateauBridge:
         self._reconnect_stop = threading.Event()
         self._reconnect_thread: Optional[threading.Thread] = None
 
+        # Callbacks declenches apres une reconnexion reussie (LedRenderer, etc.)
+        self._on_reconnect_callbacks: list = []
+
     @property
     def transport(self) -> Transport:
         return self._transport
@@ -70,6 +73,10 @@ class PlateauBridge:
     def available(self) -> bool:
         """True si transport ouvert ET pas marqué comme perdu."""
         return self._transport.is_alive and not self.transport_lost
+
+    def add_on_reconnect_callback(self, callback) -> None:
+        """Enregistre un callback a appeler quand la connexion est retablie."""
+        self._on_reconnect_callbacks.append(callback)
 
     def send_command(self, cmd: str, timeout: float = 5.0) -> Optional[str]:
         """Envoie une ligne et attend une ligne de réponse.
@@ -112,6 +119,7 @@ class PlateauBridge:
             if reply == "PONG":
                 latency_ms = (time.monotonic() - t0) * 1000.0
                 with self._counters_lock:
+                    was_lost = self.transport_lost
                     self.last_pong_at = time.monotonic()
                     self.failed_pings = 0
                     self.transport_lost = False
@@ -119,6 +127,16 @@ class PlateauBridge:
                     if len(self._latency_samples) > self._max_samples:
                         self._latency_samples.pop(0)
                     self.latency_avg_ms = sum(self._latency_samples) / len(self._latency_samples)
+                # Si on revient d'une coupure -> notifier les abonnes (LedRenderer notamment).
+                # Hors du _counters_lock pour ne pas bloquer les lectures /api/status pendant
+                # l'execution des callbacks.
+                if was_lost:
+                    log.info("Reconnexion confirmee par PONG, notification des abonnes")
+                    for cb in self._on_reconnect_callbacks:
+                        try:
+                            cb()
+                        except Exception as e:  # noqa: BLE001
+                            log.warning("Callback on_reconnect echoue (%s)", e)
             else:
                 with self._counters_lock:
                     self.failed_pings += 1
