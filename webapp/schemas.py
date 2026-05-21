@@ -3,7 +3,7 @@ from typing import Literal, Optional, Tuple
 from pydantic import BaseModel, Field
 
 
-Mode = Literal["human_vs_ai", "ai_vs_ai"]
+Mode = Literal["human_vs_ai", "ai_vs_ai", "human_vs_human"]
 Difficulty = Literal["facile", "normal", "difficile"]
 Speed = Literal["lent", "normal", "rapide"]
 Status = Literal["waiting", "playing", "paused", "finished"]

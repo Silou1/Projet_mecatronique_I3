@@ -26,6 +26,10 @@ class TestNewGamePayload:
         with pytest.raises(ValidationError):
             NewGamePayload(mode="human_vs_ai", difficulty="extreme", plateau_mode=False)
 
+    def test_payload_accepte_human_vs_human(self):
+        p = NewGamePayload(mode="human_vs_human", difficulty="normal", plateau_mode=False)
+        assert p.mode == "human_vs_human"
+
 
 class TestMovePayload:
     def test_deplacement_valide(self):
