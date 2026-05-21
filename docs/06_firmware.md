@@ -141,15 +141,37 @@ Utile pour intercaler du diagnostic sans interrompre la session webapp.
 
 ---
 
-## Plan d'ajout Wi-Fi (phase 5 — prévu, non implémenté à ce jour)
+## Sketch de validation hardware LED
 
-L'ESP32-WROOM dispose du Wi-Fi natif. La phase 5 prévoit :
+Pour valider isolément le sous-système LED (GPIO 15, câblage DIN, librairie
+NeoPixel, formule `engine_to_strip_index`) sans dépendre de la webapp, un
+sketch dédié [`firmware/src/bringup_led_check.cpp`](../firmware/src/bringup_led_check.cpp)
+enchaîne automatiquement 5 phases en boucle :
 
-- Activer le mode AP avec SSID `Quoridor-ESP32` et un mot de passe défini en constante.
-- Démarrer un serveur TCP (ou WebSocket) acceptant les mêmes commandes texte que la liaison
-  série (`PING`, `WALL`, etc.).
-- Introduire une couche d'abstraction interne (`Comm`) pour découpler lecture/écriture
-  de la couche commande — le parseur actuel restera inchangé.
-- Maintenir le canal série actif en parallèle (mode debug + fallback démo).
+| # | Phase | Ce que ça valide |
+|---|---|---|
+| 1 | LED 0 fixe blanc | GPIO 15 + lib `Adafruit_NeoPixel` + câble DIN |
+| 2 | 4 coins du strip (rouge / vert / bleu / jaune) | Orientation physique du serpentin |
+| 3 | Chenillard séquentiel 0 → 35 | Sens du serpentin pas à pas |
+| 4 | 4 coins de la grille engine via formule | Validité de `engine_to_strip_index` (port C++ de [`webapp/leds.py`](../webapp/leds.py)) |
+| 5 | Positions de départ Quoridor (J1 bleu, J2 rouge) | Vue d'ensemble réaliste |
 
-Détails d'implémentation : spec phase 5 à venir.
+```bash
+pio run -e bringup_led_check -t upload   # flash
+pio device monitor                       # observer phases sur série 115200
+```
+
+Validé le 2026-05-21 : 5 phases conformes visuellement, formule mapping OK.
+
+---
+
+## Wi-Fi (phase 5, implémentée 2026-05-21)
+
+L'ESP32-WROOM expose un point d'accès `Quoridor-ESP32` (mot de passe en
+constante dans le sketch) et un `WiFiServer` TCP sur port 3333 acceptant
+les mêmes commandes texte que la liaison série. Politique « dernier client
+gagne » + watchdog 30 s pour libérer les sockets fantômes. Le canal série
+reste actif en parallèle (debug + fallback démo).
+
+Détails protocole et tests : [`docs/07_protocole.md`](07_protocole.md) §
+« Transport Wi-Fi ».
