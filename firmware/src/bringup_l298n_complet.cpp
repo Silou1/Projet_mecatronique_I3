@@ -51,6 +51,12 @@
 #include <ESP32Servo.h>
 #include <WiFi.h>
 #include "esp_task_wdt.h"
+#include <Adafruit_NeoPixel.h>
+
+// === Sous-systeme LED (WS2812B sur GPIO 15) ===
+#define LED_PIN     15
+#define LED_COUNT   36
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // === Wi-Fi AP (phase 5) ===
 const char* AP_SSID = "Quoridor-ESP32";
@@ -859,6 +865,54 @@ static void traiter(String s, Stream* reply) {
     reply->println("done (position INVALIDEE)"); return;
   }
 
+  // === Commandes LED ===
+  if (s == "LEDSHOW") {
+    strip.show();
+    reply->println("OK");
+    return;
+  }
+  if (s == "LEDCLEAR") {
+    strip.clear();
+    strip.show();
+    reply->println("OK");
+    return;
+  }
+  if (s.startsWith("LEDBRIGHT ")) {
+    int b = s.substring(10).toInt();
+    if (b < 0 || b > 255) {
+      reply->println("ERR LEDBRIGHT borne : " + String(b) + " hors [0..255]");
+    } else {
+      strip.setBrightness(b);
+      strip.show();
+      reply->println("OK");
+    }
+    return;
+  }
+  if (s.startsWith("LED ")) {
+    // Parse : LED <idx> <r> <g> <b>
+    String args = s.substring(4);
+    int s1 = args.indexOf(' ');
+    int s2 = args.indexOf(' ', s1 + 1);
+    int s3 = args.indexOf(' ', s2 + 1);
+    if (s1 < 0 || s2 < 0 || s3 < 0) {
+      reply->println("ERR syntaxe : LED <idx> <r> <g> <b>");
+    } else {
+      int idx = args.substring(0, s1).toInt();
+      int r   = args.substring(s1 + 1, s2).toInt();
+      int g   = args.substring(s2 + 1, s3).toInt();
+      int b   = args.substring(s3 + 1).toInt();
+      if (idx < 0 || idx >= LED_COUNT) {
+        reply->println("ERR LED borne : idx=" + String(idx) + " hors [0..35]");
+      } else if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+        reply->println("ERR LED borne : composante hors [0..255]");
+      } else {
+        strip.setPixelColor(idx, strip.Color(r, g, b));
+        reply->println("OK");
+      }
+    }
+    return;
+  }
+
   reply->print("ERR Commande inconnue : '"); reply->print(s); reply->println("' - tape HELP");
 }
 
@@ -867,6 +921,13 @@ static void traiter(String s, Stream* reply) {
 // ============================================================================
 
 void setup() {
+  // Init strip LED en premier (avant tout autre periph) :
+  // securise l'etat des LEDs des le boot, evite affichage residuel.
+  strip.begin();
+  strip.setBrightness(102);  // 40% (cf. spec : marge alim + confort visuel)
+  strip.clear();
+  strip.show();
+
   // 1. Servo a 180 deg en TOUT PREMIER (securite mecanique).
   servo.attach(PIN_SERVO, PULSE_MIN_US, PULSE_MAX_US);
   servo.write(SERVO_REPOS_DEG);
