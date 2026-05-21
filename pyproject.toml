@@ -11,5 +11,7 @@ webapp = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27"]
 [tool.pytest.ini_options]
 markers = [
   "devkit: tests qui requièrent le DevKit ESP32 branché (skipés sinon)",
+  "devkit_serial: tests devkit nécessitant l'ESP32 en USB-série",
+  "devkit_wifi: tests devkit nécessitant l'ESP32 en mode AP Wi-Fi (bascule réseau Mac)",
 ]
 testpaths = ["tests"]
