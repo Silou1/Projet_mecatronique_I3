@@ -427,9 +427,146 @@ function initHandlers() {
   document.getElementById("btn-home-from-end").addEventListener("click", goHome);
 }
 
+// ============ STATUT PLATEAU ============
+let statusPollTimer = null;
+
+async function fetchStatus() {
+  try {
+    const resp = await fetch("/api/status");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderStatus(data);
+  } catch (e) {
+    // erreur reseau silencieuse, on retentera
+  }
+}
+
+function renderStatus(s) {
+  // Indicateur Client
+  const clientDot = document.getElementById("status-client-dot");
+  const clientText = document.getElementById("status-client-text");
+  if (clientDot && clientText) {
+    clientDot.className = "status-indicator dot-green";
+    clientText.textContent = `Connecté · polling actif (${s.client.polling_interval_ms} ms)`;
+  }
+
+  // Indicateur Transport
+  const tDot = document.getElementById("status-transport-dot");
+  const tText = document.getElementById("status-transport-text");
+  const tDetail = document.getElementById("status-transport-detail");
+  if (tDot && tText && tDetail) {
+    if (!s.transport.alive) {
+      tDot.className = "status-indicator dot-red";
+      tText.textContent = "Déconnecté";
+      tDetail.textContent = s.transport.startup_error
+        ? `Erreur : ${s.transport.startup_error}`
+        : "Le transport ne répond plus.";
+    } else if (s.transport.last_pong_age_seconds !== null && s.transport.last_pong_age_seconds >= 10) {
+      tDot.className = "status-indicator dot-orange";
+      tText.textContent = `Connecté · ${s.transport.description} (heartbeat en retard)`;
+      tDetail.textContent = `Dernier PONG : il y a ${Math.round(s.transport.last_pong_age_seconds)} s`;
+    } else {
+      tDot.className = "status-indicator dot-green";
+      tText.textContent = `Connecté · ${s.transport.description}`;
+      if (s.transport.last_pong_age_seconds !== null) {
+        const age = Math.round(s.transport.last_pong_age_seconds);
+        const lat = s.transport.latency_avg_ms !== null
+          ? `${Math.round(s.transport.latency_avg_ms)} ms` : "—";
+        tDetail.textContent = `Dernier PONG : il y a ${age} s · Latence moyenne : ${lat}`;
+      } else {
+        tDetail.textContent = "Aucun PONG reçu pour l'instant.";
+      }
+    }
+  }
+
+  // Indicateur Plateau
+  const pDot = document.getElementById("status-plateau-dot");
+  const pText = document.getElementById("status-plateau-text");
+  if (pDot && pText) {
+    if (s.plateau.ready) {
+      pDot.className = "status-indicator dot-green";
+      pText.textContent = s.plateau.homed ? "Prêt · homing effectué" : "Prêt";
+    } else {
+      pDot.className = "status-indicator dot-grey";
+      pText.textContent = "Indisponible";
+    }
+  }
+
+  // Banniere degradee
+  const banner = document.getElementById("banner-degraded");
+  if (banner) {
+    if (!s.transport.alive || s.transport.startup_error) {
+      banner.classList.remove("hidden");
+    } else {
+      banner.classList.add("hidden");
+    }
+  }
+}
+
+function startStatusPolling() {
+  if (statusPollTimer !== null) return;
+  fetchStatus();
+  statusPollTimer = setInterval(fetchStatus, 2000);
+}
+
+async function switchTransport(kind) {
+  try {
+    const resp = await fetch("/api/transport/switch", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({kind}),
+    });
+    const data = await resp.json();
+    if (!data.success) {
+      alert(`Bascule ${kind} échouée : ${data.error}`);
+    }
+    fetchStatus();
+  } catch (e) {
+    alert(`Erreur réseau lors de la bascule : ${e}`);
+  }
+}
+
+function initStatusUI() {
+  // Menu trois points (toggle)
+  const btnMenu = document.getElementById("btn-menu");
+  const menuDropdown = document.getElementById("menu-dropdown");
+  if (btnMenu && menuDropdown) {
+    btnMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menuDropdown.classList.toggle("hidden");
+    });
+    document.addEventListener("click", () => menuDropdown.classList.add("hidden"));
+  }
+
+  // Ouvrir panneau Statut
+  const btnMenuStatus = document.getElementById("btn-menu-status");
+  if (btnMenuStatus) {
+    btnMenuStatus.addEventListener("click", () => {
+      menuDropdown && menuDropdown.classList.add("hidden");
+      document.getElementById("modal-status").classList.remove("hidden");
+    });
+  }
+
+  // Fermer panneau Statut
+  const btnClose = document.getElementById("btn-status-close");
+  if (btnClose) {
+    btnClose.addEventListener("click", () => {
+      document.getElementById("modal-status").classList.add("hidden");
+    });
+  }
+
+  // Boutons banniere
+  const btnRetrySerial = document.getElementById("btn-retry-serial");
+  const btnRetryWifi = document.getElementById("btn-retry-wifi");
+  if (btnRetrySerial) btnRetrySerial.addEventListener("click", () => switchTransport("serial"));
+  if (btnRetryWifi) btnRetryWifi.addEventListener("click", () => switchTransport("wifi"));
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   renderCells();
   renderIntersections();
   initHandlers();
+  initStatusUI();
+  startStatusPolling();
   poll();
 });

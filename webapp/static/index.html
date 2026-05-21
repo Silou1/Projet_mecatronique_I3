@@ -141,6 +141,46 @@
     <div class="overlay-content">Reconnexion…</div>
   </div>
 
+  <!-- ============ MENU TROIS POINTS ============ -->
+  <div id="menu-dropdown" class="menu-dropdown hidden">
+    <button id="btn-menu-status" type="button">Statut Plateau</button>
+  </div>
+
+  <!-- ============ MODAL STATUT PLATEAU ============ -->
+  <div id="modal-status" class="modal hidden">
+    <div class="modal-card">
+      <h2>Statut Plateau</h2>
+      <div class="status-section">
+        <h3>Navigateur ↔ Mac</h3>
+        <p><span id="status-client-dot" class="status-indicator dot-grey"></span>
+           <span id="status-client-text">—</span></p>
+      </div>
+      <div class="status-section">
+        <h3>Mac ↔ ESP32</h3>
+        <p><span id="status-transport-dot" class="status-indicator dot-grey"></span>
+           <span id="status-transport-text">—</span></p>
+        <p class="status-detail" id="status-transport-detail">—</p>
+      </div>
+      <div class="status-section">
+        <h3>Plateau</h3>
+        <p><span id="status-plateau-dot" class="status-indicator dot-grey"></span>
+           <span id="status-plateau-text">—</span></p>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-status-close" class="btn-secondary" type="button">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BANNIERE DEGRADEE ============ -->
+  <div id="banner-degraded" class="banner-degraded hidden">
+    <span class="banner-icon">⚠</span>
+    <span class="banner-text"><strong>Plateau injoignable.</strong>
+      Vérifie le branchement USB-C entre l'ESP32 et le Mac.</span>
+    <button id="btn-retry-serial" type="button">Réessayer en USB</button>
+    <button id="btn-retry-wifi" type="button">Réessayer en Wi-Fi</button>
+  </div>
+
   <script src="/static/app.js" defer></script>
 </body>
 </html>
