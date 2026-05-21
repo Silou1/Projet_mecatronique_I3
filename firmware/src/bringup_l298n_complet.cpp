@@ -82,8 +82,9 @@ struct Moteur {
 static Moteur M1 = { "M1", 14, 27, 26, 25, 33, 32, 0 };
 static Moteur M2 = { "M2", 16, 17, 21, 22, 19, 23, 0 };
 
-static constexpr uint8_t PIN_LIMIT_X = 13;
-static constexpr uint8_t PIN_LIMIT_Y = 18;
+// 2026-05-21 : capteurs recables -> X et Y echanges (avant : X=13, Y=18).
+static constexpr uint8_t PIN_LIMIT_X = 18;
+static constexpr uint8_t PIN_LIMIT_Y = 13;
 static constexpr uint8_t PIN_SERVO   = 4;
 
 static constexpr uint32_t SPEED_DEFAUT_US = 10000;
@@ -156,12 +157,13 @@ static inline bool est_mesure(const PointMesure& p) {
 static constexpr int MUR_H_NB_I = 6;
 static constexpr int MUR_H_NB_J = 5;
 static PointMesure MURS_H[MUR_H_NB_J][MUR_H_NB_I] = {
-  //              i=0           i=1   i=2   i=3            i=4   i=5
-  /* j=0 (bas)  */ { {102,  35}, _NA, _NA, {406,  35},    _NA, {709,  35} },
-  /* j=1        */ { _NA,        _NA, _NA, _NA,            _NA, _NA        },
-  /* j=2        */ { {105, 486}, _NA, _NA, {482, 406},    _NA, {709, 485} },
-  /* j=3        */ { _NA,        _NA, _NA, _NA,            _NA, _NA        },
-  /* j=4 (haut) */ { {109, 777}, _NA, _NA, {409, 777},    _NA, {709, 777} },
+  // 2026-05-21 : 30/30 H mesures via CALIB H.
+  //              i=0           i=1           i=2           i=3           i=4           i=5
+  /* j=0 (bas)  */ { { 30, 112}, {189, 112}, {328, 112}, {488, 112}, {627, 112}, {777, 112} },
+  /* j=1        */ { { 30, 272}, {179, 262}, {333, 262}, {483, 262}, {632, 262}, {777, 262} },
+  /* j=2        */ { { 30, 417}, {179, 412}, {333, 412}, {483, 412}, {632, 407}, {782, 407} },
+  /* j=3        */ { { 30, 567}, {184, 562}, {333, 562}, {483, 562}, {632, 557}, {782, 552} },
+  /* j=4 (haut) */ { { 35, 717}, {189, 712}, {338, 712}, {488, 712}, {637, 702}, {787, 702} },
 };
 
 // ----------------------------------------------------------------------------
@@ -185,18 +187,32 @@ static PointMesure MURS_H[MUR_H_NB_J][MUR_H_NB_I] = {
 static constexpr int MUR_V_NB_I = 5;
 static constexpr int MUR_V_NB_J = 6;
 static PointMesure MURS_V[MUR_V_NB_J][MUR_V_NB_I] = {
-  //              i=0          i=1  i=2          i=3  i=4
-  /* j=0 (bas)  */ { { 32, 110}, _NA, {330, 107}, _NA, {779, 105} },
-  /* j=1        */ { _NA,        _NA, _NA,         _NA, _NA        },
-  /* j=2        */ { _NA,        _NA, _NA,         _NA, _NA        },
-  /* j=3        */ { { 33, 408}, _NA, {407, 479}, _NA, {782, 400} },
-  /* j=4        */ { _NA,        _NA, _NA,         _NA, _NA        },
-  /* j=5 (haut) */ { { 34, 707}, _NA, {339, 711}, _NA, {784, 705} },
+  // 2026-05-21 : 30/30 V mesures via CALIB V.
+  //              i=0           i=1           i=2           i=3           i=4
+  /* j=0 (bas)  */ { {102,  35}, {253,  35}, {404,  35}, {551,  35}, {702,  35} },
+  /* j=1        */ { {102, 190}, {253, 190}, {404, 190}, {556, 190}, {707, 190} },
+  /* j=2        */ { {112, 341}, {258, 341}, {409, 341}, {556, 341}, {707, 336} },
+  /* j=3        */ { {107, 487}, {258, 487}, {409, 487}, {556, 487}, {707, 487} },
+  /* j=4        */ { {107, 636}, {257, 636}, {409, 636}, {552, 636}, {707, 636} },
+  /* j=5 (haut) */ { {117, 787}, {262, 787}, {415, 787}, {562, 787}, {712, 787} },
 };
 
 static constexpr int MUR_NB_H = MUR_H_NB_I * MUR_H_NB_J;  // 30
 static constexpr int MUR_NB_V = MUR_V_NB_I * MUR_V_NB_J;  // 30
 static constexpr int MUR_NB_TOTAL = MUR_NB_H + MUR_NB_V;  // 60
+
+// ----------------------------------------------------------------------------
+// Grille theorique pour CALIB (parcours des 60 emplacements en grille reguliere)
+// ----------------------------------------------------------------------------
+// 2026-05-21 : recalibres depuis les 4 premieres rangees V mesurees.
+// V (5x6) : x_min/max calques sur V[0][0..4], y_min sur V[0], y_max extrapole
+//           a partir du pitch_y moyen mesure (~150 pas).
+// H (6x5) : x_min/max etendus pour couvrir les 6 colonnes (decalage de
+//           pitch_x/2 = 75 pas par rapport aux V), y intercales entre les V.
+static constexpr int32_t CALIB_V_X_MIN = 102; static constexpr int32_t CALIB_V_X_MAX = 702;
+static constexpr int32_t CALIB_V_Y_MIN = 35;  static constexpr int32_t CALIB_V_Y_MAX = 787;
+static constexpr int32_t CALIB_H_X_MIN = 30;  static constexpr int32_t CALIB_H_X_MAX = 777;
+static constexpr int32_t CALIB_H_Y_MIN = 112; static constexpr int32_t CALIB_H_Y_MAX = 712;
 
 static const uint8_t SEQUENCE[4][4] = {
   {1, 0, 1, 0}, {0, 1, 1, 0}, {0, 1, 0, 1}, {1, 0, 0, 1}
@@ -216,6 +232,9 @@ static Servo    servo;
 
 // Tournee automatique : -1 = inactif, 0..N-1 = index lineaire (H d'abord, puis V).
 static int tour_index = -1;
+// Calibration manuelle d'une matrice (V ou H) : -1 = inactif, 0..29 sinon.
+static int  calib_index = -1;
+static bool calib_is_h  = false;  // true = parcours MURS_H, false = parcours MURS_V
 
 // ============================================================================
 // Moteurs : phases, drivers, pulses
@@ -262,13 +281,15 @@ static void appliquer_duty_courant() {
 static void pulse_2_moteurs(uint32_t nb_pas,
                             bool m1_actif, bool m1_fwd,
                             bool m2_actif, bool m2_fwd) {
+  // 2026-05-21 : cablage moteurs refait -> bobines inversees sur les 2 L298N,
+  // d'ou inversion globale du sens (1/3 echanges). Garde la logique X/Y CoreXY.
   for (uint32_t i = 0; i < nb_pas; ++i) {
     if (m1_actif) {
-      M1.phase = (M1.phase + (m1_fwd ? 1 : 3)) & 3;
+      M1.phase = (M1.phase + (m1_fwd ? 3 : 1)) & 3;
       appliquer_phase(M1, M1.phase);
     }
     if (m2_actif) {
-      M2.phase = (M2.phase + (m2_fwd ? 1 : 3)) & 3;
+      M2.phase = (M2.phase + (m2_fwd ? 3 : 1)) & 3;
       appliquer_phase(M2, M2.phase);
     }
     delayMicroseconds(demi_periode_us);
@@ -508,6 +529,160 @@ static void tour_stop() {
   tour_index = -1;
 }
 
+// ============================================================================
+// CALIB V / CALIB H : parcours d'une matrice pour mesure manuelle des positions
+// ============================================================================
+//
+// Deux commandes distinctes pour parcourir 30 emplacements chacune :
+//   CALIB V  -> MURS_V (5 i x 6 j = 30) : rectangles V (debouts entre cases L/R)
+//   CALIB H  -> MURS_H (6 i x 5 j = 30) : rectangles H (couches entre cases H/B)
+//
+// A chaque mur, le piston va a la position theorique (grille reguliere
+// interpolee depuis les coins du plateau). Les emplacements deja remplis
+// dans la matrice sont sautes automatiquement (permet de reprendre en cours).
+// L'utilisateur ajuste avec X F/B et Y F/B puis fait STATUS pour noter la
+// position vraie. NEXT passe au mur suivant non mesure, STOP annule.
+
+static int calib_nb_total_pour(bool is_h) {
+  return is_h ? MUR_NB_H : MUR_NB_V;
+}
+
+static void decode_index_calib(bool is_h, int idx,
+                               int& i_out, int& j_out,
+                               int32_t& x_theo_out, int32_t& y_theo_out) {
+  if (is_h) {
+    int i = idx % MUR_H_NB_I;
+    int j = idx / MUR_H_NB_I;
+    i_out = i; j_out = j;
+    x_theo_out = CALIB_H_X_MIN + ((CALIB_H_X_MAX - CALIB_H_X_MIN) * i) / (MUR_H_NB_I - 1);
+    y_theo_out = CALIB_H_Y_MIN + ((CALIB_H_Y_MAX - CALIB_H_Y_MIN) * j) / (MUR_H_NB_J - 1);
+  } else {
+    int i = idx % MUR_V_NB_I;
+    int j = idx / MUR_V_NB_I;
+    i_out = i; j_out = j;
+    x_theo_out = CALIB_V_X_MIN + ((CALIB_V_X_MAX - CALIB_V_X_MIN) * i) / (MUR_V_NB_I - 1);
+    y_theo_out = CALIB_V_Y_MIN + ((CALIB_V_Y_MAX - CALIB_V_Y_MIN) * j) / (MUR_V_NB_J - 1);
+  }
+}
+
+static bool est_mesure_calib(bool is_h, int idx) {
+  int i, j; int32_t x, y;
+  decode_index_calib(is_h, idx, i, j, x, y);
+  if (is_h) return est_mesure(MURS_H[j][i]);
+  return est_mesure(MURS_V[j][i]);
+}
+
+static int prochain_idx_non_mesure(bool is_h, int depart) {
+  int total = calib_nb_total_pour(is_h);
+  for (int idx = depart; idx < total; ++idx) {
+    if (!est_mesure_calib(is_h, idx)) return idx;
+  }
+  return -1;
+}
+
+static void afficher_mur_calib(bool is_h, int idx) {
+  int i, j; int32_t x, y;
+  decode_index_calib(is_h, idx, i, j, x, y);
+  int total = calib_nb_total_pour(is_h);
+  int i_max = (is_h ? MUR_H_NB_I : MUR_V_NB_I) - 1;
+  int j_max = (is_h ? MUR_H_NB_J : MUR_V_NB_J) - 1;
+
+  Serial.println();
+  Serial.print("=== Mur "); Serial.print(idx + 1); Serial.print("/");
+  Serial.print(total); Serial.print(" (matrice "); Serial.print(is_h ? "H" : "V");
+  Serial.print(") : [j="); Serial.print(j); Serial.print("][i=");
+  Serial.print(i); Serial.println("] ===");
+
+  Serial.print("Position  : ligne "); Serial.print(j);
+  if (j == 0)          Serial.print(" (BAS)");
+  else if (j == j_max) Serial.print(" (HAUT)");
+  Serial.print(", colonne "); Serial.print(i);
+  if (i == 0)          Serial.println(" (GAUCHE)");
+  else if (i == i_max) Serial.println(" (DROITE)");
+  else                 Serial.println();
+
+  if (is_h) {
+    // Mur H = entre case (col i, ligne j) et case (col i, ligne j+1).
+    Serial.print("Entre     : case (col "); Serial.print(i); Serial.print(", ligne ");
+    Serial.print(j); Serial.print(") et case (col "); Serial.print(i);
+    Serial.print(", ligne "); Serial.print(j + 1); Serial.println(")");
+  } else {
+    // Mur V = entre case (col i, ligne j) et case (col i+1, ligne j).
+    Serial.print("Entre     : case (col "); Serial.print(i); Serial.print(", ligne ");
+    Serial.print(j); Serial.print(") et case (col "); Serial.print(i + 1);
+    Serial.print(", ligne "); Serial.print(j); Serial.println(")");
+  }
+  Serial.print("Cible     : x="); Serial.print(x); Serial.print("  y=");
+  Serial.print(y); Serial.println("  (theorique, grille reguliere)");
+  Serial.println(">> Ajuste avec X F/B, Y F/B. STATUS pour relire. NEXT = suivant. STOP = annuler.");
+}
+
+static void aller_au_point_calib(bool is_h, int idx) {
+  int i, j; int32_t x, y;
+  decode_index_calib(is_h, idx, i, j, x, y);
+  afficher_mur_calib(is_h, idx);
+  goto_xy(x, y);
+}
+
+static void calib_demarrer(bool is_h) {
+  if (!position_connue) {
+    Serial.println("CALIB refuse : HOME requis.");
+    return;
+  }
+  if (tour_index >= 0) {
+    Serial.println("TOUR en cours interrompu (CALIB demarre).");
+    tour_index = -1;
+  }
+  int prochain = prochain_idx_non_mesure(is_h, 0);
+  if (prochain < 0) {
+    Serial.print("CALIB ");
+    Serial.print(is_h ? "H" : "V");
+    Serial.println(" : toutes les positions sont deja mesurees. Rien a faire.");
+    return;
+  }
+  calib_is_h = is_h;
+  calib_index = prochain;
+  Serial.println();
+  Serial.print("=== CALIB ");
+  Serial.print(is_h ? "H" : "V");
+  Serial.print(" : parcours des ");
+  Serial.print(calib_nb_total_pour(is_h));
+  Serial.println(" emplacements (positions deja mesurees sautees) ===");
+  Serial.println("Pour chaque mur : ajuste, fais STATUS pour noter (x, y), puis NEXT.");
+  Serial.println("STOP a tout moment pour interrompre.");
+  aller_au_point_calib(is_h, calib_index);
+}
+
+static void calib_suivant() {
+  if (calib_index < 0) {
+    Serial.println("NEXT ignore : aucune calibration active. Tape CALIB V ou CALIB H.");
+    return;
+  }
+  int prochain = prochain_idx_non_mesure(calib_is_h, calib_index + 1);
+  if (prochain < 0) {
+    Serial.println();
+    Serial.print("=== CALIB ");
+    Serial.print(calib_is_h ? "H" : "V");
+    Serial.println(" termine : tous les emplacements parcourus ===");
+    calib_index = -1;
+    return;
+  }
+  calib_index = prochain;
+  aller_au_point_calib(calib_is_h, calib_index);
+}
+
+static void calib_stop() {
+  if (calib_index < 0) {
+    Serial.println("STOP ignore : aucune calibration active.");
+    return;
+  }
+  Serial.print("CALIB ");
+  Serial.print(calib_is_h ? "H" : "V");
+  Serial.print(" interrompu au mur "); Serial.print(calib_index + 1);
+  Serial.print("/"); Serial.println(calib_nb_total_pour(calib_is_h));
+  calib_index = -1;
+}
+
 // LIST : affiche le statut de remplissage des matrices MURS_H et MURS_V.
 static void afficher_liste() {
   int nb_h = 0, nb_v = 0;
@@ -663,6 +838,12 @@ static void afficher_aide() {
   Serial.println("  M2 F/B <n>        moteur 2 seul (debug, INVALIDE position)");
   Serial.println("  LEVER | BAISSER   servo 0 deg / 180 deg");
   Serial.println("  SERVO <angle>     angle 0..180");
+  Serial.println("  TOUR              parcourt les murs deja mesures (NEXT pour suivant, STOP)");
+  Serial.println("  CALIB V           parcourt MURS_V (30 emplacements, saute deja mesures)");
+  Serial.println("  CALIB H           parcourt MURS_H (30 emplacements, saute deja mesures)");
+  Serial.println("  NEXT | N          avance dans TOUR ou CALIB (selon ce qui est actif)");
+  Serial.println("  STOP              interrompt TOUR ou CALIB");
+  Serial.println("  LIST              statut de remplissage des matrices MURS_H/V");
   Serial.println("  DEMO [N]          N murs aleatoires parmi mesures, leve+baisse (defaut 10)");
   Serial.println("  LIMITS            lecture X et Y");
   Serial.println("  LIMITS WATCH      lecture continue (Enter pour sortir)");
@@ -747,9 +928,22 @@ static void traiter(String s, Stream* reply) {
   }
   if (s == "LEVER")  { servo.write(SERVO_LEVER_DEG); reply->println("servo 0 deg"); return; }
   if (s == "BAISSER"){ servo.write(SERVO_REPOS_DEG); reply->println("servo 180 deg"); return; }
-  if (s == "TOUR")   { tour_demarrer(); reply->println("OK"); return; }
-  if (s == "NEXT" || s == "N") { tour_suivant(); reply->println("OK"); return; }
-  if (s == "STOP")   { tour_stop(); reply->println("OK"); return; }
+  if (s == "TOUR")    { tour_demarrer();         reply->println("OK"); return; }
+  if (s == "CALIB V") { calib_demarrer(false);   reply->println("OK"); return; }
+  if (s == "CALIB H") { calib_demarrer(true);    reply->println("OK"); return; }
+  if (s == "NEXT" || s == "N") {
+    // CALIB prioritaire si actif, sinon TOUR.
+    if (calib_index >= 0)      calib_suivant();
+    else                        tour_suivant();
+    reply->println("OK");
+    return;
+  }
+  if (s == "STOP")   {
+    if (calib_index >= 0)      calib_stop();
+    else                        tour_stop();
+    reply->println("OK");
+    return;
+  }
   if (s == "LIST")   { afficher_liste(); reply->println("OK"); return; }
   if (s == "DEMO")   { demo_lever_murs(10); reply->println("OK"); return; }
   if (s.startsWith("DEMO ")) {

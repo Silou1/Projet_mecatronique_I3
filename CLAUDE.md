@@ -18,10 +18,10 @@ Jeu Quoridor 6×6 sur plateau mécatronique. Projet pédagogique ICAM 3A (équip
 - **Protocole** : texte ligne par ligne, identique USB/Wi-Fi : `PING`/`PONG`,
   `WALL <H|V> <r> <c>`, `OK`/`ERR`.
 
-**État hardware (2026-05-20)** : breadboard (PCB v2 abandonnée, postmortem dans
+**État hardware (2026-05-21)** : breadboard (PCB v2 abandonnée, postmortem dans
 [`hardware/archive/`](hardware/archive/pcb-v2-2026-04-28-ABANDONNEE/POSTMORTEM.md)).
-Bring-up validé : 18/60 positions de murs mesurées (à revalider physiquement,
-voir [`docs/hardware/positions-murs.md`](docs/hardware/positions-murs.md)).
+Bring-up complet validé : **60/60 positions de murs mesurées** (30 H + 30 V),
+voir [`docs/hardware/positions-murs.md`](docs/hardware/positions-murs.md).
 
 ## Commandes
 

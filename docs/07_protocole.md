@@ -158,8 +158,8 @@ Pour chaque position mesurée (non `_NA`) :
 
 La fonction retourne `raised` (0, 1 ou 2), inclus dans la réponse `WALL OK`.
 
-Les 18 positions validées au 2026-05-20 sont encodées dans les matrices `MURS_H` / `MURS_V`
-du sketch. Les 42 autres positions sont marquées `_NA` et sautées sans erreur.
+Les **60 positions** (30 H + 30 V) validées au 2026-05-21 sont encodées dans les matrices
+`MURS_H` / `MURS_V` du sketch. Toutes accessibles via `WALL`.
 
 ---
 
