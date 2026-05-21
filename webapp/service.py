@@ -13,6 +13,7 @@ from typing import Optional, TYPE_CHECKING
 
 from quoridor_engine import GameState, AI, InvalidMoveError
 from quoridor_engine.core import PLAYER_ONE, PLAYER_TWO, create_new_game
+from webapp.plateau import PlateauBridge
 
 log = logging.getLogger(__name__)
 
@@ -32,14 +33,11 @@ class QuoridorService:
     """
 
     def __init__(self, transport: Optional["Transport"] = None, startup_error: Optional[str] = None):
-        # Compatibilité transitoire : self._uart_bridge contient maintenant un
-        # Transport (Serial/WiFi/Null) au lieu de l'ancien UartBridge.
-        # Sera renommé en self._plateau (PlateauBridge complet) en Task C1.
         if transport is None:
             from webapp.transport import NullTransport
             transport = NullTransport()
             transport.open()
-        self._uart_bridge = transport
+        self._plateau = PlateauBridge(transport=transport)
         self._startup_error = startup_error
         self._lock = threading.Lock()
         # Réglages persistés entre parties (cf. spec §9.7)
@@ -79,9 +77,9 @@ class QuoridorService:
             self._last_ai_move_at = time.monotonic()
             # Re-home le plateau physique au debut de chaque partie pour repartir
             # d'un etat connu (chariot a l'origine).
-            if plateau_mode and self._uart_bridge.is_alive:
+            if plateau_mode and self._plateau.available:
                 try:
-                    self._uart_bridge.write_line("HOME")
+                    self._plateau.transport.write_line("HOME")
                 except Exception as e:  # noqa: BLE001
                     log.warning("HOME echoue (%s)", e)
 
@@ -92,9 +90,9 @@ class QuoridorService:
 
     def _to_dict_unlocked(self) -> dict:
         plateau = {
-            "available": self._uart_bridge.is_alive,
+            "available": self._plateau.available,
             "mode_active": self._plateau_mode,
-            "connected": self._uart_bridge.is_alive and self._plateau_mode,
+            "connected": self._plateau.available and self._plateau_mode,
         }
 
         if self._state is None:
@@ -347,7 +345,7 @@ class QuoridorService:
         """
         if not self._plateau_mode:
             return
-        if not self._uart_bridge.is_alive:
+        if not self._plateau.available:
             return
         move_type, payload = move
         if move_type != "mur":
@@ -357,7 +355,7 @@ class QuoridorService:
             orientation = _SWAP[payload["orientation"].upper()]
             row = int(payload["row"])
             col = int(payload["col"])
-            self._uart_bridge.write_line(f"WALL {orientation} {row} {col}")
+            self._plateau.transport.write_line(f"WALL {orientation} {row} {col}")
         except Exception as e:  # noqa: BLE001
             log.warning("WALL forward echoue (%s), desactivation plateau", e)
             self._last_error = {
@@ -367,4 +365,4 @@ class QuoridorService:
 
     def _plateau_available_unlocked(self) -> bool:
         """True si le transport est ouvert (utilisable par /api/new-game)."""
-        return self._uart_bridge.is_alive
+        return self._plateau.available

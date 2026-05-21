@@ -200,7 +200,8 @@ class TestRobustesse:
             def read_line(self, timeout=1.0): return None
             def close(self): pass
 
-        service._uart_bridge = FakeTransport()
+        from webapp.plateau import PlateauBridge
+        service._plateau = PlateauBridge(transport=FakeTransport())
         service._plateau_mode = True
         # Move de type 'mur' pour declencher la logique (les deplacements sont no-op)
         mur_payload = {"type": "mur", "orientation": "H", "row": 2, "col": 3}
