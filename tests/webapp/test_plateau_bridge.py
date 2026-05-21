@@ -108,3 +108,42 @@ def test_plateau_bridge_close():
     b = PlateauBridge(transport=t)
     b.close()
     assert t.opened is False
+
+
+def test_plateau_bridge_starts_heartbeat_thread():
+    t = FakeTransport()
+    t.open()
+    t.to_read.extend(["PONG"] * 100)  # toujours répond
+    b = PlateauBridge(transport=t, heartbeat_interval=0.1)
+    b.start_heartbeat()
+    time.sleep(0.35)  # 3 cycles environ
+    b.stop_heartbeat()
+    # Au moins 2 PING envoyés
+    pings = [w for w in t.written if w == "PING"]
+    assert len(pings) >= 2
+    assert b.last_pong_at is not None
+    assert b.failed_pings == 0
+
+
+def test_plateau_bridge_heartbeat_detects_lost_after_2_failures():
+    t = FakeTransport()
+    t.open()
+    # rien dans to_read → PONG manqué
+    b = PlateauBridge(transport=t, heartbeat_interval=0.05, pong_timeout=0.05)
+    b.start_heartbeat()
+    time.sleep(0.5)  # 5+ cycles de 0.05+0.05
+    b.stop_heartbeat()
+    assert b.failed_pings >= 2
+    assert b.transport_lost is True
+
+
+def test_plateau_bridge_latency_avg_updated_on_pong():
+    t = FakeTransport()
+    t.open()
+    t.to_read.extend(["PONG"] * 100)
+    b = PlateauBridge(transport=t, heartbeat_interval=0.05)
+    b.start_heartbeat()
+    time.sleep(0.25)
+    b.stop_heartbeat()
+    assert b.latency_avg_ms is not None
+    assert b.latency_avg_ms >= 0
