@@ -302,6 +302,14 @@ function render(newState) {
   const board = document.getElementById("board");
   const flip = state.mode === "human_vs_human" && state.current_player === "j2" && state.status === "playing";
   board.classList.toggle("flipped", flip);
+  // Halo pulse sur le pion du joueur courant
+  const isPlaying = state.status === "playing";
+  document.getElementById("pawn-j1").classList.toggle(
+    "current", isPlaying && state.current_player === "j1"
+  );
+  document.getElementById("pawn-j2").classList.toggle(
+    "current", isPlaying && state.current_player === "j2"
+  );
   renderPlateauToggle(state);
   // Sync chip vitesse in-game avec le serveur
   const speedGroup = document.querySelector('[data-field="speed-ingame"]');

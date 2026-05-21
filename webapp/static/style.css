@@ -167,6 +167,14 @@ html, body {
   transition: cx 0.4s ease-out, cy 0.4s ease-out;
 }
 
+@keyframes pawn-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50%      { filter: drop-shadow(0 0 8px var(--halo)); }
+}
+.pawn.current { animation: pawn-pulse 1.4s ease-in-out infinite; }
+#pawn-j1.current { --halo: #5b9fd9; }
+#pawn-j2.current { --halo: #e57a6c; }
+
 .wall { fill: url(#wallGrad); }
 
 @keyframes wall-appear {
