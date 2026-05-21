@@ -1,7 +1,8 @@
 # Documentation — Quoridor Interactif
 
-Projet pédagogique ICAM 3A : jeu Quoridor 6×6 sur plateau mécatronique, piloté depuis le Mac via
-un ESP32-WROOM branché en USB-série. Le Mac exécute l'IA et la webapp FastAPI ; l'ESP32 pilote le
+Projet pédagogique ICAM 3A : jeu Quoridor 6×6 sur plateau mécatronique, piloté depuis le Mac.
+Deux transports interchangeables vers l'ESP32-WROOM : USB-série (développement) ou Wi-Fi en
+mode AP `Quoridor-ESP32` (démo). Le Mac exécute l'IA et la webapp FastAPI ; l'ESP32 pilote le
 CoreXY, le servo et les détecteurs de position. Pour les détails complets du projet, voir
 [01_projet.md](01_projet.md).
 
@@ -28,8 +29,8 @@ CoreXY, le servo et les détecteurs de position. Pour les détails complets du p
    `bringup_l298n_complet.cpp`, CoreXY, servo, détecteurs de fin de course.
 
 7. **[07_protocole.md](07_protocole.md)** — Protocole texte brut Mac ↔ ESP32 sur USB-série
-   (115 200 bauds) : commandes, réponses, gestion des erreurs.
-   Mode Wi-Fi AP prévu, non implémenté à ce jour.
+   (115 200 bauds) ou Wi-Fi (TCP `192.168.4.1:3333`) : commandes, réponses, gestion
+   des erreurs.
 
 8. **[08_tests.md](08_tests.md)** — Stratégie de tests : pytest Python (moteur + webapp) et
    scénarios de validation firmware (commandes manuelles).

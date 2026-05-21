@@ -13,12 +13,14 @@ responsabilités. Le Mac fait tourner toute la logique logicielle ; l'ESP32 pilo
 │  │  quoridor_engine/   │   │  webapp/                       │  │
 │  │  - core.py          │◄──│  - server.py  (FastAPI :8000)  │  │
 │  │  - ai.py            │   │  - service.py (orchestration)  │  │
-│  │  (moteur + IA)      │   │  - uart_bridge.py (optionnel)  │  │
+│  │  (moteur + IA)      │   │  - transport.py (Serial/WiFi)  │  │
+│  │                     │   │  - plateau.py (lock + heartbt) │  │
 │  └─────────────────────┘   └──────────────┬─────────────────┘  │
-│                                           │ USB-série (actuel)  │
-│                                           │ Wi-Fi AP (phase 5)  │
+│                                           │ USB-série (dev)     │
+│                                           │ ou Wi-Fi AP (démo)  │
 └───────────────────────────────────────────┼────────────────────┘
-                                            │ 115200 bauds
+                                            │ 115200 bauds (USB)
+                                            │ TCP 192.168.4.1:3333 (Wi-Fi)
                               ┌─────────────▼─────────────────┐
                               │  ESP32-WROOM                  │
                               │  bringup_l298n_complet.cpp    │
@@ -61,7 +63,9 @@ navigateur sur le réseau local (iPhone, PC, Mac).
 |---|---|
 | `server.py` | Point d'entrée FastAPI + uvicorn. Routes API + `GET /` sert le HTML. |
 | `service.py` | `QuoridorService` singleton thread-safe. État partie, tick IA, orchestration. |
-| `uart_bridge.py` | Passerelle optionnelle vers l'ESP32. Détection auto au démarrage. |
+| `transport.py` | Interface `Transport` + 3 impls (`SerialTransport`, `WiFiTransport`, `NullTransport`) + factory pilotée par env var `QUORIDOR_TRANSPORT`. |
+| `plateau.py` | `PlateauBridge` : couche haute au-dessus de `Transport`. Heartbeat thread (PING/PONG 5 s), lock TX, reconnexion auto, `switch_transport` à chaud. |
+| `qr.py` | Génération de QR code SVG pour partager l'URL de la webapp sur téléphone. |
 | `schemas.py` | Modèles Pydantic pour les payloads et réponses JSON. |
 | `static/` | Frontend : HTML5 + CSS3 + JS vanilla + SVG inline. Zéro framework, zéro build. |
 
@@ -70,8 +74,9 @@ fiabilité). Animations CSS sur les transitions pions et murs.
 
 ### `firmware/src/bringup_l298n_complet.cpp`
 
-Sketch ESP32 monolithique. Aucune refonte prévue ; des commandes supplémentaires pourront
-être ajoutées en phase 5 (Wi-Fi).
+Sketch ESP32 monolithique. Étendu en phase 5 avec : Wi-Fi softAP + `WiFiServer` port 3333
++ refactor `traiter(cmd, Stream*)` pour servir les deux canaux (Serial et WiFi) avec
+une seule fonction de dispatch.
 
 Responsabilités du sketch :
 - **Homing** : déplacement jusqu'aux fins de course (X=GPIO13, Y=GPIO18, INPUT_PULLUP),
@@ -92,18 +97,53 @@ Voir `docs/hardware/pinout.md`, `docs/hardware/calibration.md` et
 
 ## Transport ESP32 ↔ Mac
 
-### USB-série (mode actuel, validé)
+Le transport est piloté par la variable d'environnement `QUORIDOR_TRANSPORT` :
 
-Câble USB-C direct entre le Mac et l'ESP32. Côté Mac : `/dev/tty.usbserial-*` (détection
-automatique par `uart_bridge.py`). Baudrate 115200. Ce mode est utilisé en développement
-et constitue le fallback fiable pour la démo.
+```bash
+QUORIDOR_TRANSPORT=wifi   python -m webapp.server   # défaut, mode démo
+QUORIDOR_TRANSPORT=serial python -m webapp.server   # mode développement
+QUORIDOR_TRANSPORT=none   python -m webapp.server   # mode autonome (sans plateau)
+```
 
-### Wi-Fi en mode AP (cible phase 5, prévu, non implémenté)
+Si le transport demandé échoue à s'ouvrir au démarrage, la webapp démarre quand même en
+mode autonome (`NullTransport`) avec une bannière dégradée explicative. Boutons
+"Réessayer en USB" / "Réessayer en Wi-Fi" dans la bannière déclenchent un
+`POST /api/transport/switch` qui bascule à chaud sans redémarrer.
 
-L'ESP32 crée un point d'accès Wi-Fi nommé `Quoridor-ESP32`. Le Mac s'y connecte comme
-client et joint l'ESP32 via son IP fixe (ex. `192.168.4.1`). Le protocole d'application
-est identique à l'USB-série (même format texte, même baudrate logique). Pas de refonte
-firmware requise : seule la couche transport change.
+### USB-série (mode développement, validé)
+
+Câble USB-C direct entre le Mac et l'ESP32. Côté Mac : `/dev/cu.usbserial-*` (détection
+automatique par `SerialTransport`). Baudrate 115200. Reste actif en parallèle du Wi-Fi
+côté firmware (un seul transport actif côté Mac, mais l'ESP32 sert les deux canaux).
+
+### Wi-Fi en mode AP (mode démo, validé)
+
+L'ESP32 crée un point d'accès Wi-Fi `Quoridor-ESP32` (WPA2, mot de passe `quoridor2026`)
+au boot. Le Mac s'y connecte et joint l'ESP32 via TCP `192.168.4.1:3333`. Le protocole
+d'application est identique à l'USB-série (texte ligne par ligne, UTF-8).
+
+Politique côté firmware : **dernier client gagne** (une nouvelle connexion TCP fait
+fermer l'ancienne) + **watchdog 30 s** (drop des clients silencieux pour libérer le
+socket si un client a disparu sans fermeture propre).
+
+Côté Mac, `PlateauBridge` ajoute :
+- **Heartbeat applicatif** : `PING` toutes les 5 s, détection coupure après 2 PONG ratés
+- **Reconnexion auto** : tâche en arrière-plan qui retente `transport.open()` toutes les 10 s
+- **Lock TX** : sérialise toutes les paires (write, read response) pour éviter les races
+  entre heartbeat et commandes utilisateur
+
+### Test de bascule manuelle entre les deux transports
+
+L'outil `tools/wifi_switch.py` automatise la bascule réseau côté Mac via `networksetup` :
+
+```bash
+python tools/wifi_switch.py to-esp32 --save-current ICAM  # bascule sur AP ESP32
+python tools/wifi_switch.py restore                       # restaure SSID précédent
+python tools/wifi_switch.py status                        # SSID courant
+```
+
+Utilisé par la fixture pytest `wifi_fixture` pour les tests devkit Wi-Fi (cf.
+[`08_tests.md`](08_tests.md)).
 
 ### Protocole d'application (commun aux deux transports)
 

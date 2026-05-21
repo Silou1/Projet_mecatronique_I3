@@ -3,13 +3,14 @@
 ## Vue d'ensemble
 
 Le protocole est **texte ligne par ligne**. Une commande = une ligne terminée par `\n`.
-Une réponse = une ligne terminée par `\n`. Encodage : ASCII.
+Une réponse = une ligne terminée par `\n`. Encodage : UTF-8.
 
 | Paramètre        | Valeur                                      |
 |------------------|---------------------------------------------|
 | Liaison USB      | 115200 baud, 8N1                            |
+| Liaison Wi-Fi    | TCP sur `192.168.4.1:3333` (AP `Quoridor-ESP32`) |
 | Fin de ligne     | `\n` (LF)                                   |
-| Encodage         | ASCII                                       |
+| Encodage         | UTF-8                                       |
 | Framing          | Aucun (texte brut)                          |
 | Checksum         | Aucun                                       |
 | Séquence / ack   | Aucun                                       |
@@ -17,9 +18,11 @@ Une réponse = une ligne terminée par `\n`. Encodage : ASCII.
 Le canal (USB local ou Wi-Fi local en mode AP) est supposé **fiable et exclusif** :
 pas de détection d'erreur applicative au niveau transport.
 
-Sur **Wi-Fi (phase 5, prévu, non implémenté à ce jour)** : le payload texte est identique,
-transporté sur TCP ou WebSocket vers l'adresse de l'ESP32 en mode AP. La couche Python
-(`UartBridge`) expose la même API `send_line` / `read_line` quel que soit le canal.
+Le protocole est **identique mot pour mot** sur les deux canaux. Côté Python,
+l'abstraction `Transport` (`SerialTransport`, `WiFiTransport`, `NullTransport`) expose
+la même API `write_line` / `read_line`. Côté firmware, la fonction `traiter()` accepte
+un `Stream*` (polymorphisme `HardwareSerial` / `WiFiClient`), donc une seule logique de
+dispatch sert les deux canaux.
 
 ---
 
@@ -62,11 +65,12 @@ WALL V 0 0
 WALL H 4 4
 ```
 
-> **Note — inversion d'orientation** : la couche Python (`uart_bridge.py`) applique
-> une inversion `H ↔ V` avant d'envoyer la commande, pour compenser la convention
-> d'orientation inverse entre l'engine Quoridor et les matrices physiques du firmware.
-> Le firmware reçoit donc l'orientation **déjà corrigée** ; les exemples ci-dessus sont
-> ceux effectivement envoyés sur le fil.
+> **Note — inversion d'orientation** : la couche Python (`webapp/service.py`,
+> méthode `_forward_to_plateau_unlocked`) applique une inversion `H ↔ V` avant
+> d'envoyer la commande, pour compenser la convention d'orientation inverse entre
+> l'engine Quoridor et les matrices physiques du firmware. Le firmware reçoit donc
+> l'orientation **déjà corrigée** ; les exemples ci-dessus sont ceux effectivement
+> envoyés sur le fil.
 
 ---
 
@@ -208,18 +212,23 @@ servo 0 deg
 servo 180 deg
 ```
 
-La couche Python (`uart_bridge.py`) **filtre** ces lignes : seules celles qui correspondent
-aux patterns attendus (`PONG`, `WALL OK …`, `WALL ERR …`) sont transmises à la logique
-applicative. Les autres lignes sont consignées en `DEBUG` et ignorées.
+La couche Python (`webapp/plateau.py`) lit les lignes ; les logs verbeux qui
+n'appartiennent pas au protocole sont ignorés au niveau du heartbeat (qui attend
+exactement `PONG`).
 
 ---
 
-## Extension Wi-Fi (phase 5, prévu, non implémenté à ce jour)
+## Transport Wi-Fi (phase 5, implémenté)
 
-Le protocole texte décrit dans ce document reste **identique mot pour mot** sur Wi-Fi.
-Seul le canal de transport change :
+Le protocole texte est strictement identique au transport USB. Seul le canal change :
 
-- Socket TCP ou WebSocket vers l'adresse de l'ESP32 (mode AP, IP fixe `192.168.4.1`).
-- Côté Python : une abstraction `Transport` exposera la même API `send_line` /
-  `read_line` que l'implémentation `SerialTransport` actuelle, rendant les couches
-  supérieures agnostiques au canal.
+- **Côté firmware** : `WiFi.softAP("Quoridor-ESP32", "quoridor2026")` au boot, puis
+  `WiFiServer` sur port `3333`. Politique "dernier client gagne" + watchdog 30 s
+  pour libérer les sockets fantômes.
+- **Côté Mac** : `WiFiTransport` (TCP brut, buffer interne pour lignes coupées entre
+  chunks). `PlateauBridge` ajoute heartbeat applicatif (`PING` toutes les 5 s,
+  détection coupure après 2 PONG ratés), reconnexion auto (10 s), et lock TX pour
+  sérialiser les commandes concurrentes.
+
+Test bout-en-bout validé (cf. [`08_tests.md`](08_tests.md) — tests `devkit_wifi`) :
+PING/PONG, politique dernier client, coexistence USB + Wi-Fi simultanée.
