@@ -238,3 +238,38 @@ class TestHumainVsHumain:
         assert state["current_player"] == "j1"
         assert state["turn_count"] == 2
         assert state["players"]["j2"]["position"] == [1, 3]
+
+    def test_hvh_tick_noop(self, service):
+        service.new_game(mode="human_vs_human", difficulty="normal", plateau_mode=False)
+        service._last_ai_move_at = 0.0  # delai depasse, force la condition
+        played = service.tick_once()
+        assert played is False
+        state = service.to_dict()
+        assert state["turn_count"] == 0
+        assert state["current_player"] == "j1"
+
+    def test_hvh_wall_de_j2_forwarded_au_plateau(self):
+        """Le mur pose par J2 en HvH doit etre envoye au plateau physique
+        avec inversion H<->V (convention plateau)."""
+        from webapp.transport import NullTransport
+
+        lignes_envoyees = []
+
+        class FakeTransport(NullTransport):
+            description = "fake"
+            is_alive = True
+            def write_line(self, line):
+                lignes_envoyees.append(line)
+
+        transport = FakeTransport()
+        transport.open()
+        service = QuoridorService(transport=transport)
+        service.new_game(mode="human_vs_human", difficulty="normal", plateau_mode=True)
+        # J1 deplace son pion (turn count 1, current player = j2)
+        service.apply_user_move({"type": "deplacement", "target": (4, 3)})
+        lignes_envoyees.clear()  # on ignore les HOME/autres au demarrage
+        # J2 pose un mur horizontal
+        service.apply_user_move({"type": "mur", "orientation": "h", "row": 1, "col": 2})
+        # Verifier que la commande WALL a ete envoyee (avec inversion h->V)
+        assert any(ligne.startswith("WALL V 1 2") for ligne in lignes_envoyees), \
+            f"WALL non envoye, lignes: {lignes_envoyees}"
