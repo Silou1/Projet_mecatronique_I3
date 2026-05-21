@@ -66,6 +66,7 @@ navigateur sur le réseau local (iPhone, PC, Mac).
 | `transport.py` | Interface `Transport` + 3 impls (`SerialTransport`, `WiFiTransport`, `NullTransport`) + factory pilotée par env var `QUORIDOR_TRANSPORT`. |
 | `plateau.py` | `PlateauBridge` : couche haute au-dessus de `Transport`. Heartbeat thread (PING/PONG 5 s), lock TX, reconnexion auto, `switch_transport` à chaud. |
 | `qr.py` | Génération de QR code SVG pour partager l'URL de la webapp sur téléphone. |
+| `leds.py` | Mapping engine↔strip serpentin + classe `LedRenderer` avec diff. Hook après mutation de `GameState`. |
 | `schemas.py` | Modèles Pydantic pour les payloads et réponses JSON. |
 | `static/` | Frontend : HTML5 + CSS3 + JS vanilla + SVG inline. Zéro framework, zéro build. |
 

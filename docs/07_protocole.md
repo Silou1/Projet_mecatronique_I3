@@ -198,6 +198,43 @@ du sketch. Les 42 autres positions sont marquées `_NA` et sautées sans erreur.
 
 ---
 
+## Commandes LED (phase 5b)
+
+Le sous-système LED expose 4 commandes texte additionnelles, identiques sur USB et Wi-Fi.
+Détail dans la spec `docs/superpowers/specs/2026-05-21-leds-design.md`.
+
+### Commandes Mac → ESP32
+
+| Commande | Réponse | Description |
+|---|---|---|
+| `LED <idx> <r> <g> <b>` | `OK` ou `ERR <msg>` | Met à jour le pixel `idx` dans le buffer firmware. Ne push pas sur le strip. |
+| `LEDSHOW` | `OK` | Push atomique du buffer interne vers le strip. |
+| `LEDCLEAR` | `OK` | Buffer remis à 0 + push immédiat. Toutes les LEDs éteintes. |
+| `LEDBRIGHT <0..255>` | `OK` ou `ERR <msg>` | Modifie la luminosité globale. Persistant jusqu'au reset. Défaut : 102 (40 %). |
+
+### Bornes
+
+| Champ | Bornes | Erreur |
+|---|---|---|
+| `idx` | `[0..35]` | `ERR LED borne : idx=X hors [0..35]` |
+| `r`, `g`, `b` | `[0..255]` | `ERR LED borne : composante hors [0..255]` |
+| `LEDBRIGHT` | `[0..255]` | `ERR LEDBRIGHT borne : X hors [0..255]` |
+
+### Exemple de session
+
+```
+> LED 3 0 0 0          ← éteindre l'ancienne position J1
+< OK
+> LED 8 0 0 255        ← allumer la nouvelle position J1 (bleu)
+< OK
+> LED 7 0 64 64        ← case atteignable (cyan dim, P1 bonus)
+< OK
+> LEDSHOW              ← push atomique
+< OK
+```
+
+---
+
 ## Logs verbeux du firmware
 
 En plus des réponses structurées, le firmware émet des messages de debug sur le même

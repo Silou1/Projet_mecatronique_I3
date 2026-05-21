@@ -49,6 +49,18 @@ ESP32-WROOM (Freenove DevKit). Wi-Fi natif intégré au SoC, USB-série pour deb
 
 Pulses : 500 µs (0°) à 2500 µs (180°).
 
+## Strip LED WS2812B (36 LEDs)
+
+| Signal | GPIO ou alim |
+|---|---|
+| DIN (data) | 15 |
+| VDD | alimentation 5 V externe (step-down du 12 V général) |
+| GND | commun avec ESP32 GND (impératif) |
+
+Strapping pin sans risque (pull-up interne, état HIGH par défaut au boot).
+Pin libérée comme GPIO normal après le boot. Cf. spec :
+`docs/superpowers/specs/2026-05-21-leds-design.md`.
+
 ## Pins libres et précautions pour futurs ajouts
 
 Pour tout ajout de périphérique (Wi-Fi futur, boutons, LEDs, expander I²C), **vérifier

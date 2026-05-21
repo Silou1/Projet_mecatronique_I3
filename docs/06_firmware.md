@@ -41,6 +41,7 @@ PlatformIO est installé dans `~/.platformio/penv`. CLI uniquement — aucune ex
 | Capteur fin de course X | 13 (INPUT_PULLUP) |
 | Capteur fin de course Y | 18 (INPUT_PULLUP) |
 | Servo SG90 (signal) | 4 |
+| Strip LED WS2812B (DIN) | 15 |
 
 Conventions méchaniques (validées machine) :
 - **X pur** : M1 et M2 tournent en **sens opposés**.
@@ -123,8 +124,13 @@ Format : texte ASCII, terminé par `\n`. Tokens séparés par des espaces. Comma
 |---|---|
 | `PING` | `PONG` |
 | `WALL <H\|V> <row> <col>` | `WALL OK <H\|V> <r> <c> raised=<n>` ou `WALL ERR <raison>` |
+| `LED <idx> <r> <g> <b>` | `OK` ou `ERR <msg>` |
+| `LEDSHOW` | `OK` |
+| `LEDCLEAR` | `OK` |
+| `LEDBRIGHT <0..255>` | `OK` ou `ERR <msg>` |
 
 Pour la sémantique complète du protocole webapp, voir [`docs/07_protocole.md`](07_protocole.md).
+Sous-système LED documenté en détail dans `docs/07_protocole.md` et `docs/superpowers/specs/2026-05-21-leds-design.md`.
 
 ### Cohabitation des deux modes
 
