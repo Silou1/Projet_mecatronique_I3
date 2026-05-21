@@ -30,28 +30,45 @@ def wifi_fixture():
     restore_ssid = os.environ.get("QUORIDOR_SSID_RESTORE")
     save_arg = ["--save-current", restore_ssid] if restore_ssid else []
 
-    # Bascule
-    try:
-        subprocess.check_call(
-            [sys.executable, str(WIFI_SWITCH), "to-esp32"] + save_arg,
-            timeout=15,
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        pytest.skip(f"Bascule Wi-Fi vers Quoridor-ESP32 echouee : {e}")
-    # Laisse 3s à la liaison Wi-Fi
-    time.sleep(3.0)
+    # Bascule sur Quoridor-ESP32 si pas déjà connecté.
+    # Optimisation : on teste d'abord si on peut joindre 192.168.4.1:3333.
+    # Si oui, on saute la bascule (gain de ~5-10s par test devkit_wifi).
+    already_on_esp32 = _can_reach_esp32()
+    if not already_on_esp32:
+        try:
+            subprocess.check_call(
+                [sys.executable, str(WIFI_SWITCH), "to-esp32"] + save_arg,
+                timeout=45,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            pytest.skip(f"Bascule Wi-Fi vers Quoridor-ESP32 echouee : {e}")
+        time.sleep(3.0)
 
     yield
 
-    # Restauration (best effort)
+    # Restauration seulement si la variable QUORIDOR_AUTO_RESTORE=1 est positionnee.
+    # Par defaut, on reste sur Quoridor-ESP32 pour chainer plusieurs tests devkit_wifi
+    # sans payer le cout de bascule a chaque fois. L'utilisateur fera la restauration
+    # manuelle a la fin (ou via wifi_switch.py restore).
+    if os.environ.get("QUORIDOR_AUTO_RESTORE") == "1":
+        try:
+            subprocess.check_call(
+                [sys.executable, str(WIFI_SWITCH), "restore"],
+                timeout=45,
+            )
+            time.sleep(2.0)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            sys.stderr.write(
+                f"\n⚠ Restauration Wi-Fi a echoue : {e}\n"
+                f"  Reconnecte-toi manuellement au SSID precedent via le menu Wi-Fi macOS.\n"
+            )
+
+
+def _can_reach_esp32(host: str = "192.168.4.1", port: int = 3333, timeout: float = 1.0) -> bool:
+    """Test rapide si l'ESP32 est joignable en TCP (= Mac deja sur l'AP)."""
+    import socket as _s
     try:
-        subprocess.check_call(
-            [sys.executable, str(WIFI_SWITCH), "restore"],
-            timeout=15,
-        )
-        time.sleep(2.0)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        sys.stderr.write(
-            f"\n⚠ Restauration Wi-Fi a echoue : {e}\n"
-            f"  Reconnecte-toi manuellement au SSID precedent via le menu Wi-Fi macOS.\n"
-        )
+        with _s.create_connection((host, port), timeout=timeout):
+            return True
+    except (OSError, _s.timeout):
+        return False
