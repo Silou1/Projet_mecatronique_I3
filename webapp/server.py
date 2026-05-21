@@ -116,6 +116,36 @@ def create_app(transport: Optional[object] = None, startup_error: Optional[str] 
         service.quit_to_home()
         return service.to_dict()
 
+    @app.get("/api/status")
+    def get_status():
+        plateau_dict = service._plateau.status_dict()
+        desc = plateau_dict["description"]
+        if desc.startswith("wifi"):
+            kind = "wifi"
+        elif desc.startswith("serial"):
+            kind = "serial"
+        else:
+            kind = "none"
+        return {
+            "client": {
+                "polling_active": True,
+                "polling_interval_ms": 500,
+            },
+            "transport": {
+                "kind": kind,
+                "description": desc,
+                "alive": plateau_dict["alive"],
+                "last_pong_at_iso": plateau_dict["last_pong_at_iso"],
+                "last_pong_age_seconds": plateau_dict["last_pong_age_seconds"],
+                "latency_avg_ms": plateau_dict["latency_avg_ms"],
+                "startup_error": service._startup_error,
+            },
+            "plateau": {
+                "homed": False,  # suivi du homing physique : hors scope phase 5
+                "ready": plateau_dict["alive"],
+            },
+        }
+
     return app
 
 

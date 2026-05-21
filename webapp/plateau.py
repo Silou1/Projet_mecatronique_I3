@@ -160,6 +160,27 @@ class PlateauBridge:
                 except TransportError as e:
                     log.info("Reconnexion echouee : %s", e)
 
+    def status_dict(self) -> dict:
+        """Snapshot des compteurs heartbeat, serialisable JSON."""
+        import datetime as _dt
+        with self._counters_lock:
+            last_pong_iso = None
+            last_pong_age = None
+            if self.last_pong_at is not None:
+                last_pong_age = max(0.0, time.monotonic() - self.last_pong_at)
+                last_pong_iso = (
+                    _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=last_pong_age)
+                ).isoformat()
+            return {
+                "description": self._transport.description,
+                "alive": self.available,
+                "last_pong_at_iso": last_pong_iso,
+                "last_pong_age_seconds": last_pong_age,
+                "latency_avg_ms": self.latency_avg_ms,
+                "transport_lost": self.transport_lost,
+                "failed_pings": self.failed_pings,
+            }
+
     def switch_transport(self, new_transport: Transport) -> None:
         """Bascule vers un nouveau transport en cours d'execution.
 
