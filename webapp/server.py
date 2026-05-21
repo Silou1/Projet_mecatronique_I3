@@ -136,6 +136,8 @@ def main() -> None:
 
     app = create_app(transport=transport, startup_error=startup_error)
     app.state.service.start_tick_thread()
+    app.state.service._plateau.start_heartbeat()
+    app.state.service._plateau.start_reconnect_watcher()
 
     log.info("Quoridor web app demarree sur http://0.0.0.0:8000 (transport=%s)",
              transport.description)

@@ -175,3 +175,52 @@ def test_plateau_bridge_auto_reconnect_after_lost():
     b.stop_heartbeat()
     b.stop_reconnect_watcher()
     assert b.transport_lost is False
+
+
+def test_plateau_bridge_switch_transport_success():
+    t1 = FakeTransport()
+    t1.open()
+    b = PlateauBridge(transport=t1)
+    t2 = FakeTransport()
+    b.switch_transport(t2)
+    assert b.transport is t2
+    assert t2.opened is True
+    assert t1.opened is False  # ancien fermé
+
+
+def test_plateau_bridge_switch_transport_open_failure_keeps_old():
+    t1 = FakeTransport()
+    t1.open()
+    b = PlateauBridge(transport=t1)
+
+    class FailingTransport:
+        opened = False
+        is_alive = False
+        description = "failing"
+        def open(self): raise TransportError("boom")
+        def write_line(self, l): raise TransportError("boom")
+        def read_line(self, timeout=1.0): return None
+        def close(self): pass
+
+    with pytest.raises(TransportError):
+        b.switch_transport(FailingTransport())
+    # L'ancien transport reste actif si le nouveau a echoue a open()
+    assert b.transport is t1
+    assert t1.opened is True
+
+
+def test_plateau_bridge_switch_resets_counters():
+    t1 = FakeTransport()
+    t1.open()
+    b = PlateauBridge(transport=t1)
+    # Simuler un etat "transport_lost"
+    b.transport_lost = True
+    b.failed_pings = 5
+    b.last_pong_at = 12345.0
+    b.latency_avg_ms = 42.0
+    t2 = FakeTransport()
+    b.switch_transport(t2)
+    assert b.transport_lost is False
+    assert b.failed_pings == 0
+    assert b.last_pong_at is None
+    assert b.latency_avg_ms is None

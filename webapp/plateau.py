@@ -160,6 +160,29 @@ class PlateauBridge:
                 except TransportError as e:
                     log.info("Reconnexion echouee : %s", e)
 
+    def switch_transport(self, new_transport: Transport) -> None:
+        """Bascule vers un nouveau transport en cours d'execution.
+
+        Acquiert _tx_lock -> attend la fin d'une commande en cours.
+        Ouvre le nouveau transport. Si l'open() echoue, l'ancien reste actif.
+        Sinon, ferme l'ancien et bascule, puis reinitialise les compteurs heartbeat.
+        """
+        with self._tx_lock:
+            new_transport.open()  # leve TransportError si echec -> l'ancien reste actif
+            old = self._transport
+            self._transport = new_transport
+            try:
+                old.close()
+            except Exception:  # noqa: BLE001
+                pass
+            with self._counters_lock:
+                self.last_pong_at = None
+                self.failed_pings = 0
+                self.latency_avg_ms = None
+                self._latency_samples = []
+                self.transport_lost = False
+            log.info("Bascule transport : %s", new_transport.description)
+
     def close(self) -> None:
         """Ferme le transport sous-jacent et arrête les threads."""
         self.stop_heartbeat()
