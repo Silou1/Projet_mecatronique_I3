@@ -165,25 +165,29 @@ function renderHeader(state) {
   document.getElementById("j1-walls").textContent = state.players.j1.walls_remaining;
   document.getElementById("j2-walls").textContent = state.players.j2.walls_remaining;
   const ind = document.getElementById("turn-indicator");
+  // Reset des classes a chaque rendu
+  ind.classList.remove("ai-thinking", "turn-j1", "turn-j2");
   if (state.status !== "playing" && state.status !== "paused") {
     ind.textContent = "";
-    ind.classList.remove("ai-thinking");
     return;
   }
   if (state.status === "paused") {
     ind.textContent = "Pause";
-    ind.classList.remove("ai-thinking");
     return;
   }
   if (state.ai_thinking) {
     ind.textContent = "IA réfléchit";
     ind.classList.add("ai-thinking");
-  } else if (state.mode === "ai_vs_ai") {
+    return;
+  }
+  // Couleur selon le joueur courant
+  ind.classList.add(state.current_player === "j1" ? "turn-j1" : "turn-j2");
+  if (state.mode === "ai_vs_ai") {
     ind.textContent = `Tour de ${state.current_player.toUpperCase()}`;
-    ind.classList.remove("ai-thinking");
-  } else {
-    ind.textContent = state.current_player === "j1" ? "Ton tour" : "IA joue";
-    ind.classList.remove("ai-thinking");
+  } else if (state.mode === "human_vs_human") {
+    ind.textContent = `AU TOUR DE ${state.current_player.toUpperCase()}`;
+  } else /* human_vs_ai */ {
+    ind.textContent = state.current_player === "j1" ? "TON TOUR" : "IA joue";
   }
 }
 
