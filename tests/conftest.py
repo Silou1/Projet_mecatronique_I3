@@ -50,6 +50,15 @@ class MockSerial:
     def close(self):
         self.is_open = False
 
+    def flush(self):
+        """No-op : equivalent du flush pyserial."""
+        pass
+
+    def reset_input_buffer(self):
+        """Vide le buffer RX (equivalent pyserial)."""
+        with self._lock:
+            self._rx_buffer.clear()
+
     # API helpers pour les tests
     def inject_rx(self, data: bytes) -> None:
         """Simule l'arrivee de bytes depuis l'ESP32."""
