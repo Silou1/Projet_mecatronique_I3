@@ -49,7 +49,19 @@
 
 #include <Arduino.h>
 #include <ESP32Servo.h>
+#include <WiFi.h>
 #include "esp_task_wdt.h"
+
+// === Wi-Fi AP (phase 5) ===
+const char* AP_SSID = "Quoridor-ESP32";
+const char* AP_PASS = "quoridor2026";
+const uint16_t TCP_PORT = 3333;
+const unsigned long CLIENT_WATCHDOG_MS = 30000;
+
+WiFiServer wifi_server(TCP_PORT);
+WiFiClient wifi_client;
+String tampon_wifi = "";
+unsigned long last_rx_from_client = 0;
 
 // ============================================================================
 // Pins / parametres
@@ -702,145 +714,152 @@ static long parse_n_apres(const String& s, size_t off) {
   return n;
 }
 
-static void traiter(String s) {
+static void traiter(String s, Stream* reply) {
   s.trim();
   s.toUpperCase();
   if (s.length() == 0) return;
 
   if (s == "HELP")        { afficher_aide();  return; }
-  if (s == "PING")        { Serial.println("PONG"); return; }
-  if (s == "STATUS")      { afficher_status(); return; }
+  if (s == "PING")        { reply->println("PONG"); return; }
+  if (s == "STATUS")      { afficher_status(); reply->println("OK"); return; }
   if (s == "LIMITS")      {
-    Serial.print("X="); Serial.print(digitalRead(PIN_LIMIT_X) == LOW ? "LOW " : "HIGH");
-    Serial.print("  Y="); Serial.println(digitalRead(PIN_LIMIT_Y) == LOW ? "LOW " : "HIGH");
+    reply->print("X="); reply->print(digitalRead(PIN_LIMIT_X) == LOW ? "LOW " : "HIGH");
+    reply->print("  Y="); reply->println(digitalRead(PIN_LIMIT_Y) == LOW ? "LOW " : "HIGH");
     return;
   }
   if (s == "LIMITS WATCH") { limits_watch(); return; }
-  if (s == "EN ON")  { activer_drivers(true);  Serial.println("drivers ON");  return; }
-  if (s == "EN OFF") { activer_drivers(false); Serial.println("drivers OFF"); return; }
-  if (s == "HOME")   { homing_complet(); return; }
-  if (s == "LEVER")  { servo.write(SERVO_LEVER_DEG); Serial.println("servo 0 deg"); return; }
-  if (s == "BAISSER"){ servo.write(SERVO_REPOS_DEG); Serial.println("servo 180 deg"); return; }
-  if (s == "TOUR")   { tour_demarrer(); return; }
-  if (s == "NEXT" || s == "N") { tour_suivant(); return; }
-  if (s == "STOP")   { tour_stop(); return; }
-  if (s == "LIST")   { afficher_liste(); return; }
-  if (s == "DEMO")   { demo_lever_murs(10); return; }
+  if (s == "EN ON")  { activer_drivers(true);  reply->println("drivers ON");  return; }
+  if (s == "EN OFF") { activer_drivers(false); reply->println("drivers OFF"); return; }
+  if (s == "HOME")   {
+    bool ok = homing_complet();
+    reply->println(ok ? "HOME OK" : "HOME ERR");
+    return;
+  }
+  if (s == "LEVER")  { servo.write(SERVO_LEVER_DEG); reply->println("servo 0 deg"); return; }
+  if (s == "BAISSER"){ servo.write(SERVO_REPOS_DEG); reply->println("servo 180 deg"); return; }
+  if (s == "TOUR")   { tour_demarrer(); reply->println("OK"); return; }
+  if (s == "NEXT" || s == "N") { tour_suivant(); reply->println("OK"); return; }
+  if (s == "STOP")   { tour_stop(); reply->println("OK"); return; }
+  if (s == "LIST")   { afficher_liste(); reply->println("OK"); return; }
+  if (s == "DEMO")   { demo_lever_murs(10); reply->println("OK"); return; }
   if (s.startsWith("DEMO ")) {
     long v = s.substring(5).toInt();
-    if (v <= 0) { Serial.println("DEMO N : N doit etre > 0"); return; }
+    if (v <= 0) { reply->println("ERR DEMO N : N doit etre > 0"); return; }
     demo_lever_murs((int)v);
+    reply->println("OK");
     return;
   }
 
   if (s.startsWith("WALL ")) {
     String r = s.substring(5); r.trim();
     if (r.length() < 5 || (r.charAt(0) != 'H' && r.charAt(0) != 'V')) {
-      Serial.println("WALL ERR orientation : H ou V attendu");
+      reply->println("WALL ERR orientation : H ou V attendu");
       return;
     }
     char orient = r.charAt(0);
     String reste = r.substring(2); reste.trim();
     int sp = reste.indexOf(' ');
     if (sp < 0) {
-      Serial.println("WALL ERR syntaxe : WALL <H|V> <row> <col>");
+      reply->println("WALL ERR syntaxe : WALL <H|V> <row> <col>");
       return;
     }
     int row = reste.substring(0, sp).toInt();
     int col = reste.substring(sp + 1).toInt();
     if (row < 0 || row > 4 || col < 0 || col > 4) {
-      Serial.print("WALL ERR borne : row="); Serial.print(row);
-      Serial.print(" col="); Serial.print(col);
-      Serial.println(" hors [0..4]");
+      reply->print("WALL ERR borne : row="); reply->print(row);
+      reply->print(" col="); reply->print(col);
+      reply->println(" hors [0..4]");
       return;
     }
     int raised = wall_lever(orient, row, col);
-    Serial.print("WALL OK "); Serial.print(orient);
-    Serial.print(" "); Serial.print(row); Serial.print(" "); Serial.print(col);
-    Serial.print(" raised="); Serial.println(raised);
+    reply->print("WALL OK "); reply->print(orient);
+    reply->print(" "); reply->print(row); reply->print(" "); reply->print(col);
+    reply->print(" raised="); reply->println(raised);
     return;
   }
 
   if (s.startsWith("MUR ")) {
     String r = s.substring(4); r.trim();
     if (r.length() < 3 || (r.charAt(0) != 'H' && r.charAt(0) != 'V')) {
-      Serial.println("Syntaxe : MUR H <i> <j>  ou  MUR V <i> <j>");
+      reply->println("ERR Syntaxe : MUR H <i> <j>  ou  MUR V <i> <j>");
       return;
     }
     char type = r.charAt(0);
     String reste = r.substring(2); reste.trim();
     int sp = reste.indexOf(' ');
     if (sp < 0) {
-      Serial.println("Syntaxe : MUR H <i> <j>  ou  MUR V <i> <j>");
+      reply->println("ERR Syntaxe : MUR H <i> <j>  ou  MUR V <i> <j>");
       return;
     }
     int i = reste.substring(0, sp).toInt();
     int j = reste.substring(sp + 1).toInt();
     if (type == 'H') aller_au_mur_h(i, j);
     else             aller_au_mur_v(i, j);
+    reply->println("OK");
     return;
   }
 
   if (s.startsWith("SERVO ")) {
     long v = s.substring(6).toInt();
-    if (v < 0 || v > 180) { Serial.println("angle hors [0..180]"); return; }
+    if (v < 0 || v > 180) { reply->println("ERR angle hors [0..180]"); return; }
     servo.write((int)v);
-    Serial.print("servo "); Serial.print(v); Serial.println(" deg");
+    reply->print("servo "); reply->print(v); reply->println(" deg");
     return;
   }
   if (s.startsWith("SPEED ")) {
     long v = s.substring(6).toInt();
     if (v < (long)SPEED_MIN_US || v > (long)SPEED_MAX_US) {
-      Serial.println("SPEED hors limite"); return;
+      reply->println("ERR SPEED hors limite"); return;
     }
     demi_periode_us = (uint32_t)v;
-    Serial.print("SPEED = "); Serial.print(demi_periode_us); Serial.println(" us");
+    reply->print("SPEED = "); reply->print(demi_periode_us); reply->println(" us");
     return;
   }
   if (s.startsWith("DUTY ")) {
     long v = s.substring(5).toInt();
     if (v < (long)DUTY_MIN_PCT || v > (long)DUTY_MAX_PCT) {
-      Serial.println("DUTY hors limite"); return;
+      reply->println("ERR DUTY hors limite"); return;
     }
     duty_pct = (uint8_t)v;
     appliquer_duty_courant();
-    Serial.print("DUTY = "); Serial.print(duty_pct); Serial.println(" %");
+    reply->print("DUTY = "); reply->print(duty_pct); reply->println(" %");
     return;
   }
   if (s.startsWith("GOTO ")) {
     String r = s.substring(5); r.trim();
     int sp = r.indexOf(' ');
-    if (sp < 0) { Serial.println("Syntaxe : GOTO <x> <y>"); return; }
+    if (sp < 0) { reply->println("ERR Syntaxe : GOTO <x> <y>"); return; }
     goto_xy(r.substring(0, sp).toInt(), r.substring(sp + 1).toInt());
+    reply->println("OK");
     return;
   }
   if (!drivers_actifs && (s.startsWith("X ") || s.startsWith("Y ") ||
                           s.startsWith("M1 ") || s.startsWith("M2 "))) {
-    Serial.println("Drivers OFF. Tape 'EN ON' d'abord.");
+    reply->println("ERR Drivers OFF. Tape 'EN ON' d'abord.");
     return;
   }
   if (s.startsWith("X F ") || s.startsWith("X B ")) {
     long n = parse_n_apres(s, 4); if (n < 0) return;
     deplacer_x((uint32_t)n, s.charAt(2) == 'F');
-    Serial.println("done"); return;
+    reply->println("done"); return;
   }
   if (s.startsWith("Y F ") || s.startsWith("Y B ")) {
     long n = parse_n_apres(s, 4); if (n < 0) return;
     deplacer_y((uint32_t)n, s.charAt(2) == 'F');
-    Serial.println("done"); return;
+    reply->println("done"); return;
   }
   if (s.startsWith("M1 F ") || s.startsWith("M1 B ")) {
     long n = parse_n_apres(s, 5); if (n < 0) return;
     deplacer_m1((uint32_t)n, s.charAt(3) == 'F');
-    Serial.println("done (position INVALIDEE)"); return;
+    reply->println("done (position INVALIDEE)"); return;
   }
   if (s.startsWith("M2 F ") || s.startsWith("M2 B ")) {
     long n = parse_n_apres(s, 5); if (n < 0) return;
     deplacer_m2((uint32_t)n, s.charAt(3) == 'F');
-    Serial.println("done (position INVALIDEE)"); return;
+    reply->println("done (position INVALIDEE)"); return;
   }
 
-  Serial.print("Commande inconnue : '"); Serial.print(s); Serial.println("' - tape HELP");
+  reply->print("ERR Commande inconnue : '"); reply->print(s); reply->println("' - tape HELP");
 }
 
 // ============================================================================
@@ -887,14 +906,43 @@ void setup() {
   Serial.println();
   afficher_aide();
   Serial.println();
+
+  // 4. Demarrage Wi-Fi AP (phase 5)
+  WiFi.mode(WIFI_AP);
+  bool ap_ok = WiFi.softAP(AP_SSID, AP_PASS);
+  if (ap_ok) {
+    Serial.print("[WiFi] AP demarre : ");
+    Serial.print(AP_SSID);
+    Serial.print(" / IP : ");
+    Serial.println(WiFi.softAPIP());
+  } else {
+    Serial.println("[WiFi] AP softAP() echoue");
+  }
+  wifi_server.begin();
+  Serial.print("[WiFi] Serveur TCP demarre sur port ");
+  Serial.println(TCP_PORT);
+  Serial.println();
 }
 
 void loop() {
+  // 1. Accepter une nouvelle connexion TCP (politique "dernier client gagne")
+  if (wifi_server.hasClient()) {
+    if (wifi_client && wifi_client.connected()) {
+      wifi_client.stop();
+    }
+    wifi_client = wifi_server.available();
+    tampon_wifi = "";
+    last_rx_from_client = millis();
+    Serial.print("[WiFi] Nouveau client : ");
+    Serial.println(wifi_client.remoteIP());
+  }
+
+  // 2. Lecture USB-serie (canal existant, inchange)
   while (Serial.available()) {
     char c = (char)Serial.read();
     if (c == '\r') continue;
     if (c == '\n') {
-      traiter(tampon_serie);
+      traiter(tampon_serie, &Serial);
       tampon_serie = "";
     } else {
       tampon_serie += c;
@@ -903,5 +951,31 @@ void loop() {
         Serial.println("Ligne trop longue, ignoree.");
       }
     }
+  }
+
+  // 3. Lecture client TCP (nouveau)
+  if (wifi_client && wifi_client.connected()) {
+    while (wifi_client.available()) {
+      char c = (char)wifi_client.read();
+      if (c == '\r') continue;
+      if (c == '\n') {
+        traiter(tampon_wifi, &wifi_client);
+        tampon_wifi = "";
+        last_rx_from_client = millis();
+      } else {
+        tampon_wifi += c;
+        if (tampon_wifi.length() > 64) {
+          tampon_wifi = "";
+          wifi_client.println("Ligne trop longue, ignoree.");
+        }
+      }
+    }
+  }
+
+  // 4. Watchdog : drop client TCP si 30s sans trafic
+  if (wifi_client && wifi_client.connected()
+      && (millis() - last_rx_from_client > CLIENT_WATCHDOG_MS)) {
+    Serial.println("[WiFi] Watchdog : client silencieux, drop");
+    wifi_client.stop();
   }
 }
