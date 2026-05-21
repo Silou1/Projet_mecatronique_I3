@@ -672,6 +672,10 @@ static void afficher_aide() {
   Serial.println("  STATUS            etat actuel");
   Serial.println("  PING              repond PONG (handshake webapp)");
   Serial.println("  WALL <H|V> <r> <c>  lever mur Quoridor (r,c dans [0..4])");
+  Serial.println("  LED <idx> <r> <g> <b>  ecrit pixel idx (buffer, 0..35)");
+  Serial.println("  LEDSHOW           pousse le buffer LED");
+  Serial.println("  LEDCLEAR          eteint toutes les LEDs");
+  Serial.println("  LEDBRIGHT <0..255>  luminosite globale");
   Serial.println("  HELP              cette aide");
 }
 
