@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import glob
 import logging
+import os
 import platform
 import socket
 import time
@@ -254,3 +255,21 @@ class WiFiTransport(Transport):
     @property
     def description(self) -> str:
         return f"wifi {self._host}:{self._port}"
+
+
+def make_transport() -> Transport:
+    """Construit le Transport selon la variable d'env QUORIDOR_TRANSPORT.
+
+    Valeurs acceptées (case-insensitive) : 'wifi', 'serial', 'none'.
+    Défaut : 'wifi'.
+    """
+    kind = os.environ.get("QUORIDOR_TRANSPORT", "wifi").lower()
+    if kind == "wifi":
+        return WiFiTransport()
+    if kind == "serial":
+        return SerialTransport()
+    if kind == "none":
+        return NullTransport()
+    raise ValueError(
+        f"QUORIDOR_TRANSPORT invalide : {kind!r} (attendu : wifi|serial|none)"
+    )
