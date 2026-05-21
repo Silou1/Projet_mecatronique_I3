@@ -147,12 +147,18 @@ def create_app(transport: Optional[object] = None, startup_error: Optional[str] 
                 "error": str(e),
             }
 
+    DEMO_FIXED_URL = "http://192.168.4.2:8000"  # IP du Mac en mode AP Quoridor-ESP32
+
     @app.get("/api/qr-code")
-    def get_qr_code():
-        """Renvoie un QR code SVG pointant vers l'URL de la webapp sur le LAN."""
+    def get_qr_code(mode: str = "auto"):
+        """Renvoie un QR code SVG.
+
+        - mode=auto (defaut) : URL dynamique selon l'IP courante du Mac.
+        - mode=demo : URL figee 192.168.4.2:8000 (a imprimer pour la demo Wi-Fi).
+        """
         from fastapi.responses import Response
         from webapp.qr import qr_svg, webapp_url
-        url = webapp_url()
+        url = DEMO_FIXED_URL if mode == "demo" else webapp_url()
         svg = qr_svg(url)
         return Response(content=svg, media_type="image/svg+xml", headers={
             "X-Webapp-Url": url,
@@ -160,10 +166,11 @@ def create_app(transport: Optional[object] = None, startup_error: Optional[str] 
         })
 
     @app.get("/api/qr-code/url")
-    def get_qr_code_url():
+    def get_qr_code_url(mode: str = "auto"):
         """Renvoie l'URL textuelle (pour affichage à côté du QR)."""
         from webapp.qr import webapp_url
-        return {"url": webapp_url()}
+        url = DEMO_FIXED_URL if mode == "demo" else webapp_url()
+        return {"url": url, "mode": mode}
 
     @app.get("/api/status")
     def get_status():

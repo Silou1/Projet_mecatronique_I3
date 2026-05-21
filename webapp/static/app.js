@@ -532,18 +532,41 @@ function initShareUI() {
   const btnShareClose = document.getElementById("btn-share-close");
   const qrImage = document.getElementById("qr-image");
   const qrUrl = document.getElementById("qr-url");
+  const qrModeHint = document.getElementById("qr-mode-hint");
+  let qrMode = "auto";
+
+  async function refreshQr() {
+    qrImage.src = `/api/qr-code?mode=${qrMode}&t=` + Date.now();
+    try {
+      const r = await fetch(`/api/qr-code/url?mode=${qrMode}`);
+      const j = await r.json();
+      qrUrl.textContent = j.url;
+    } catch (e) {
+      qrUrl.textContent = "(URL indisponible)";
+    }
+    if (qrMode === "demo") {
+      qrModeHint.textContent = "URL figée pour le mode démo (Mac + téléphone sur Quoridor-ESP32). À imprimer.";
+    } else {
+      qrModeHint.textContent = "URL selon le réseau actuel du Mac.";
+    }
+  }
+
+  // Toggle chips dans le modal QR
+  const qrModeGroup = document.querySelector('[data-field="qr-mode"]');
+  if (qrModeGroup) {
+    qrModeGroup.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip) return;
+      qrModeGroup.querySelectorAll(".chip").forEach(c => c.classList.remove("selected"));
+      chip.classList.add("selected");
+      qrMode = chip.dataset.value;
+      refreshQr();
+    });
+  }
 
   if (btnShare && modalShare) {
-    btnShare.addEventListener("click", async () => {
-      // Reload du QR (au cas où l'IP a changé entre 2 ouvertures)
-      qrImage.src = "/api/qr-code?t=" + Date.now();
-      try {
-        const r = await fetch("/api/qr-code/url");
-        const j = await r.json();
-        qrUrl.textContent = j.url;
-      } catch (e) {
-        qrUrl.textContent = "(URL indisponible)";
-      }
+    btnShare.addEventListener("click", () => {
+      refreshQr();
       modalShare.classList.remove("hidden");
     });
   }
