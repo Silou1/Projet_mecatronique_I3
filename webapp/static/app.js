@@ -298,6 +298,10 @@ function render(newState) {
   }
   renderModal(state);
   maybeShowTransition(state);
+  // Rotation 180 du plateau au tour de J2 en HvH
+  const board = document.getElementById("board");
+  const flip = state.mode === "human_vs_human" && state.current_player === "j2" && state.status === "playing";
+  board.classList.toggle("flipped", flip);
   renderPlateauToggle(state);
   // Sync chip vitesse in-game avec le serveur
   const speedGroup = document.querySelector('[data-field="speed-ingame"]');
