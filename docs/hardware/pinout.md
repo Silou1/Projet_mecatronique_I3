@@ -63,9 +63,15 @@ Pin libérée comme GPIO normal après le boot. Cf. spec :
 
 ## Pins libres et précautions pour futurs ajouts
 
-Pour tout ajout de périphérique (Wi-Fi futur, boutons, LEDs, expander I²C), **vérifier
+Pour tout ajout de périphérique (capteurs additionnels, expander I²C, etc.), **vérifier
 d'abord dans NotebookLM `7d0bccd1-df3f-456d-99a0-1192766043ba`** (« ESP32 Development Board
-Pinout Reference Map ») avant câblage. Précautions générales :
+Pinout Reference Map ») avant câblage.
+
+> La matrice de boutons 6×6 envisagée à l'origine a été **abandonnée définitivement**
+> le 2026-05-21 (cf. [`../decisions.md`](../decisions.md)). Les ~12 GPIO qui auraient été
+> mobilisés pour le scan ligne/colonne restent libres pour évolutions futures.
+
+Précautions générales :
 
 - **Strapping pins** (GPIO 0, 2, 5, 12, 15) : à éviter en sortie au boot, état au reset
   conditionne le mode de démarrage.

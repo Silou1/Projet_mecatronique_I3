@@ -35,6 +35,9 @@ CoreXY, le servo et les détecteurs de position. Pour les détails complets du p
 8. **[08_tests.md](08_tests.md)** — Stratégie de tests : pytest Python (moteur + webapp) et
    scénarios de validation firmware (commandes manuelles).
 
+9. **[decisions.md](decisions.md)** — Registre des décisions et pivots du projet :
+   abandons, changements d'architecture, choix techniques majeurs avec justification.
+
 ---
 
 ## Sous-dossier `hardware/`

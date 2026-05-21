@@ -2,22 +2,31 @@
 
 ## Vue d'ensemble
 
-La webapp est servie par **FastAPI** (Python 3.12) sur `localhost:8000`. Elle tourne sur le
-**Mac de développement** et expose l'interface de jeu dans n'importe quel navigateur
-(iPhone Safari via Wi-Fi local est le cas d'usage principal pour la démo).
+La webapp est servie par **FastAPI** + **uvicorn** sur `localhost:8000`.
+Elle tourne sur le **Mac** et expose l'interface de jeu dans n'importe
+quel navigateur connecté au même réseau local. En mode démo, l'iPhone
+ouvre Safari sur l'IP du Mac dans le réseau Wi-Fi `Quoridor-ESP32`
+hébergé par l'ESP32.
 
-- **Frontend** : SVG vanilla, zéro framework JS, zéro étape de build.
-- **Transport backend** : HTTP polling toutes les 500 ms (pas de WebSocket — fiabilité prioritaire).
-- **Deux modes** :
-  - **Mode autonome** — l'ESP32 n'est pas connecté ; le jeu est entièrement logiciel.
-  - **Mode hybride** — l'ESP32 est branché en USB-série ; chaque mur posé à l'écran est
-    levé physiquement sur le plateau.
+- **Frontend** : SVG inline + JS vanilla. Zéro framework, zéro étape de build.
+- **Transport HTTP** : polling `/api/state` toutes les 500 ms (pas de WebSocket — fiabilité prioritaire).
+- **Trois modes de transport** vers l'ESP32, pilotés par la variable
+  d'environnement `QUORIDOR_TRANSPORT` :
+
+| Valeur | Description |
+|---|---|
+| `wifi` (défaut) | TCP `192.168.4.1:3333` sur le réseau Wi-Fi AP `Quoridor-ESP32` |
+| `serial` | USB-série, port auto-détecté (`/dev/cu.usbserial-*`) |
+| `none` | Pas de plateau, jeu 100 % logiciel (mode autonome) |
+
+Bascule à chaud sans redémarrer via `POST /api/transport/switch`.
 
 Lancer le serveur :
 
 ```bash
-uv pip install fastapi "uvicorn[standard]" pyserial httpx
-python -m webapp.server
+QUORIDOR_TRANSPORT=wifi   python -m webapp.server   # défaut, mode démo
+QUORIDOR_TRANSPORT=serial python -m webapp.server   # mode développement (USB)
+QUORIDOR_TRANSPORT=none   python -m webapp.server   # mode autonome
 # → http://localhost:8000
 ```
 
@@ -27,159 +36,229 @@ python -m webapp.server
 
 ### `webapp/server.py`
 
-Point d'entrée FastAPI + uvicorn. Déclare les routes HTTP et sert le frontend statique
-(`webapp/static/` — HTML, CSS, JS).
+Point d'entrée FastAPI + uvicorn. Déclare les routes HTTP et sert le
+frontend statique (`webapp/static/`). Instancie `QuoridorService` au
+démarrage et lui injecte la stack transport (transport → plateau bridge
+→ LED renderer).
 
-Principales routes :
+Routes principales :
 
 | Méthode | Route | Rôle |
-|---------|-------|------|
-| `GET` | `/` | Sert le fichier HTML principal |
-| `POST` | `/api/new_game` | Démarre une nouvelle partie |
+|---|---|---|
+| `GET` | `/` | Sert le HTML principal |
+| `GET` | `/api/state` | Retourne l'état courant (polling 500 ms) |
+| `POST` | `/api/new-game` | Démarre une nouvelle partie (mode + difficulté) |
 | `POST` | `/api/move` | Soumet un coup (déplacement ou mur) |
-| `GET` | `/api/state` | Retourne l'état courant de la partie |
-| `POST` | `/api/reset` | Remet le plateau à zéro |
-
-Le module instancie `QuoridorService` au démarrage, tente d'initialiser `UartBridge`
-(mode hybride), et passe l'éventuel bridge au service.
+| `POST` | `/api/pause`, `/api/resume` | Pause / reprise du tick IA |
+| `POST` | `/api/speed` | Modifie la vitesse de réflexion IA (lent/normal/rapide) |
+| `POST` | `/api/wall-mode` | Bascule entre mode pion et mode mur (frontend) |
+| `POST` | `/api/quit` | Quitte la partie en cours |
+| `POST` | `/api/transport/switch` | Bascule `wifi` / `serial` / `none` à chaud |
+| `GET` | `/api/qr-code`, `/api/qr-code/url` | QR code SVG vers l'URL webapp pour smartphone |
+| `GET` | `/api/status` | Statut du transport (état, dernier ping, erreurs) |
 
 ---
 
-### `webapp/service.py`
+### `webapp/service.py` — `QuoridorService`
 
-Couche service entre l'API et le moteur de jeu. Implémentée comme un singleton
-thread-safe (`QuoridorService`).
+Couche service entre l'API et le moteur de jeu. Singleton thread-safe.
 
 Responsabilités :
 
-- Détient l'état courant de la partie (`GameState`, immuable — chaque coup produit un nouvel état).
+- Détient l'état courant de la partie (`GameState`, immuable — chaque coup
+  produit un nouvel état).
 - Gère les modes de partie : `human_vs_ai`, `ai_vs_ai`, `human_vs_human`.
-- Instancie et pilote les instances `AI` (Minimax + Alpha-Beta, table de transposition).
-- Lance un thread daemon (`tick`) pour les coups IA en arrière-plan, avec délai configurable
-  (`lent` / `normal` / `rapide`).
-- Délègue vers `UartBridge.forward_move(move)` quand un mur est posé en mode hybride.
+- Instancie et pilote les instances `AI` (Minimax + Alpha-Bêta, table de
+  transposition).
+- Lance un thread daemon (`tick`) pour les coups IA en arrière-plan, avec
+  délai configurable (`lent` / `normal` / `rapide`).
+- Délègue vers `PlateauBridge.forward_move(move)` quand un mur est posé,
+  pour que la pose soit miroitée sur le plateau physique.
+- Pilote la mise à jour des LEDs via `LedRenderer.update(state)` après
+  chaque mutation.
 - Sérialise l'état pour la route `GET /api/state`.
-
-```python
-class QuoridorService:
-    def __init__(self, uart_bridge: Optional["UartBridge"] = None): ...
-    def new_game(self, mode: str, difficulty: str, plateau_mode: bool) -> None: ...
-    def apply_move(self, move: tuple) -> dict: ...
-```
 
 ---
 
-### `webapp/uart_bridge.py`
+### `webapp/transport.py` — abstraction de canal
 
-Transport USB-série vers l'ESP32. Utilise **pyserial** à 115 200 bauds.
+Interface `Transport` (ABC) avec trois implémentations interchangeables
+et une factory pilotée par `QUORIDOR_TRANSPORT`.
 
-#### Détection automatique du port
+| Classe | Canal physique |
+|---|---|
+| `SerialTransport` | USB-série via **pyserial** (115200 bauds, 8N1) |
+| `WiFiTransport` | TCP brut vers `192.168.4.1:3333` (socket Python natif) |
+| `NullTransport` | No-op (mode autonome ou plateau absent) |
 
-Au démarrage, `uart_bridge.init()` scanne les ports disponibles :
+API commune :
 
-- **Mac** : `glob("/dev/cu.usbserial-*")` (driver CP210x / CH340 USB-C)
-- **Linux** : `glob("/dev/ttyUSB*")`
+```python
+class Transport(ABC):
+    def open(self) -> None: ...
+    def close(self) -> None: ...
+    def write_line(self, line: str) -> None: ...
+    def read_line(self, timeout: float | None = None) -> str | None: ...
+    @property
+    def name(self) -> str: ...
+```
+
+`make_transport()` lit `QUORIDOR_TRANSPORT` et retourne l'instance
+appropriée. Si l'ouverture échoue, fallback gracieux sur `NullTransport`
+avec bannière dégradée dans la webapp.
+
+**Détection automatique du port série** :
+
+- Mac : `glob("/dev/cu.usbserial-*")` (driver CP210x / CH340 USB-C)
+- Linux : `glob("/dev/ttyUSB*")`
 
 La variable d'environnement `QUORIDOR_SERIAL_PORT` peut forcer un port précis.
 
-#### Handshake PING/PONG
+---
 
-Avant d'activer le bridge, le module envoie `PING\n` et attend une ligne contenant `PONG`
-dans un délai de 5 s (tentatives toutes les 500 ms). Si aucun `PONG` n'est reçu, `init()`
-retourne `None` et la webapp bascule en mode autonome.
+### `webapp/plateau.py` — `PlateauBridge`
 
-#### Envoi des coups
+Couche **au-dessus du `Transport`** qui apporte les garanties
+applicatives :
 
-```
-WALL <H|V> <row> <col>\n
-```
+- **Heartbeat applicatif** : `PING` toutes les 5 s, détection de coupure
+  après 2 `PONG` ratés (timeout total ~10 s).
+- **Lock TX** : sérialise toutes les paires (write, read response) pour
+  éviter les races entre heartbeat et commandes utilisateur.
+- **Reconnexion automatique** : tâche en arrière-plan qui retente
+  `transport.open()` toutes les 10 s après une coupure.
+- **Bascule à chaud** : `switch_transport(new_transport)` permet de
+  changer le canal physique sans recréer le service.
+- **Fallback gracieux** : à la première erreur de transport pendant une
+  commande, `available = False` ; les forwards suivants deviennent des
+  no-ops silencieux jusqu'à la reconnexion.
 
-Note : le bridge applique une inversion `H ↔ V` car la convention d'orientation du plateau
-physique est inverse de celle du moteur Quoridor (mesurée lors du bring-up).
+Méthode principale :
 
-Les déplacements de pions sont des **no-op** (aucun système physique de pion dans cette version).
+```python
+def forward_move(self, move) -> None:
+    """Envoie WALL <H|V> <r> <c> si move est une pose de mur.
 
-#### Politique d'erreur
-
-En cas d'erreur série pendant une partie (timeout, port mort, etc.), `UartBridge.available`
-passe à `False` et tous les forwards suivants sont silencieux. Pas de tentative de
-reconnexion — la partie continue en mode autonome jusqu'au prochain redémarrage.
-
-#### Commande HOME
-
-`UartBridge.send_home()` envoie `HOME\n` au plateau pour déclencher le homing CoreXY au
-début d'une nouvelle partie.
-
-#### Placeholder phase 5 — abstraction `Transport`
-
-À terme, une interface `Transport` unifiée (`send_line` / `read_line`) supportera USB-série
-et Wi-Fi mode AP via la même API. Sélection prévue par env var :
-
-```bash
-QUORIDOR_TRANSPORT=serial python -m webapp.server  # USB-série (défaut actuel)
-QUORIDOR_TRANSPORT=wifi   python -m webapp.server  # Wi-Fi mode AP (phase 5)
+    Applique l'inversion d'orientation H ↔ V (convention engine ≠ firmware).
+    Les déplacements de pion sont des no-ops (pas de système physique).
+    """
 ```
 
-**Prévu, non implémenté à ce jour.** Seul le mode `serial` existe.
+**Handshake initial** : à l'ouverture du transport, envoie `PING` (timeout
+5 s, polling 0,5 s). Si `PONG` arrive, le pont devient actif. Sinon, la
+webapp démarre quand même avec `available = False` et une bannière
+explicite "transport indisponible, mode dégradé".
+
+---
+
+### `webapp/leds.py` — affichage sur la strip WS2812B
+
+Classe `LedRenderer` qui rend l'état du jeu sur la strip de 36 LEDs
+WS2812B câblée en serpentin.
+
+- `engine_to_strip_index(row, col)` : convertit une case logique (row, col)
+  en index linéaire dans la strip (serpentin alternant gauche↔droite).
+- `LedColor` : tuple `(r, g, b)` (`int * 3`, valeurs `[0..255]`).
+- `RenderOptions` : `show_legal_moves: bool` (P1, active l'affichage des
+  coups légaux en cyan dim).
+- `render_state(state, opts) -> list[LedColor]` : produit le vecteur de
+  36 couleurs cible pour un `GameState` donné.
+- `LedRenderer.update(state)` : compare au vecteur précédent, calcule le
+  diff, et envoie via le bridge :
+  - `LED <idx> <r> <g> <b>` pour chaque pixel changé
+  - `LEDSHOW` final pour le push atomique
+- **Reconnexion** : sur callback de reconnexion du `PlateauBridge`, le
+  renderer force un re-render complet (le buffer firmware a été réinitialisé).
+
+Palette par défaut :
+
+| Élément | Couleur |
+|---|---|
+| Joueur 1 (humain) | bleu `(0, 0, 255)` |
+| Joueur 2 (IA) | rouge `(255, 0, 0)` |
+| Cases atteignables (P1) | cyan dim `(0, 64, 64)` |
+| Fond | éteint `(0, 0, 0)` |
+
+Voir la spec complète :
+[`superpowers/specs/2026-05-21-leds-design.md`](superpowers/specs/2026-05-21-leds-design.md).
 
 ---
 
 ### `webapp/schemas.py`
 
-Modèles **Pydantic** des messages échangés entre le frontend et l'API.
+Modèles **Pydantic** des messages échangés entre frontend et API.
 
 Exemples :
 
-- `MoveRequest` — payload de `POST /api/move` (`type`, `orientation`, `row`, `col`)
-- `GameStateResponse` — réponse de `GET /api/state` (plateau, scores, statut)
-- `NewGameRequest` — paramètres de `POST /api/new_game` (mode, difficulté, plateau_mode)
+- `MoveRequest` — payload de `POST /api/move`
+- `GameStateResponse` — réponse de `GET /api/state`
+- `NewGameRequest` — paramètres de `POST /api/new-game`
+- `TransportStatusResponse` — réponse de `GET /api/status`
+
+---
+
+### `webapp/qr.py`
+
+Génère un QR code SVG vers l'URL de la webapp pour partage avec un
+smartphone. Utilisé par `/api/qr-code`. Pas de dépendance externe lourde
+(générateur SVG en Python pur).
 
 ---
 
 ## Modes d'exécution
 
-### Mode autonome (sans ESP32)
+### Mode autonome (`QUORIDOR_TRANSPORT=none`)
 
-La webapp tourne en local sans aucun matériel. Les murs posés à l'écran sont uniquement
-visuels. Idéal pour développer le moteur, affiner l'IA, ou préparer une démo sans le plateau.
+Aucun matériel requis. La webapp tourne entièrement en local sur le Mac
+et le moteur Python gère l'état complet. Mode "démo minimum" (P0) si le
+plateau physique est indisponible.
 
-Activé automatiquement si aucun port série n'est détecté au démarrage.
+### Mode développement (`QUORIDOR_TRANSPORT=serial`)
 
-### Mode hybride (avec plateau physique)
+ESP32 connecté au Mac via USB-C. Détection automatique du port. Plus
+fiable que le Wi-Fi pour du debug ; permet de capturer les logs verbeux
+du firmware sur le moniteur série en parallèle.
 
-L'ESP32 est connecté au Mac via USB-C. Le mode est détecté automatiquement grâce au
-handshake PING/PONG. Quand il est actif, le toggle "Plateau physique" s'affiche dans
-l'interface de démo.
+### Mode démo (`QUORIDOR_TRANSPORT=wifi`, défaut)
+
+L'ESP32 héberge le réseau `Quoridor-ESP32`. Le Mac s'y connecte et
+joint l'ESP32 via TCP. L'iPhone du joueur se connecte au même réseau et
+ouvre la webapp via l'IP du Mac (typiquement `192.168.4.2:8000`).
+Aucun accès Internet requis.
+
+L'outil [`tools/wifi_switch.py`](../tools/wifi_switch.py) automatise la
+bascule réseau côté Mac via `networksetup` (macOS).
 
 ---
 
-## Flux d'un coup en mode hybride
+## Flux d'un coup en mode démo
 
 ```
-Frontend                       service.py                uart_bridge.py          ESP32
-   |                               |                           |                    |
-   |  POST /api/move               |                           |                    |
-   |  {type:'mur', ori:'h', ...}   |                           |                    |
-   |-----------------------------> |                           |                    |
-   |                               | validate (moteur Quoridor)|                    |
-   |                               |--[valide]---------------->|                    |
-   |                               |                           | WALL V 2 3\n       |
-   |                               |                           |-------------------->
-   |                               |                           |    WALL OK / ERR   |
-   |                               |                           |<--------------------|
-   |                               | nouvel état               |                    |
-   |  200 OK + état mis à jour     |                           |                    |
-   |<------------------------------ |                           |                    |
+Frontend                  server.py            service.py          plateau.py            ESP32
+   |                         |                     |                   |                    |
+   |  POST /api/move         |                     |                   |                    |
+   |  {type:'mur',...}       |                     |                   |                    |
+   |---------------------->  |                     |                   |                    |
+   |                         |  apply_move(move)   |                   |                    |
+   |                         |------------------>  |                   |                    |
+   |                         |                     | engine.play_move()|                    |
+   |                         |                     |       OK          |                    |
+   |                         |                     | forward_move(move)|                    |
+   |                         |                     |------------------>|  WALL H 2 3\n      |
+   |                         |                     |                   |------------------->|
+   |                         |                     |                   |   WALL OK ...      |
+   |                         |                     |                   |<-------------------|
+   |                         |                     | LedRenderer.update|                    |
+   |                         |                     |       (diff)      |                    |
+   |                         |                     |------------------>|  LED ... LEDSHOW   |
+   |                         |                     |                   |------------------->|
+   |                         |                     |                   |        OK          |
+   |  200 OK + état          |                     |                   |                    |
+   |<----------------------- |                     |                   |                    |
 ```
 
-Détail des étapes :
-
-1. Le frontend envoie `POST /api/move` avec `{type: 'mur', orientation: 'h', row: 2, col: 3}`.
-2. `service.py` valide le coup via `place_wall(state, player, wall)` du moteur Quoridor.
-3. Si valide, `service.py` appelle `uart_bridge.forward_move(move)`.
-4. `uart_bridge` envoie `WALL V 2 3\n` (après inversion H↔V) et retourne immédiatement
-   (mode fire-and-forget — pas d'attente de réponse bloquante pour ce prototype).
-5. `service.py` répond `200 OK` au frontend avec le nouvel état sérialisé.
+Voir aussi le diagramme Mermaid :
+[`flowcharts/07_webapp_flux.md`](flowcharts/07_webapp_flux.md).
 
 ---
 
@@ -188,25 +267,43 @@ Détail des étapes :
 - Rendu SVG inline du plateau 6×6.
 - Clic sur une case → déplacement du pion (si coup légal).
 - Clic sur une arête inter-cases → pose d'un mur (si coup légal).
-- Affichage du joueur courant, compteurs de murs restants, statut de la partie.
-- Polling `GET /api/state` toutes les 500 ms pour mettre à jour l'affichage (coups IA inclus).
-- **Aucun framework** (React, Vue, etc.) — choix pédagogique pour la lisibilité du code.
+- Affichage du joueur courant, compteurs de murs restants, statut de la
+  partie, transport actif.
+- Polling `GET /api/state` toutes les 500 ms pour mettre à jour
+  l'affichage (coups IA inclus).
+- **QR code intégré** : bouton "Partager sur smartphone" qui affiche
+  l'URL via QR (route `/api/qr-code`).
+- **Bannière dégradée** affichée si le transport est indisponible, avec
+  boutons UI "Réessayer en USB" / "Réessayer en Wi-Fi" qui appellent
+  `/api/transport/switch`.
+- **Aucun framework** (React, Vue, etc.) — choix pédagogique pour la
+  lisibilité du code.
 
 ---
 
 ## Tests
 
 | Fichier | Couverture |
-|---------|------------|
-| `tests/webapp/test_api.py` | Routes FastAPI (client de test httpx) |
-| `tests/webapp/test_service.py` | Couche service, intégration moteur + transport mocké |
-| `tests/webapp/test_uart_bridge.py` | Transport série avec `serial.Serial` mocké (pyserial) |
-| `tests/webapp/test_schemas.py` | Modèles Pydantic — validation entrées/sorties |
+|---|---|
+| `tests/webapp/test_api.py` | Routes FastAPI principales (client httpx) |
+| `tests/webapp/test_api_status.py` | Route `/api/status` |
+| `tests/webapp/test_api_transport_switch.py` | Bascule transport à chaud |
+| `tests/webapp/test_service.py` | Couche service + intégration moteur + transport mocké |
+| `tests/webapp/test_plateau_bridge.py` | Heartbeat, lock TX, reconnexion |
+| `tests/webapp/test_transport_abstract.py` | Contrat de l'interface `Transport` |
+| `tests/webapp/test_transport_factory.py` | Factory `make_transport()` selon env var |
+| `tests/webapp/test_transport_null.py` | `NullTransport` (no-ops) |
+| `tests/webapp/test_transport_serial.py` | `SerialTransport` avec `serial.Serial` mocké |
+| `tests/webapp/test_transport_wifi.py` | `WiFiTransport` avec socket mocké |
+| `tests/webapp/test_schemas.py` | Modèles Pydantic |
+| `tests/webapp/test_status_schemas.py` | Schémas `/api/status` |
 
-Aucun test ne nécessite un ESP32 physique. Les tests d'intégration matériel se trouvent
-dans `tests/integration/`.
+Aucun test ne nécessite un ESP32 physique. Les tests d'intégration
+matériel se trouvent dans `tests/devkit/` (markers `devkit_serial` et
+`devkit_wifi`). Voir [`08_tests.md`](08_tests.md).
 
 ```bash
-pytest tests/webapp/ -v
-# Pas de hardware requis.
+pytest tests/webapp/ -v          # tests unitaires (sans hardware)
+pytest -m devkit_serial          # tests devkit USB (ESP32 branché)
+pytest -m devkit_wifi            # tests devkit Wi-Fi
 ```

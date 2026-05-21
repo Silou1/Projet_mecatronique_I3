@@ -176,8 +176,9 @@ L'iPhone est débranché du Mac et se connecte au Wi-Fi `Quoridor-ESP32` de l'ES
 Le Mac est aussi sur ce réseau Wi-Fi. L'iPhone accède à la webapp via l'IP du Mac sur
 le réseau ESP32 (typiquement `192.168.4.2:8000`). Aucun accès Internet requis.
 
-Si le Wi-Fi est instable lors de la démo, fallback immédiat sur USB-C direct : la
-webapp et l'`uart_bridge.py` détectent automatiquement `/dev/tty.usbserial-*` au boot.
+Si le Wi-Fi est instable lors de la démo, fallback immédiat sur USB-C direct : un
+`POST /api/transport/switch` (ou les boutons UI de la bannière dégradée) bascule
+la stack vers `SerialTransport`, qui détecte automatiquement `/dev/cu.usbserial-*`.
 
 ### Mode autonome
 
@@ -190,7 +191,7 @@ l'interface SVG, sans action physique. C'est le mode de démo minimum (P0).
 1. Le joueur clique dans la webapp (déplacement de pion ou pose de mur).
 2. La webapp valide via `quoridor_engine` : déplacement légal, mur non bloquant (BFS).
 3. Si déplacement de pion : mise à jour de l'état interne seulement (pas de commande ESP32).
-4. Si pose de mur : la webapp envoie `WALL <H|V> <row> <col>` à l'ESP32 via `uart_bridge.py`.
+4. Si pose de mur : la webapp envoie `WALL <H|V> <row> <col>` à l'ESP32 via `PlateauBridge` (`webapp/plateau.py`), qui sérialise les commandes via un lock TX et passe par le `Transport` actif (USB ou Wi-Fi).
 5. L'ESP32 calcule la position physique depuis les matrices `MURS_H` / `MURS_V`.
 6. L'ESP32 enchaîne : `GOTO` jusqu'à la 1re case → `LEVER` → `BAISSER`. Si le mur occupe
    2 cases physiques, répète GOTO + LEVER + BAISSER pour la 2e case.

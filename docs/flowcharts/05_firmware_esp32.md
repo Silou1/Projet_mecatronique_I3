@@ -1,216 +1,227 @@
-# Firmware ESP32 — bring-up CoreXY
+# Firmware ESP32 — bring-up et boucle de commandes
 
-Ce document détaille le firmware actif sur l'ESP32-WROOM : `firmware/src/bringup_l298n_complet.cpp`. Ce sketch unique combine pilotage CoreXY (2 moteurs pas à pas via L298N), servo de placement des murs, et lecture des fins de course. Validé sur breadboard le 2026-05-20 après l'abandon de la PCB v2.
+Le firmware tient dans **un seul sketch monolithique** :
+[`firmware/src/bringup_l298n_complet.cpp`](../../firmware/src/bringup_l298n_complet.cpp).
+Il est piloté à 100 % par commandes texte reçues sur deux canaux
+interchangeables (USB-série et Wi-Fi TCP) et sert une seule logique de
+dispatch via `traiter(cmd, Stream*)`.
 
----
-
-## Vue d'ensemble du sketch
-
-```mermaid
-flowchart LR
-    subgraph FIRM["bringup_l298n_complet.cpp"]
-        SETUP["setup()<br/>boot auto"]
-        LOOP["loop()<br/>lecture série"]
-        SETUP --> LOOP
-    end
-
-    subgraph BLOCKS["Modules logiques"]
-        MOT["Pilotage moteurs<br/>(IN1..4 + ENA/ENB PWM)"]
-        SRV["Pilotage servo<br/>(ESP32Servo)"]
-        CAP["Lecture capteurs<br/>(INPUT_PULLUP)"]
-        PARSE["Parsing commandes<br/>(GOTO, MUR H/V, ...)"]
-        MAT["Matrices murs<br/>(30 H + 30 V)"]
-    end
-
-    LOOP --> PARSE
-    PARSE --> MOT
-    PARSE --> SRV
-    PARSE --> CAP
-    PARSE --> MAT
-
-    style FIRM fill:#FF9800,color:#fff
-```
+Le firmware ne contient **aucune logique de jeu** : pas de matrice de
+boutons, pas de validation de coup, pas de connaissance des règles
+Quoridor. Il exécute uniquement des actions hardware (déplacement,
+servo, LEDs) demandées par le Mac.
 
 ---
 
-## Séquence de boot automatique
-
-Au reset de l'ESP32, le firmware exécute une séquence rigoureuse en plaçant la sécurité mécanique en premier (servo retracté) avant d'activer les moteurs.
+## Séquence de boot
 
 ```mermaid
 flowchart TD
-    BOOT(["Reset / power-on"]) --> S1["1. Servo → 180°<br/>(repos, piston bas)"]
-    S1 --> S2["2. Init pins moteurs<br/>(IN1..4, ENA/ENB PWM = 0)"]
-    S2 --> S3["3. Init pins capteurs<br/>(INPUT_PULLUP, actifs LOW)"]
-    S3 --> S4["4. Désactivation watchdog<br/>(esp_task_wdt_deinit)"]
-    S4 --> S5["5. Serial.begin(115200)<br/>Affichage header config"]
-    S5 --> S6["6. Activation drivers L298N<br/>(PWM = DUTY_DEFAUT, 40%)"]
-    S6 --> S7["7. HOME automatique<br/>(homing X puis Y)"]
-    S7 --> S8{"HOME<br/>réussi ?"}
-    S8 -->|Oui| READY["Origine (0, 0) établie<br/>position_connue = true"]
-    S8 -->|Non| FAIL["Drivers OFF<br/>(sécurité mécanique)"]
-    READY --> WAIT(["loop() : attente<br/>commandes série"])
-    FAIL --> WAIT
+    POWER([Power-on / Reset]) --> LED_INIT[strip.begin<br/>setBrightness 102<br/>strip.clear + show]
+    LED_INIT --> SERVO_INIT[servo.attach pin 4<br/>servo.write 180°<br/>= REPOS, sécurité mécanique]
+    SERVO_INIT --> PIN_INIT[Init pins moteurs<br/>drivers OFF par défaut]
+    PIN_INIT --> SERIAL_INIT[Serial.begin 115200]
+    SERIAL_INIT --> WD_OFF[esp_task_wdt_deinit<br/>watchdog désactivé]
+    WD_OFF --> HOME[homing_complet]
 
-    style BOOT fill:#4CAF50,color:#fff
-    style S1 fill:#FFEB3B,color:#000
-    style FAIL fill:#f44336,color:#fff
-    style READY fill:#81C784,color:#000
-    style WAIT fill:#2196F3,color:#fff
-```
+    HOME --> HOME_OK{HOME<br/>réussi ?}
+    HOME_OK -->|Oui| AP[WiFi.softAP<br/>Quoridor-ESP32 / quoridor2026]
+    HOME_OK -->|Non| HOME_FAIL[Drivers OFF<br/>attend HOME manuel via série]
 
-> **Sécurité critique** : le servo est mis à 180° (piston rétracté) **avant** toute activation des moteurs, pour éviter qu'un mur déjà levé n'entre en collision avec le chariot pendant le homing.
+    AP --> TCP[wifi_server.begin port 3333]
+    TCP --> LOOP([Boucle principale])
+    HOME_FAIL --> LOOP
 
----
-
-## Procédure HOME (homing CoreXY)
-
-Le homing établit l'origine (0, 0) du chariot en se déplaçant vers les fins de course X- puis Y-, en exploitant la **convention CoreXY** : combiner les sens de rotation des deux moteurs pour obtenir un mouvement axial pur.
-
-```mermaid
-flowchart TD
-    HOME_START(["HOME"]) --> AXE_X["HOME axe X"]
-
-    AXE_X --> X_PRECHK{"Capteur X<br/>déjà LOW ?"}
-    X_PRECHK -->|Oui| X_FREE["Libération :<br/>50 pas vers X+<br/>(M1 et M2 sens opposés)"]
-    X_PRECHK -->|Non| X_APPROACH
-    X_FREE --> X_APPROACH
-
-    X_APPROACH["Approche vers X- :<br/>1 pas à la fois<br/>(M1 et M2 sens opposés)"]
-    X_APPROACH --> X_READ{"Capteur X<br/>= LOW ?"}
-    X_READ -->|Non| X_LIMIT{"Pas max<br/>4000 atteint ?"}
-    X_LIMIT -->|Non| X_APPROACH
-    X_LIMIT -->|Oui| HOME_FAIL(["Échec HOME<br/>timeout"])
-    X_READ -->|Oui| X_BACK["Recul 20 pas<br/>(libère le capteur)"]
-    X_BACK --> AXE_Y
-
-    AXE_Y["HOME axe Y"]
-    AXE_Y --> Y_PRECHK{"Capteur Y<br/>déjà LOW ?"}
-    Y_PRECHK -->|Oui| Y_FREE["Libération :<br/>50 pas vers Y+<br/>(M1 et M2 même sens)"]
-    Y_PRECHK -->|Non| Y_APPROACH
-    Y_FREE --> Y_APPROACH
-
-    Y_APPROACH["Approche vers Y- :<br/>1 pas à la fois<br/>(M1 et M2 même sens)"]
-    Y_APPROACH --> Y_READ{"Capteur Y<br/>= LOW ?"}
-    Y_READ -->|Non| Y_LIMIT{"Pas max<br/>4000 atteint ?"}
-    Y_LIMIT -->|Non| Y_APPROACH
-    Y_LIMIT -->|Oui| HOME_FAIL
-    Y_READ -->|Oui| Y_BACK["Recul 20 pas"]
-    Y_BACK --> ORIGIN(["Origine (0, 0) établie"])
-
-    style HOME_START fill:#FF9800,color:#fff
-    style ORIGIN fill:#4CAF50,color:#fff
+    style POWER fill:#4CAF50,color:#fff
+    style LOOP fill:#2196F3,color:#fff
+    style LED_INIT fill:#FFD600
+    style SERVO_INIT fill:#FF9800,color:#fff
     style HOME_FAIL fill:#f44336,color:#fff
 ```
 
-> **Convention CoreXY** mesurée et validée sur la machine :
-> - **X pur** : M1 et M2 tournent en **sens opposés** → chariot bouge horizontalement seul
-> - **Y pur** : M1 et M2 tournent en **même sens** → chariot bouge verticalement seul
-> - **Calibration** : 100 pas full-step = 2 cm. 1 cm = 50 pas, 1 mm = 5 pas.
+**Garanties de sécurité au boot** :
+
+1. Le servo est positionné à **180° (REPOS) en tout premier**, avant
+   l'initialisation des moteurs. Évite qu'un piston levé bloque le
+   chariot CoreXY.
+2. Les drivers L298N sont **OFF par défaut** et n'activent les bobines
+   que lors d'un mouvement demandé.
+3. Le watchdog matériel ESP32 est désactivé (sketch monothread avec
+   `delayMicroseconds` bloquants).
 
 ---
 
-## Boucle principale et commandes série
+## Procédure HOME (par axe)
 
-Une fois le HOME validé, la boucle `loop()` lit le port série caractère par caractère. À chaque saut de ligne, elle dispatche vers le handler de la commande.
+Le HOME se fait axe par axe : X d'abord, Y ensuite. Chaque axe utilise
+le moteur CoreXY combiné de manière à ne bouger que sur cet axe.
 
 ```mermaid
 flowchart TD
-    LOOP_START(["loop()"]) --> READ{"Caractère<br/>dispo ?"}
-    READ -->|Non| READ
-    READ -->|Oui| BUFFER["Accumule dans<br/>tampon_serie (max 64 chars)"]
-    BUFFER --> EOL{"CR / LF<br/>reçu ?"}
-    EOL -->|Non| READ
-    EOL -->|Oui| DISPATCH
+    START([HOME axe N]) --> CHECK{Capteur<br/>déjà LOW ?}
+    CHECK -->|Oui| FREE[Libération 50 pas<br/>dans le sens opposé]
+    CHECK -->|Non| APPROACH
+    FREE --> APPROACH
 
-    DISPATCH{"Commande ?"}
+    APPROACH[Approche pas à pas<br/>vers le capteur<br/>max 4000 pas]
+    APPROACH --> TOUCHED{Capteur<br/>LOW ?}
+    TOUCHED -->|Non, < 4000 pas| APPROACH
+    TOUCHED -->|Oui| BACK[Recul 20 pas<br/>marge de sécurité]
+    TOUCHED -->|Non, 4000 pas atteints| FAIL[Échec, drivers OFF]
 
-    DISPATCH -->|"HOME"| CMD_HOME["Relance homing complet"]
-    DISPATCH -->|"GOTO x y"| CMD_GOTO["Déplacement absolu<br/>(bornes 0..900 pas)"]
-    DISPATCH -->|"X F/B n"| CMD_X["Axe X pur, n pas"]
-    DISPATCH -->|"Y F/B n"| CMD_Y["Axe Y pur, n pas"]
-    DISPATCH -->|"LEVER"| CMD_LEVER["Servo → 0°<br/>(mur levé)"]
-    DISPATCH -->|"BAISSER"| CMD_BAISSER["Servo → 180°<br/>(piston bas)"]
-    DISPATCH -->|"MUR H/V i j"| CMD_MUR["Lookup matrice + GOTO"]
-    DISPATCH -->|"TOUR"| CMD_TOUR["Parcourir tous murs<br/>mesurés (NEXT/STOP)"]
-    DISPATCH -->|"LIMITS"| CMD_LIM["Lecture capteurs X et Y"]
-    DISPATCH -->|"EN ON/OFF"| CMD_EN["Active/coupe drivers"]
-    DISPATCH -->|"SPEED us"| CMD_SPEED["Délai inter-pas"]
-    DISPATCH -->|"DUTY %"| CMD_DUTY["PWM moteurs<br/>(10..60%)"]
-    DISPATCH -->|"STATUS"| CMD_STAT["Position, drivers,<br/>capteurs, etc."]
-    DISPATCH -->|"HELP"| CMD_HELP["Affiche aide"]
+    BACK --> OK([Axe N à 0])
 
-    CMD_HOME --> ACK["Affichage 'OK' / 'KO'"]
-    CMD_GOTO --> ACK
-    CMD_X --> ACK
-    CMD_Y --> ACK
-    CMD_LEVER --> ACK
-    CMD_BAISSER --> ACK
-    CMD_MUR --> ACK
-    CMD_TOUR --> ACK
-    CMD_LIM --> ACK
-    CMD_EN --> ACK
-    CMD_SPEED --> ACK
-    CMD_DUTY --> ACK
-    CMD_STAT --> ACK
-    CMD_HELP --> ACK
-
-    ACK --> READ
-
-    style LOOP_START fill:#2196F3,color:#fff
-    style DISPATCH fill:#9C27B0,color:#fff
+    style START fill:#2196F3,color:#fff
+    style OK fill:#4CAF50,color:#fff
+    style FAIL fill:#f44336,color:#fff
 ```
 
----
+**Convention CoreXY (validée machine)** :
 
-## Cycle de placement d'un mur
-
-Le mécanisme exploite les matrices `MURS_H` (30 positions horizontales) et `MURS_V` (30 positions verticales) — un total de 60 positions de murs sur le plateau 6×6 — pré-mesurées en pas depuis l'origine.
-
-```mermaid
-flowchart TD
-    WALL_REQ(["Commande<br/>MUR H i j  ou  MUR V i j"]) --> LOOKUP["Lookup dans<br/>MURS_H[i][j] ou MURS_V[i][j]"]
-
-    LOOKUP --> CHECK{"Position<br/>mesurée ?"}
-    CHECK -->|Non| ERR(["Refusé : position non<br/>encore calibrée"])
-    CHECK -->|Oui| MOVE["GOTO x_mur y_mur<br/>(déplacement absolu CoreXY)"]
-
-    MOVE --> ARRIVED["Chariot positionné<br/>sous l'emplacement du mur"]
-    ARRIVED --> LIFT["LEVER : servo → 0°<br/>(piston pousse le mur vers le haut)"]
-    LIFT --> WAIT_USER{"Mur en place<br/>sur le plateau ?"}
-    WAIT_USER -->|En attente| LOWER["BAISSER : servo → 180°<br/>(piston redescend)"]
-    LOWER --> DONE(["Cycle terminé,<br/>chariot libre"])
-
-    style WALL_REQ fill:#FF9800,color:#fff
-    style DONE fill:#4CAF50,color:#fff
-    style ERR fill:#f44336,color:#fff
-```
-
-> **Convention servo** : 180° = repos (piston rétracté), 0° = mur levé. Cette convention est mémorisée pour la sécurité : à tout reset, le servo retourne en 180°, donc aucun risque de collision pendant le HOME.
-
----
-
-## Pins utilisées et contraintes
-
-| Élément | Pins | Rôle |
+| Mouvement | Action moteurs | Capteur |
 |---|---|---|
-| **Moteur 1 (L298N #1)** | 14, 27, 26, 25 | IN1..4 (phases) |
-| Moteur 1 PWM | 33, 32 | ENA, ENB |
-| **Moteur 2 (L298N #2)** | 16, 17, 21, 22 | IN1..4 (phases) |
-| Moteur 2 PWM | 19, 23 | ENA, ENB |
-| **Fin de course X** | 13 | INPUT_PULLUP, actif LOW |
-| **Fin de course Y** | 18 | INPUT_PULLUP, actif LOW |
-| **Servo SG90** | 4 | PWM (alim 5V externe) |
-| **UART0** | TX/RX (USB) | 115200 bauds — debug + futur dialogue avec RPi |
+| X pur | M1 et M2 en **sens opposés** | Pin 13 (`PIN_LIMIT_X`) |
+| Y pur | M1 et M2 dans le **même sens** | Pin 18 (`PIN_LIMIT_Y`) |
 
-**Limites de sécurité** :
-- `PAS_MAX = 10 000` pas par commande
-- `GOTO_MAX = 900` pas (limite plateau)
-- `HOME_PAS_MAX = 4 000` pas (timeout homing)
-- `DUTY` plage 10..60 % (au-delà : risque thermique L298N)
-- Drivers coupés au boot **et** si HOME échoue
-- Mouvements X/Y refusés si drivers OFF
+Origine (0, 0) en bas-gauche après HOME complet, X croissant à droite,
+Y croissant vers le haut. Voir
+[`../hardware/calibration.md`](../hardware/calibration.md).
 
 ---
 
-> **Note évolutive** : ce sketch est un firmware de **bring-up validé**. La prochaine étape (Plan P11) consiste à le refactoriser pour qu'il dialogue avec le RPi via le protocole UART Plan 2 (cf. `06_protocole_uart.md`), au lieu de répondre à des commandes texte saisies au monitor série.
+## Boucle principale `loop()`
+
+```mermaid
+flowchart TD
+    LOOP([loop iteration]) --> NEW{Nouvelle<br/>connexion TCP ?}
+    NEW -->|Oui| ACCEPT[Ferme ancien client<br/>accepte nouveau<br/>« dernier client gagne »]
+    NEW -->|Non| SERIAL
+
+    ACCEPT --> SERIAL{Char Serial<br/>dispo ?}
+    SERIAL -->|Oui| READ_S[Accumule dans tampon_serie<br/>jusqu'au \\n]
+    SERIAL -->|Non| WIFI
+
+    READ_S --> DISP_S[traiter tampon_serie, Serial]
+    DISP_S --> WIFI
+
+    WIFI{Client TCP connecté<br/>avec char dispo ?}
+    WIFI -->|Oui| READ_W[Accumule dans tampon_wifi<br/>jusqu'au \\n]
+    WIFI -->|Non| WD
+
+    READ_W --> DISP_W[traiter tampon_wifi, wifi_client]
+    DISP_W --> WD
+
+    WD{Client TCP silencieux<br/>plus de 30 s ?}
+    WD -->|Oui| KILL[wifi_client.stop<br/>libère le socket]
+    WD -->|Non| LOOP
+    KILL --> LOOP
+
+    style LOOP fill:#2196F3,color:#fff
+    style DISP_S fill:#FF9800,color:#fff
+    style DISP_W fill:#FF9800,color:#fff
+    style KILL fill:#9E9E9E,color:#fff
+```
+
+**Politique « dernier client gagne »** : si un client TCP est déjà connecté
+quand un nouveau arrive, l'ancien est fermé. Simplifie la gestion d'état
+sans nécessiter de multi-client.
+
+**Watchdog applicatif** : un client TCP silencieux pendant 30 s est
+expulsé. Évite les sockets fantômes laissés par un client mal débranché.
+
+---
+
+## Cycle d'une commande `WALL`
+
+```mermaid
+sequenceDiagram
+    participant MAC as Mac (webapp)
+    participant FW as Firmware
+
+    MAC->>FW: WALL H 2 3\n
+
+    Note over FW: traiter() : parse + bornes [0..4]
+    Note over FW: wall_lever('H', 2, 3)<br/>j = 4 - 2 = 2
+
+    alt MURS_H[2][3] mesuré
+        FW->>FW: goto_xy(x, y)<br/>déplacement CoreXY
+        FW->>FW: servo.write(0°) + delay 400 ms<br/>LEVER
+        FW->>FW: servo.write(180°) + delay 400 ms<br/>BAISSER
+    else _NA
+        Note over FW: saute (raised inchangé)
+    end
+
+    alt MURS_H[2][4] mesuré
+        FW->>FW: goto_xy(x, y) + LEVER + BAISSER
+    end
+
+    FW->>MAC: WALL OK H 2 3 raised=2\n
+```
+
+Détail dans [`06_protocole.md`](06_protocole.md) (côté protocole) et
+dans [`05_firmware.md`](../06_firmware.md) (textuel complet).
+
+---
+
+## Catalogue des commandes implémentées
+
+| Commande | Effet | Détail |
+|---|---|---|
+| `PING` | Répond `PONG` | Handshake |
+| `HOME` | Relance le homing | Réinitialise position connue |
+| `STATUS` | Affiche état drivers + position + SPEED + DUTY + limits | Debug |
+| `LIMITS` | Lecture instantanée des 2 capteurs | Debug |
+| `LIMITS WATCH` | Lecture continue (Enter pour sortir) | Debug |
+| `EN ON` / `EN OFF` | Active / coupe les 2 drivers | Sécurité manuelle |
+| `GOTO <x> <y>` | Déplacement absolu en pas, [0..900] | Mouvement bas-niveau |
+| `X F/B <n>`, `Y F/B <n>` | Axe pur, n pas, sens forward/backward | Mouvement bas-niveau |
+| `M1 F/B <n>`, `M2 F/B <n>` | Moteur isolé, invalide la position connue | Debug câblage |
+| `LEVER` / `BAISSER` | Servo 0° / 180° | Pose mur manuel |
+| `SERVO <angle>` | Angle arbitraire [0..180] | Calibration servo |
+| `SPEED <us>` | Délai entre pas [500..10000] | Tuning vitesse |
+| `DUTY <pct>` | PWM driver [10..60] | Tuning couple |
+| `WALL <H\|V> <r> <c>` | Lève un mur Quoridor | Cf. cycle ci-dessus |
+| `MUR <H\|V> <i> <j>` | Va à la position physique du mur (sans lever) | Calibration positions |
+| `TOUR`, `NEXT`, `STOP` | Parcours interactif des positions mesurées | Validation visuelle |
+| `LIST` | Statut de remplissage des matrices `MURS_H`/`MURS_V` | Suivi calibration |
+| `DEMO [N]` | N murs aléatoires parmi les mesurés, levée + redescente | Démonstration |
+| `LED <idx> <r> <g> <b>` | Met à jour le pixel `idx` dans le buffer | Affichage |
+| `LEDSHOW` | Push atomique vers la strip | Affichage |
+| `LEDCLEAR` | Éteint toutes les LEDs | Affichage |
+| `LEDBRIGHT <0..255>` | Modifie la luminosité globale | Affichage |
+| `HELP` | Liste les commandes | Aide |
+
+---
+
+## Pinout (résumé)
+
+| GPIO | Rôle |
+|---|---|
+| 14, 27, 26, 25 | M1 IN1..IN4 (L298N #1) |
+| 33, 32 | M1 ENA, ENB (PWM) |
+| 16, 17, 21, 22 | M2 IN1..IN4 (L298N #2) |
+| 19, 23 | M2 ENA, ENB (PWM) |
+| 13 | Fin de course X (`INPUT_PULLUP`) |
+| 18 | Fin de course Y (`INPUT_PULLUP`) |
+| 4 | Servo SG90 (pulse 500–2500 µs) |
+| 15 | Strip WS2812B (36 LEDs) |
+
+Détails complets : [`../hardware/pinout.md`](../hardware/pinout.md).
+
+---
+
+## Pourquoi ce sketch monolithique
+
+- **Démarrage prévisible** : aucune dépendance à un système de fichiers,
+  pas de mode init complexe, le code de chaque commande est dans la
+  même unité de compilation.
+- **Debug direct** : tout est accessible via le moniteur série.
+- **Évolution sans recompilation des couches Python** : ajout d'une
+  commande = ajout d'un cas dans `traiter()`, sans changement
+  d'interface Mac.
+- **Pas de FreeRTOS task** : monothread, `delayMicroseconds` bloquants.
+  Suffit pour les besoins du Quoridor (un coup à la fois, pas de
+  contrainte temps réel sub-milliseconde).
+
+Pour les évolutions envisagées et écartées (multi-tâches, FSM boutons,
+protocole CRC), voir [`../decisions.md`](../decisions.md).

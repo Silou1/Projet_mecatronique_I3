@@ -5,7 +5,7 @@
 | **Date** | 2026-05-21 |
 | **Statut** | Validé par l'utilisateur, prêt pour implémentation |
 | **Phase** | 5b — LEDs (post-Wi-Fi, pré-démo finale) |
-| **Hors scope** | Animations (transitions, pulse, victoire) ; affichage des murs sur LEDs ; mode fond blanc faible (option β) ; sous-système boutons (utilisera le multiplexer 16-canaux plus tard) |
+| **Hors scope** | Animations (transitions, pulse, victoire) ; affichage des murs sur LEDs ; mode fond blanc faible (option β). Le sous-système boutons mentionné initialement comme « plus tard » a été **abandonné définitivement** le 2026-05-21 — cf. `docs/decisions.md`. |
 
 ## Objectif
 
@@ -57,8 +57,9 @@ Le sous-système doit s'intégrer **sans rupture** dans :
 - Animations (transitions fade, pulse pendant le tour, animation de victoire).
 - Indication des murs sur les LEDs adjacentes.
 - Mode fond blanc faible.
-- Tout ce qui relève des boutons (sera traité dans une spec séparée avec le
-  multiplexer CD74HC4067).
+- Tout ce qui relève des boutons : **système abandonné définitivement** le
+  2026-05-21 (cf. `docs/decisions.md`). L'interaction se fait via la webapp,
+  pas par le plateau.
 
 ## 2. Hardware et câblage
 

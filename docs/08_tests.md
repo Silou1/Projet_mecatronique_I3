@@ -40,18 +40,35 @@ Le rapport HTML est généré dans `htmlcov/index.html`.
 
 | Fichier | Couverture |
 |---|---|
-| `test_api.py` | Routes FastAPI (HTTP) |
-| `test_service.py` | Couche service, intégration moteur + transport |
-| `test_uart_bridge.py` | Transport série avec `serial.Serial` mocké |
+| `test_api.py` | Routes FastAPI principales (HTTP) |
+| `test_api_status.py` | Route `/api/status` (état transport) |
+| `test_api_transport_switch.py` | Bascule transport à chaud |
+| `test_service.py` | Couche service, intégration moteur + transport mocké |
+| `test_plateau_bridge.py` | `PlateauBridge` : heartbeat, lock TX, reconnexion |
+| `test_transport_abstract.py` | Contrat de l'interface `Transport` |
+| `test_transport_factory.py` | Factory `make_transport()` selon `QUORIDOR_TRANSPORT` |
+| `test_transport_null.py` | `NullTransport` (no-ops) |
+| `test_transport_serial.py` | `SerialTransport` avec `serial.Serial` mocké |
+| `test_transport_wifi.py` | `WiFiTransport` avec socket mocké |
 | `test_schemas.py` | Modèles Pydantic |
+| `test_status_schemas.py` | Schémas de réponse `/api/status` |
 
-### Tests hardware
+### Tests hardware (`tests/devkit/`)
 
-Aucun test hardware automatisé n'est enregistré aujourd'hui. Un harnais de tests d'intégration sur DevKit ESP32 (handshake `PING`/`PONG`, levée de murs `WALL`, etc.) sera ajouté à la phase 5, en cohérence avec le protocole texte stable.
+Tests qui nécessitent un ESP32 physiquement branché. Deux marqueurs
+pytest pour distinguer le canal :
 
-## Marqueur `devkit`
+- **`devkit_serial`** : ESP32 connecté en USB-C. Couvre handshake
+  `PING`/`PONG`, lecture `LIMITS`, commande `WALL`, parseur d'erreurs.
+- **`devkit_wifi`** : ESP32 reachable via Wi-Fi AP `Quoridor-ESP32`. La
+  fixture `wifi_fixture` automatise la bascule réseau Mac via
+  [`tools/wifi_switch.py`](../tools/wifi_switch.py). Couvre handshake
+  Wi-Fi, politique "dernier client gagne", coexistence USB + Wi-Fi.
 
-Le marqueur pytest `devkit` reste défini dans `pyproject.toml` pour les futurs tests hardware. Sans test enregistré sous ce marqueur, `pytest -m "not devkit"` et `pytest` produisent le même résultat aujourd'hui.
+```bash
+pytest -m devkit_serial      # ESP32 en USB
+pytest -m devkit_wifi        # ESP32 en Wi-Fi (bascule auto du Mac)
+```
 
 ## Couverture cible
 

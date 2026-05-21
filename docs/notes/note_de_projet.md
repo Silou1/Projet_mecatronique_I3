@@ -1,69 +1,159 @@
-# ****Note de Projet Détaillée – Quoridor Interactif****
+# Note de Projet — Quoridor Interactif
 
-## ****1. Contexte et Objectifs du Projet****  
-  
-* **Projet :** Il s’agit d’un projet de mécatronique mené par une équipe de six élèves.  
-* **Concept :** L’équipe recrée le jeu de société « Le Quoridor ».  
-* **Objectif Principal :** Concevoir un plateau de jeu intelligent permettant à un joueur humain d’affronter une intelligence artificielle (IA).  
-* **Expérience Visée :** Offrir une expérience de jeu plus immersive et dynamique que le jeu classique.  
-* **Règles du Jeu :** Les règles fondamentales du Quoridor classique sont conservées sans modification. Le projet se concentre sur l'ajout d'une dimension interactive.
+> Version à jour au **2026-05-21**. Pour la vision initiale du projet
+> (plateau autonome avec boutons + RPi), voir l'historique git de ce
+> fichier et le registre [`../decisions.md`](../decisions.md).
 
-## ****2. Fonctionnement et Interaction Utilisateur (Interface de Jeu)****
+---
 
-Le joueur interagit directement avec le plateau, qui lui fournit un retour visuel et tactile.  
-  
-* **Double Mode d’Action :** Le plateau dispose d’un bouton dédié pour basculer entre le « mode pion » (pour se déplacer) et le « mode mur » (pour placer un obstacle).  
-    * **Déplacement des Pions :**  
-        * Le joueur clique sur une seule case pour sélectionner la position désirée de son pion.  
-        * Les cases sont interactives et fonctionnent comme des boutons tactiles.  
-        * La position *actuelle* des pions est indiquée par des cases lumineuses (LED).  
-        * Les cases sur lesquelles le joueur a le droit de se déplacer s’affichent dans une *couleur différente* pour le guider.  
-        * Si le déplacement est valide, le jeu l’enregistre. Le pion se déplace alors « virtuellement » , et la case de la nouvelle position change de couleur pour fournir un retour visuel immédiat.  
-    * **Placement des Murs (Joueur) :**  
-        * Le joueur (en « mode mur ») clique *simultanément* sur deux cases pour indiquer l’emplacement du mur. Ce double clic valide le placement.  
-        * Si le placement est autorisé par les règles, le jeu l’enregistre.  
-        * Deux murs physiques monteront alors de l’intérieur du plateau pour créer la barrière.  
-    * **Placement des Murs (IA) :**  
-        * Les murs sont intégrés au plateau, et non des pièces amovibles.  
-        * Cette intégration permet à l'IA de placer ses murs de manière fluide et stratégique, sans intervention manuelle du joueur.
+## 1. Contexte et objectifs du projet
 
-## ****3. Conception Mécanique Détaillée (Système des Murs)****
+- **Projet** : projet de mécatronique mené par une équipe de six élèves
+  ICAM en 3ᵉ année, semestre 2025-2026.
+- **Concept** : recréer le jeu de société **Quoridor** sous une forme
+  mécatronique hybride : un plateau physique animé associé à une
+  interface logicielle.
+- **Objectif principal** : permettre à un joueur humain d'affronter une
+  intelligence artificielle (IA Minimax avec élagage alpha-bêta), avec
+  un retour visuel et mécanique sur un plateau réel.
+- **Expérience visée** : un Quoridor 6×6 jouable en démonstration sur un
+  smartphone, avec les murs qui se lèvent physiquement sur le plateau
+  au fur et à mesure des coups.
+- **Règles du jeu** : règles classiques du Quoridor conservées sans
+  modification, sur un plateau 6×6 (au lieu du 9×9 standard, pour
+  contraintes de fabrication mécanique).
 
-Le mécanisme des murs est géré par un plateau 3D conçu en plusieurs niveaux.  
-  
-* **Simplification des Murs :** Pour réduire la complexité, les murs physiques ne font qu’une case de long, au lieu des deux cases traditionnelles. Pour simuler un mur classique, le mécanisme soulèvera *deux* de ces murs d’une case.  
-    * **Niveau 1 : Système Corps XY**  
-        * Ce niveau est composé d’un système corps XY animé par deux moteurs précis.  
-        * Ce système permet le déplacement (dans toutes les directions : X et Y) d’un unique piston.  
-        * Le rôle du piston est de se positionner sous les murs concernés et de les soulever pour les faire apparaître sur le plateau.  
-    * **Niveau 2 : Stockage des Murs**  
-        * C’est à ce niveau que tous les murs non posés sont stockés.  
-    * **Niveau 3 : Murs Partiellement Visibles (Verrouillage)**  
-        * Lorsqu’un mur est poussé par le piston, il monte jusqu’à ce niveau. Les murs ne sont pas complètement visibles à ce stade.  
-        * Des « petits loquets ingénieux », intégrés directement aux murs, les maintiennent en place au troisième niveau.  
-        * Ce système de verrouillage empêche les murs de redescendre lorsque le piston se retire pour effectuer une autre action.  
-    * **Niveau 4 : Partie Visible du Plateau**  
-        * C’est le plateau de jeu final, la surface sur laquelle les joueurs interagissent.  
-        * C’est là que les pions et les murs (une fois soulevés) sont visibles.  
-    * **Mécanisme de Réinitialisation :**  
-        * À la fin de la partie, un bouton dédié permet de déplacer légèrement *tout le troisième niveau*.  
-        * Ce déplacement désengage les loquets, faisant ainsi retomber tous les murs placés au deuxième niveau (stockage).  
-  
-## ****4. Conception Électronique et Repérage (Interface de Jeu)****  
-  
-* **Grille Interactive :** Le système de placement des murs et de déplacement des pions utilise la même interface de cases interactives (tactiles) et de LEDs.  
-* **Optimisation du Câblage :** Les cases sont disposées en lignes et en colonnes (matrice).  
-* **Objectif de l’Optimisation :** Cette disposition permet de réduire le nombre de fils nécessaires et de simplifier le circuit électrique global.  
-* **Repérage :** La position du pion (et des actions) est repérée grâce à un système de coordonnées XY (ligne/colonne).  
-  
-## ****5. Système de Contrôle (Cerveau du Projet)****
+---
 
-> **Note de mise à jour (2026-04-28)** : l'architecture initialement prévue avec une seule Raspberry Pi 5 a évolué vers une architecture à deux processeurs (RPi 3/4 + ESP32-WROOM via UART). Voir [02_architecture.md](../02_architecture.md) pour la vision actuelle.
+## 2. Interaction utilisateur
 
-* **Contrôleur principal :** Raspberry Pi 3/4 — gère le moteur de jeu Python et l'intelligence artificielle (Minimax + alpha-bêta).
-* **Microcontrôleur temps réel :** ESP32-WROOM (Freenove) — gère tout le hardware du plateau (moteurs XY pour le piston, LEDs WS2812B, matrice boutons 6×6, servo de réinitialisation).
-* **Liaison entre les deux :** UART0 à 115200 bauds.
-* **Justification de la séparation :** la RPi a la puissance de calcul pour l'IA, l'ESP32 a le temps réel et le contrôle hardware fiable (FreeRTOS, watchdog, GPIO directs).
-  
-  
-  
+L'interface de jeu est une **webapp** servie par FastAPI, accessible
+depuis n'importe quel navigateur (smartphone, ordinateur) connecté au
+même réseau que le Mac.
+
+- **Saisie des coups** : clic sur les cases (déplacement) ou les arêtes
+  inter-cases (pose de mur) directement dans l'interface SVG.
+- **Validation** : le moteur de jeu Python (`quoridor_engine`) valide
+  chaque coup contre les règles, y compris la garantie BFS qu'un chemin
+  reste possible pour chaque joueur après pose d'un mur.
+- **Retour visuel double** :
+  - Sur la **webapp** : plateau SVG mis à jour en temps réel (polling
+    HTTP 500 ms).
+  - Sur le **plateau physique** : strip LED WS2812B (36 LEDs) qui
+    affiche les positions des pions et les coups légaux du joueur
+    courant.
+- **Retour mécanique** : pour chaque pose de mur, un piston monté sur
+  un chariot CoreXY se déplace sous la position du mur et le lève
+  physiquement via un servo.
+
+**Pas de boutons sur le plateau.** L'idée initiale d'une matrice de
+boutons 6×6 (un par case) a été abandonnée le 2026-05-21 ; voir
+[`../decisions.md`](../decisions.md) pour les raisons. Le plateau est
+désormais un **miroir physique** des coups joués sur la webapp.
+
+---
+
+## 3. Conception mécanique (système des murs)
+
+Le plateau est conçu en plusieurs niveaux superposés :
+
+- **Niveau 1 — Chariot CoreXY** : un système à deux moteurs pas à pas
+  NEMA17 (architecture CoreXY) déplace un piston unique dans le plan XY
+  sous le plateau. Le piston est aligné précisément avec chacune des
+  positions de murs.
+- **Niveau 2 — Stockage des murs** : tous les murs non posés y sont
+  stockés à plat, prêts à être poussés vers le haut par le piston.
+- **Niveau 3 — Murs verrouillés** : quand le piston pousse un mur vers
+  le haut, le mur arrive à ce niveau et y est maintenu par des
+  **loquets mécaniques** intégrés. Le piston peut alors redescendre
+  sans que le mur retombe.
+- **Niveau 4 — Plateau visible** : la surface où sont visibles les
+  pions (représentés par les LEDs) et les murs (une fois levés).
+
+**Simplification volontaire** : un mur Quoridor occupe normalement deux
+cases adjacentes. Plutôt qu'un mécanisme à mur long, le système utilise
+**deux murs d'une case** levés successivement par le piston. La
+commande firmware `WALL <H|V> <row> <col>` orchestre les deux levées
+consécutives.
+
+**Réinitialisation des murs** : à la fin d'une partie, un mécanisme
+manuel (poignée externe) déplace légèrement le niveau 3 pour désengager
+tous les loquets et faire retomber les murs au niveau 2 simultanément.
+
+---
+
+## 4. Conception électronique
+
+Source de vérité pour le pinout :
+[`../hardware/pinout.md`](../hardware/pinout.md).
+
+### Composants
+
+| Composant | Rôle |
+|---|---|
+| **ESP32-WROOM** (Freenove DevKit) | Microcontrôleur unique. Gère tout le hardware du plateau via commandes texte reçues du Mac. |
+| **2× L298N** | Ponts en H pour les 2 steppers NEMA17 du CoreXY. |
+| **2× NEMA17** | Steppers des axes X et Y. |
+| **1× SG90** | Servo pour la levée du piston (0° = levé, 180° = repos). |
+| **2× fins de course** | Capteurs de homing X et Y (`INPUT_PULLUP`, contact = LOW). |
+| **Strip WS2812B 36 LEDs** | Affichage des pions et coups légaux sur la grille 6×6. |
+| **Alimentation 12 V** | Puissance moteurs (les LEDs et le servo passent par un step-down 5 V). |
+
+### Câblage
+
+Prototype **breadboard** (la PCB v2 a été abandonnée le 2026-05-19, cf.
+[`../decisions.md`](../decisions.md)). Le breadboard est l'état final
+pour la démo et la soutenance.
+
+---
+
+## 5. Système de contrôle (cerveau du projet)
+
+### Architecture deux-machines
+
+- **Contrôleur principal — Mac de l'utilisateur (Python 3.12)** :
+  exécute le moteur de jeu Quoridor, l'IA Minimax, et la webapp FastAPI
+  (port 8000). Source unique de vérité pour les règles et l'état de
+  partie.
+- **Microcontrôleur temps réel — ESP32-WROOM (Arduino C++)** :
+  exécute le sketch
+  [`bringup_l298n_complet.cpp`](../../firmware/src/bringup_l298n_complet.cpp).
+  Gère le pilotage des moteurs CoreXY, le servo, les fins de course
+  (homing) et la strip LED.
+
+### Liaison Mac ↔ ESP32
+
+Deux transports interchangeables, **identiques au niveau protocole** :
+
+- **USB-série 115200 bauds** (mode développement) : câble USB-C direct.
+- **Wi-Fi mode AP** (mode démo) : l'ESP32 héberge le réseau
+  `Quoridor-ESP32` (WPA2, IP `192.168.4.1`, TCP port 3333). Le Mac s'y
+  connecte. Aucun accès Internet requis pour la démo.
+
+Bascule à chaud entre les deux via une route HTTP `POST /api/transport/switch`.
+
+### Justification de la séparation
+
+- Le **Mac** apporte la puissance de calcul pour l'IA, la souplesse du
+  développement Python (debug, tests, hot-reload) et l'écosystème
+  bureautique pour la démo (navigateur, partage smartphone).
+- L'**ESP32** apporte le contrôle hardware fiable (GPIO directs, PWM,
+  timing déterministe) et le Wi-Fi natif intégré pour la démo sans
+  câble.
+
+Cette répartition a été choisie après pivot le 2026-05-20 (l'architecture
+initialement prévue, avec une Raspberry Pi 3/4 comme contrôleur
+principal et un protocole UART CRC-16, a été abandonnée pour gain de
+souplesse et de fiabilité ; cf. [`../decisions.md`](../decisions.md)).
+
+---
+
+## 6. Pour aller plus loin
+
+| Document | Contenu |
+|---|---|
+| [`../01_projet.md`](../01_projet.md) | Présentation générale du projet et règles Quoridor |
+| [`../02_architecture.md`](../02_architecture.md) | Vue d'ensemble des composants logiciels et matériels |
+| [`../decisions.md`](../decisions.md) | Registre des décisions et pivots du projet |
+| [`../flowcharts/01_vue_generale.md`](../flowcharts/01_vue_generale.md) | Architecture en diagrammes |
+| [`../hardware/pinout.md`](../hardware/pinout.md) | Pinout ESP32 complet |

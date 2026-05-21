@@ -1,211 +1,229 @@
-# Webapp de démonstration — architecture et flux
+# Webapp — couches HTTP et flux de jeu
 
-Ce document détaille la webapp FastAPI développée comme mode de démonstration principal (suite à l'abandon de la PCB v2). Elle fonctionne en **mode autonome** par défaut, ou en **mode hybride** si un ESP32 est détecté au boot.
+La webapp est servie par **FastAPI** + **uvicorn** sur le port 8000. Elle
+tourne sur le Mac et est accessible depuis n'importe quel navigateur sur
+le même réseau (Safari iPhone, Chrome sur le Mac, etc.). Frontend HTML5 +
+SVG inline + JS vanilla — zéro framework, zéro étape de build.
 
-Sources : `webapp/server.py`, `webapp/service.py`, `webapp/uart_bridge.py`, `webapp/schemas.py`, `webapp/static/`.
+Pour l'historique de l'architecture serveur côté **RPi** (avant le pivot
+2026-05-20), voir
+[`archive/pre-2026-05-20/07_webapp_flux.md`](archive/pre-2026-05-20/07_webapp_flux.md).
 
 ---
 
-## Architecture en trois couches
+## Architecture en couches
 
 ```mermaid
-flowchart TB
-    subgraph CLIENT["Navigateur (mobile / desktop)"]
-        SVG["Frontend HTML5 + SVG inline<br/>JavaScript vanilla"]
-        POLL["Polling /api/state<br/>toutes les 500 ms"]
+graph TB
+    subgraph FRONT["Frontend (navigateur)"]
+        SVG["Rendu SVG inline 6×6<br/>HTML5 + CSS3 + JS vanilla"]
+        POLL["Polling 500 ms<br/>GET /api/state"]
     end
 
-    subgraph SERVER["Raspberry Pi — FastAPI port 8000"]
-        API["server.py<br/>Endpoints HTTP"]
-        SERVICE["service.py<br/>QuoridorService (lock + tick thread)"]
-        BRIDGE["uart_bridge.py<br/>UartBridge (optionnel)"]
-        ENGINE["quoridor_engine<br/>core + ai"]
-        API --> SERVICE
-        SERVICE --> ENGINE
-        SERVICE --> BRIDGE
+    subgraph SERVER["Couche HTTP — webapp/server.py"]
+        FASTAPI["FastAPI app<br/>+ uvicorn"]
+        ROUTES["Routes :<br/>/ , /api/new_game<br/>/api/move , /api/state<br/>/api/transport/switch<br/>/api/qr-code"]
     end
 
-    subgraph HW["Hardware (optionnel)"]
-        ESP["ESP32 firmware<br/>CoreXY + servo"]
+    subgraph SERVICE["Couche service — webapp/service.py"]
+        QSERVICE["QuoridorService singleton<br/>thread-safe (lock)"]
+        STATE["GameState courant<br/>(immuable)"]
+        TICK["thread daemon tick<br/>(pour coups IA)"]
     end
 
-    CLIENT <-->|"HTTP JSON"| API
-    BRIDGE <-.->|"UART si détecté"| ESP
+    subgraph ENGINE_LAYER["Moteur — quoridor_engine/"]
+        CORE["core.py<br/>règles, validation, BFS"]
+        AI["ai.py<br/>Minimax + alpha-bêta"]
+    end
 
-    style CLIENT fill:#2196F3,color:#fff
+    subgraph TRANSPORT["Couche plateau — webapp/"]
+        BRIDGE["plateau.py<br/>PlateauBridge<br/>heartbeat + lock TX<br/>reconnexion auto"]
+        TRANSP["transport.py<br/>SerialTransport<br/>WiFiTransport<br/>NullTransport"]
+        LEDS["leds.py<br/>LedRenderer + diff<br/>mapping serpentin"]
+    end
+
+    SVG -->|HTTP| FASTAPI
+    POLL -->|HTTP| FASTAPI
+    FASTAPI --> ROUTES
+    ROUTES --> QSERVICE
+    QSERVICE --> CORE
+    QSERVICE --> AI
+    TICK --> AI
+    QSERVICE --> BRIDGE
+    BRIDGE --> TRANSP
+    QSERVICE --> LEDS
+    LEDS --> BRIDGE
+
+    TRANSP -.->|USB ou Wi-Fi| ESP[(ESP32)]
+
+    style FRONT fill:#2196F3,color:#fff
     style SERVER fill:#4CAF50,color:#fff
-    style HW fill:#FF9800,color:#fff
-    style ENGINE fill:#9C27B0,color:#fff
+    style SERVICE fill:#FF9800,color:#fff
+    style ENGINE_LAYER fill:#9C27B0,color:#fff
+    style TRANSPORT fill:#795548,color:#fff
 ```
 
 ---
 
-## Endpoints HTTP exposés
+## Routes principales
 
-```mermaid
-flowchart LR
-    subgraph EP["Endpoints"]
-        E1["GET /<br/>→ sert index.html"]
-        E2["GET /api/state<br/>→ état JSON du jeu"]
-        E3["POST /api/new-game<br/>→ démarre une partie"]
-        E4["POST /api/move<br/>→ applique un coup humain"]
-        E5["POST /api/pause<br/>POST /api/resume<br/>→ pause / reprise"]
-        E6["POST /api/speed<br/>→ vitesse IA vs IA"]
-        E7["POST /api/wall-mode<br/>→ active mode pose de mur"]
-        E8["POST /api/quit<br/>→ retour à l'accueil"]
-    end
-
-    style EP fill:#E3F2FD
-```
-
-Tous les endpoints retournent un JSON sérialisé par `QuoridorService.to_dict()` contenant : mode, difficulté, statut, joueurs, murs, gagnant, état plateau, dernière erreur.
+| Méthode | Route | Rôle |
+|---|---|---|
+| `GET` | `/` | Sert le fichier HTML principal |
+| `GET` | `/api/state` | Retourne l'état courant (polling 500 ms) |
+| `POST` | `/api/new_game` | Démarre une nouvelle partie (mode + difficulté) |
+| `POST` | `/api/move` | Soumet un coup (déplacement ou mur) |
+| `POST` | `/api/reset` | Remet le plateau à zéro |
+| `POST` | `/api/transport/switch` | Bascule à chaud entre `wifi`, `serial`, `none` |
+| `GET` | `/api/qr-code` | Retourne un QR code SVG vers l'URL de la webapp |
+| `GET` | `/api/status` | Statut du transport (état, dernier ping, erreurs) |
 
 ---
 
-## Flux d'un coup humain (mode autonome)
+## Flux d'un coup humain (pose de mur, mode démo Wi-Fi)
 
 ```mermaid
 sequenceDiagram
-    participant USER as Utilisateur (souris)
     participant FRONT as Frontend SVG
-    participant API as FastAPI
+    participant API as server.py
     participant SVC as QuoridorService
-    participant ENG as quoridor_engine
+    participant ENGINE as quoridor_engine
+    participant BRIDGE as PlateauBridge
+    participant LED as LedRenderer
+    participant ESP as ESP32
 
-    USER->>FRONT: Clic sur une case (r, c)
-    FRONT->>API: POST /api/move<br/>{type:"deplacement", target:[r,c]}
+    FRONT->>API: POST /api/move<br/>{type:'mur', orientation:'h', row:2, col:3}
+    API->>SVC: apply_move(('mur', 'h', 2, 3))
+    SVC->>ENGINE: play_move(state, move)
 
-    API->>SVC: apply_user_move(payload)
-
-    Note over SVC: with self._lock:
-    SVC->>SVC: Valide tour humain<br/>(status, mode, current_player)
-    SVC->>ENG: move_pawn(state, player, target)
-
-    alt Coup valide
-        ENG->>SVC: Nouvel état GameState
-        SVC->>SVC: turn_count += 1<br/>check_game_over()
-        SVC->>API: 200 OK + to_dict()
-        API->>FRONT: JSON état actualisé
-    else Coup invalide
-        ENG->>SVC: InvalidMoveError(code=...)
-        SVC->>API: HTTPException
-        API->>FRONT: 400 + {code, message}
-        FRONT->>USER: Affiche erreur
+    alt Coup valide (BFS confirme un chemin pour les 2 joueurs)
+        ENGINE->>SVC: nouveau GameState
+        SVC->>SVC: state = nouveau
+        SVC->>BRIDGE: send_wall('H', 2, 3) (inversion H↔V)
+        BRIDGE->>ESP: WALL H 2 3\n
+        Note over ESP: GOTO + LEVER + BAISSER<br/>× nombre de cases mesurées
+        ESP->>BRIDGE: WALL OK H 2 3 raised=2
+        BRIDGE->>SVC: retour OK
+        SVC->>LED: render_state(state)
+        LED->>LED: diff vs précédent
+        LED->>BRIDGE: LED <i> <r> <g> <b> (× N)
+        LED->>BRIDGE: LEDSHOW
+        BRIDGE->>ESP: (commandes LED batch)
+        SVC->>API: dict état sérialisé
+        API->>FRONT: 200 OK + état
+    else Coup invalide (mur bloque le chemin, déjà posé, etc.)
+        ENGINE-->>SVC: InvalidMoveError(code=ILLEGAL)
+        SVC-->>API: HTTPException 400
+        API->>FRONT: 400 + {error: 'ILLEGAL'}
     end
 
-    Note over FRONT: Polling /api/state<br/>toutes les 500 ms<br/>→ redessine plateau SVG
+    Note over FRONT,ESP: Polling /api/state continue<br/>indépendamment toutes les 500 ms
 ```
 
 ---
 
-## Flux d'un coup IA via le tick thread
-
-L'IA tourne dans un **thread daemon séparé** qui boucle toutes les 100 ms. Point clé : la réflexion IA (qui peut prendre 0,5 à 5 secondes selon la difficulté) est exécutée **hors du lock** pour ne pas bloquer les requêtes HTTP.
+## Flux d'un coup IA (tick thread)
 
 ```mermaid
-flowchart TD
-    TICK(["Tick thread (daemon)<br/>boucle toutes les 100 ms"]) --> ACQ1["Acquiert _lock"]
+sequenceDiagram
+    participant TICK as Thread tick<br/>(daemon, service.py)
+    participant SVC as QuoridorService
+    participant AI as ai.py
+    participant ENGINE as quoridor_engine.core
+    participant BRIDGE as PlateauBridge
+    participant ESP as ESP32
 
-    ACQ1 --> CHECKS{"Conditions<br/>réunies ?"}
-    CHECKS -->|"status != playing<br/>OU pas tour IA<br/>OU délai non écoulé"| SLEEP["Libère le lock<br/>+ sleep(0.1s)"]
-    CHECKS -->|Oui| SNAPSHOT["Snapshot state<br/>_ai_thinking = True"]
+    loop Toutes les 0,5 s
+        TICK->>SVC: lock.acquire()
+        TICK->>SVC: current_player == AI ?
 
-    SLEEP --> TICK
-    SNAPSHOT --> REL1["Libère _lock"]
+        alt Oui
+            SVC->>AI: find_best_move(state)<br/>iterative deepening
+            AI->>ENGINE: explore arbre minimax
+            AI->>SVC: meilleur coup
+            SVC->>ENGINE: play_move(state, ai_move)
+            ENGINE->>SVC: nouveau GameState
+            SVC->>SVC: state = nouveau
 
-    REL1 --> THINK["AI.find_best_move(snapshot)<br/>HORS du lock<br/>(0,5 à 5 secondes)"]
+            alt Coup IA = mur
+                SVC->>BRIDGE: send_wall(...)
+                BRIDGE->>ESP: WALL ...
+                ESP->>BRIDGE: WALL OK ...
+            end
 
-    THINK --> ACQ2["Ré-acquiert _lock"]
+            SVC->>BRIDGE: LedRenderer.update + LEDSHOW
+        else Non (tour humain)
+            Note over TICK: attend, polling 500 ms
+        end
 
-    ACQ2 --> RECHECK{"Partie toujours<br/>active ?<br/>(pas quit, pas pause)"}
-    RECHECK -->|Non| ABANDON["Jette le coup<br/>(utilisateur a quitté)"]
-    RECHECK -->|Oui| APPLY["Applique le coup<br/>(move_pawn ou place_wall)"]
-
-    APPLY --> UPDATE["turn_count += 1<br/>check_game_over()<br/>forward au plateau si hybride"]
-    UPDATE --> REL2["Libère _lock"]
-    REL2 --> TICK
-    ABANDON --> REL2
-
-    style TICK fill:#9C27B0,color:#fff
-    style THINK fill:#FF5722,color:#fff
-    style APPLY fill:#4CAF50,color:#fff
+        TICK->>SVC: lock.release()
+    end
 ```
-
-> **Pourquoi sortir du lock** ? Une requête `GET /api/state` doit retourner sous 100 ms pour que le polling reste fluide. Si l'IA pensait dans le lock, l'interface serait gelée pendant toute sa réflexion.
 
 ---
 
-## Mode hybride : webapp + plateau physique
-
-Si l'ESP32 est branché au boot, `UartBridge` essaie le handshake. Si ça réussit, l'option **« mode plateau »** apparaît dans la webapp. Les coups joués dans le navigateur sont alors miroités physiquement.
-
-```mermaid
-flowchart TD
-    BOOT(["Démarrage du serveur"]) --> DETECT{"ESP32 branché<br/>(handshake OK) ?"}
-
-    DETECT -->|Non| AUTO["UartBridge non créé<br/>plateau.available = False"]
-    DETECT -->|Oui| HYBRID["UartBridge initialisé<br/>plateau.available = True"]
-
-    AUTO --> READY["Webapp démarre<br/>en mode autonome uniquement"]
-    HYBRID --> READY2["Webapp démarre<br/>+ checkbox 'plateau mode' active"]
-
-    READY --> GAME1["Partie autonome :<br/>moteur Python uniquement"]
-
-    READY2 --> CHOICE{"Joueur coche<br/>'mode plateau' ?"}
-    CHOICE -->|Non| GAME1
-    CHOICE -->|Oui| GAME2["Partie hybride :<br/>chaque coup est miroité"]
-
-    GAME2 --> MOVE["Coup joué (humain ou IA)"]
-    MOVE --> SVC_APPLY["service.apply_user_move()<br/>ou tick_once()"]
-    SVC_APPLY --> FORWARD["_forward_to_plateau_unlocked()"]
-
-    FORWARD --> SEND{"Forward<br/>réussi ?"}
-    SEND -->|Oui| OK["DONE reçu de l'ESP32<br/>partie continue"]
-    SEND -->|Non| LOST["plateau.available = False<br/>last_error = PLATEAU_LOST"]
-
-    LOST --> FALLBACK["Bascule transparente<br/>en mode autonome<br/>(GameState préservé)"]
-
-    OK --> NEXT["Tour suivant"]
-    FALLBACK --> NEXT
-
-    style BOOT fill:#2196F3,color:#fff
-    style HYBRID fill:#4CAF50,color:#fff
-    style FALLBACK fill:#FF9800,color:#fff
-    style LOST fill:#f44336,color:#fff
-```
-
-> **Fallback gracieux** : aucune tentative de reconnexion automatique. Une fois le plateau perdu, la partie continue côté logiciel sans interruption — le joueur est juste notifié dans l'interface.
-
----
-
-## Modèle de threading
+## Modes d'exécution
 
 ```mermaid
 flowchart LR
-    subgraph THREADS["Threads dans le processus FastAPI"]
-        MAIN["Thread principal<br/>(uvicorn ASGI)"]
-        WORKERS["Workers HTTP<br/>(traitent les requêtes)"]
-        TICK["Tick thread (daemon)<br/>tick_once() toutes les 100 ms"]
-    end
+    START(["Démarrage webapp"]) --> ENV{QUORIDOR_TRANSPORT}
 
-    subgraph SHARED["État partagé (sous _lock)"]
-        STATE["_state : GameState"]
-        STATUS["_status, _winner, _turn_count"]
-        FLAGS["_ai_thinking, _last_error"]
-    end
+    ENV -->|none| AUTONOMOUS[NullTransport<br/>jeu 100 % logiciel<br/>= démo P0]
+    ENV -->|serial| HYBRID_USB[SerialTransport<br/>câble USB-C<br/>= mode dev]
+    ENV -->|wifi (défaut)| HYBRID_WIFI[WiFiTransport<br/>AP Quoridor-ESP32<br/>= mode démo]
 
-    WORKERS -->|"acquire _lock"| SHARED
-    TICK -->|"acquire _lock"| SHARED
+    AUTONOMOUS --> NO_MIRROR[Murs posés à l'écran<br/>aucun écho physique]
+    HYBRID_USB --> MIRROR[Webapp pilote le plateau]
+    HYBRID_WIFI --> MIRROR
 
-    style THREADS fill:#E3F2FD
-    style SHARED fill:#FFF3E0
+    MIRROR --> CRASH{Erreur transport<br/>en cours ?}
+    CRASH -->|Oui| FALLBACK[available = False<br/>bannière PLATEAU_LOST<br/>reconnexion auto background]
+    CRASH -->|Non| OK[Partie suit son cours]
+    FALLBACK --> OK
+
+    style AUTONOMOUS fill:#9E9E9E,color:#fff
+    style HYBRID_USB fill:#4CAF50,color:#fff
+    style HYBRID_WIFI fill:#FF9800,color:#fff
+    style FALLBACK fill:#f44336,color:#fff
 ```
 
-**Règles** :
-1. Toutes les mutations passent par `self._lock`.
-2. La réflexion IA (la seule opération longue) sort du lock avec un snapshot.
-3. Le tick thread est daemon : il meurt avec le processus, pas besoin de stop explicite.
+> **Bascule à chaud** : `POST /api/transport/switch` permet de basculer
+> `wifi` ↔ `serial` ↔ `none` sans redémarrer la webapp. Pratique pendant
+> la démo si le Wi-Fi devient instable.
 
 ---
 
-> **Principe clé** : la webapp est conçue pour être **toujours fonctionnelle** — sans hardware, avec hardware, et même si le hardware se déconnecte en pleine partie. C'est ce qui en fait un mode de démonstration robuste pour la présentation finale.
+## Frontend
+
+Un seul fichier HTML + un fichier CSS + un fichier JS vanilla. Rendu
+**SVG inline** du plateau 6×6 :
+
+- **Clic sur une case** : envoie `/api/move` avec `{type:'deplacement', row, col}`
+- **Clic sur une arête inter-cases** : envoie `/api/move` avec `{type:'mur', orientation, row, col}`
+- **Coups légaux pré-affichés** en cyan dim (sur le plateau LED aussi, depuis 2026-05-21)
+- **Bannières de statut** : transport actif, erreurs, mode dégradé
+- **Polling 500 ms** sur `/api/state` met à jour le plateau pour refléter
+  les coups IA jouée en arrière-plan
+- **QR code intégré** au démarrage (route `/api/qr-code`) pour partager
+  l'URL avec un smartphone
+
+Choix volontaire : zéro framework, zéro build. Toute la logique frontale
+tient dans ~300 lignes JS, lisible par n'importe quel développeur.
+
+---
+
+## Tests
+
+| Fichier | Couverture |
+|---|---|
+| `tests/webapp/test_api.py` | Routes FastAPI (client httpx) |
+| `tests/webapp/test_service.py` | Couche service, intégration moteur + transport mocké |
+| `tests/webapp/test_transport.py` | Implémentations Serial / WiFi / Null |
+| `tests/webapp/test_plateau.py` | `PlateauBridge` : heartbeat, lock, reconnexion |
+| `tests/webapp/test_leds.py` | `LedRenderer` : mapping serpentin, diff |
+| `tests/webapp/test_schemas.py` | Modèles Pydantic |
+| `tests/devkit/*.py` | Tests requérant un ESP32 branché (markers `devkit_serial`, `devkit_wifi`) |
+
+Aucun test webapp standard ne nécessite un ESP32 physique. Les tests
+hardware sont isolés via marqueurs pytest. Voir
+[`../08_tests.md`](../08_tests.md).

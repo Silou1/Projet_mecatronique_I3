@@ -47,8 +47,8 @@ Brancher le câble USB-C entre le Mac et l'ESP32. Le port apparaît comme :
 - `/dev/tty.usbserial-*` (Mac Intel)
 - `/dev/tty.usbmodem*` (Apple Silicon, parfois)
 
-La webapp détecte automatiquement le port via `webapp/uart_bridge.py`. Si plusieurs ports série sont
-visibles, forcer la sélection via variable d'environnement :
+La webapp détecte automatiquement le port via `webapp/transport.py` (`SerialTransport`).
+Si plusieurs ports série sont visibles, forcer la sélection via variable d'environnement :
 
 ```bash
 QUORIDOR_SERIAL_PORT=/dev/tty.usbserial-XXX python -m webapp.server
