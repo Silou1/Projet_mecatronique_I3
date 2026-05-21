@@ -348,10 +348,8 @@ body.wall-placement .cell { opacity: 0.6; cursor: default; }
 
 /* === Banniere degradee === */
 .banner-degraded {
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
   background: #fff3cd;
   border-bottom: 2px solid #f5a623;
   padding: 10px 16px;
@@ -359,7 +357,7 @@ body.wall-placement .cell { opacity: 0.6; cursor: default; }
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  z-index: 200;
+  z-index: 50;
   font-size: 14px;
 }
 .banner-icon { font-size: 18px; }

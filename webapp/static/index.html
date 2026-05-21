@@ -10,6 +10,15 @@
 </head>
 <body>
 
+  <!-- ============ BANNIERE DEGRADEE (sticky en haut, dans le flux) ============ -->
+  <div id="banner-degraded" class="banner-degraded hidden">
+    <span class="banner-icon">⚠</span>
+    <span class="banner-text"><strong>Plateau injoignable.</strong>
+      Vérifie le branchement USB-C entre l'ESP32 et le Mac.</span>
+    <button id="btn-retry-serial" type="button">Réessayer en USB</button>
+    <button id="btn-retry-wifi" type="button">Réessayer en Wi-Fi</button>
+  </div>
+
   <!-- ============ VUE ACCUEIL ============ -->
   <section id="view-home" class="view">
     <header class="home-header">
@@ -185,15 +194,6 @@
         <button id="btn-status-close" class="btn-secondary" type="button">Fermer</button>
       </div>
     </div>
-  </div>
-
-  <!-- ============ BANNIERE DEGRADEE ============ -->
-  <div id="banner-degraded" class="banner-degraded hidden">
-    <span class="banner-icon">⚠</span>
-    <span class="banner-text"><strong>Plateau injoignable.</strong>
-      Vérifie le branchement USB-C entre l'ESP32 et le Mac.</span>
-    <button id="btn-retry-serial" type="button">Réessayer en USB</button>
-    <button id="btn-retry-wifi" type="button">Réessayer en Wi-Fi</button>
   </div>
 
   <script src="/static/app.js" defer></script>
