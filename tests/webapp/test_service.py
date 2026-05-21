@@ -223,3 +223,18 @@ class TestHumainVsHumain:
         assert state["players"]["j2"]["is_ai"] is False
         assert state["status"] == "playing"
         assert state["current_player"] == "j1"
+
+    def test_hvh_both_players_can_move(self, service):
+        service.new_game(mode="human_vs_human", difficulty="normal", plateau_mode=False)
+        # J1 joue
+        service.apply_user_move({"type": "deplacement", "target": (4, 3)})
+        state = service.to_dict()
+        assert state["current_player"] == "j2"
+        assert state["turn_count"] == 1
+        assert state["players"]["j1"]["position"] == [4, 3]
+        # J2 joue
+        service.apply_user_move({"type": "deplacement", "target": (1, 3)})
+        state = service.to_dict()
+        assert state["current_player"] == "j1"
+        assert state["turn_count"] == 2
+        assert state["players"]["j2"]["position"] == [1, 3]

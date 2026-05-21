@@ -175,10 +175,6 @@ class QuoridorService:
         with self._lock:
             if self._status != "playing":
                 raise InvalidMoveError("Aucune partie active.", NackCode.WRONG_TURN)
-            if self._mode == "ai_vs_ai":
-                raise InvalidMoveError(
-                    "Pas de coup humain en mode IA vs IA.", NackCode.WRONG_TURN
-                )
             if self._is_ai_turn_unlocked():
                 raise InvalidMoveError(
                     "Ce n'est pas le tour du joueur humain.", NackCode.WRONG_TURN
