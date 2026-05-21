@@ -63,6 +63,45 @@ class ErrorInfo(BaseModel):
     message: str
 
 
+TransportKind = Literal["wifi", "serial", "none"]
+
+
+class ClientStatusInfo(BaseModel):
+    polling_active: bool
+    polling_interval_ms: int
+
+
+class TransportStatusInfo(BaseModel):
+    kind: TransportKind
+    description: str
+    alive: bool
+    last_pong_at_iso: Optional[str] = None
+    last_pong_age_seconds: Optional[float] = None
+    latency_avg_ms: Optional[float] = None
+    startup_error: Optional[str] = None
+
+
+class PlateauStatusInfo(BaseModel):
+    homed: bool
+    ready: bool
+
+
+class StatusResponse(BaseModel):
+    client: ClientStatusInfo
+    transport: TransportStatusInfo
+    plateau: PlateauStatusInfo
+
+
+class TransportSwitchRequest(BaseModel):
+    kind: Literal["wifi", "serial"]  # 'none' n'est pas une cible de switch utilisateur
+
+
+class TransportSwitchResponse(BaseModel):
+    success: bool
+    description: str
+    error: Optional[str] = None
+
+
 class StateResponse(BaseModel):
     """Réponse de GET /api/state."""
     mode: Mode = "human_vs_ai"
