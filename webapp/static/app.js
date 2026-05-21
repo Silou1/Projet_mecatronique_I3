@@ -263,6 +263,29 @@ function renderError(state) {
   }
 }
 
+// ============ TRANSITION HvH ============
+let _lastTransitionTurn = -1;
+
+function maybeShowTransition(state) {
+  if (state.mode !== "human_vs_human") return;
+  if (state.status === "waiting") {
+    _lastTransitionTurn = -1;  // reset au retour a l'accueil
+    return;
+  }
+  if (state.status !== "playing") return;
+  if (state.turn_count === _lastTransitionTurn) return;
+  _lastTransitionTurn = state.turn_count;
+  const delayMs = state.turn_count === 0 ? 0 : 500;
+  document.getElementById("transition-text").textContent =
+    `À toi ${state.current_player.toUpperCase()} !`;
+  setTimeout(() => {
+    // Re-verifier au moment d'afficher : l'utilisateur a pu quitter entre temps
+    if (state.status === "playing") {
+      document.getElementById("modal-transition").classList.remove("hidden");
+    }
+  }, delayMs);
+}
+
 function render(newState) {
   state = newState;
   document.getElementById("overlay-reconnect").classList.add("hidden");
@@ -274,6 +297,7 @@ function render(newState) {
     renderWallMode(state);
   }
   renderModal(state);
+  maybeShowTransition(state);
   renderPlateauToggle(state);
   // Sync chip vitesse in-game avec le serveur
   const speedGroup = document.querySelector('[data-field="speed-ingame"]');
