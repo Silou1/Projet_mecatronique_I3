@@ -20,6 +20,7 @@ from webapp.schemas import (
     MovePayload,
     SpeedPayload,
     WallModePayload,
+    TransportSwitchRequest,
 )
 from webapp.service import QuoridorService
 
@@ -27,6 +28,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _make_transport_by_kind(kind: str):
+    """Factory helper pour le switch endpoint, indirection facilitant les tests."""
+    from webapp.transport import WiFiTransport, SerialTransport
+    if kind == "wifi":
+        return WiFiTransport()
+    if kind == "serial":
+        return SerialTransport()
+    raise ValueError(f"kind invalide : {kind}")
 
 
 def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
@@ -115,6 +126,26 @@ def create_app(transport: Optional[object] = None, startup_error: Optional[str] 
     def post_quit():
         service.quit_to_home()
         return service.to_dict()
+
+    from webapp.transport import TransportError
+
+    @app.post("/api/transport/switch")
+    def post_transport_switch(payload: TransportSwitchRequest):
+        new_t = _make_transport_by_kind(payload.kind)
+        try:
+            service._plateau.switch_transport(new_t)
+            service._startup_error = None
+            return {
+                "success": True,
+                "description": service._plateau.transport.description,
+                "error": None,
+            }
+        except TransportError as e:
+            return {
+                "success": False,
+                "description": service._plateau.transport.description,
+                "error": str(e),
+            }
 
     @app.get("/api/status")
     def get_status():
