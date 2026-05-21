@@ -49,8 +49,23 @@
       </div>
 
       <button id="btn-start" class="btn-primary">Commencer la partie →</button>
+      <button id="btn-share" class="btn-secondary">📱 Partager sur téléphone</button>
     </div>
   </section>
+
+  <!-- ============ MODAL PARTAGE QR CODE ============ -->
+  <div id="modal-share" class="modal hidden">
+    <div class="modal-card">
+      <h2>Partager sur téléphone</h2>
+      <p>Scanne ce QR code avec ton téléphone pour ouvrir la webapp.</p>
+      <img id="qr-image" src="/api/qr-code" alt="QR code"
+           style="max-width: 280px; margin: 16px auto; display: block; image-rendering: pixelated;" />
+      <p id="qr-url" class="status-detail" style="text-align: center;">—</p>
+      <div class="modal-actions">
+        <button id="btn-share-close" class="btn-secondary" type="button">Fermer</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ============ VUE JEU ============ -->
   <section id="view-game" class="view hidden">

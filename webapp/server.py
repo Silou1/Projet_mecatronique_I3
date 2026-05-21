@@ -147,6 +147,24 @@ def create_app(transport: Optional[object] = None, startup_error: Optional[str] 
                 "error": str(e),
             }
 
+    @app.get("/api/qr-code")
+    def get_qr_code():
+        """Renvoie un QR code SVG pointant vers l'URL de la webapp sur le LAN."""
+        from fastapi.responses import Response
+        from webapp.qr import qr_svg, webapp_url
+        url = webapp_url()
+        svg = qr_svg(url)
+        return Response(content=svg, media_type="image/svg+xml", headers={
+            "X-Webapp-Url": url,
+            "Cache-Control": "no-cache",
+        })
+
+    @app.get("/api/qr-code/url")
+    def get_qr_code_url():
+        """Renvoie l'URL textuelle (pour affichage à côté du QR)."""
+        from webapp.qr import webapp_url
+        return {"url": webapp_url()}
+
     @app.get("/api/status")
     def get_status():
         plateau_dict = service._plateau.status_dict()

@@ -526,6 +526,34 @@ async function switchTransport(kind) {
   }
 }
 
+function initShareUI() {
+  const btnShare = document.getElementById("btn-share");
+  const modalShare = document.getElementById("modal-share");
+  const btnShareClose = document.getElementById("btn-share-close");
+  const qrImage = document.getElementById("qr-image");
+  const qrUrl = document.getElementById("qr-url");
+
+  if (btnShare && modalShare) {
+    btnShare.addEventListener("click", async () => {
+      // Reload du QR (au cas où l'IP a changé entre 2 ouvertures)
+      qrImage.src = "/api/qr-code?t=" + Date.now();
+      try {
+        const r = await fetch("/api/qr-code/url");
+        const j = await r.json();
+        qrUrl.textContent = j.url;
+      } catch (e) {
+        qrUrl.textContent = "(URL indisponible)";
+      }
+      modalShare.classList.remove("hidden");
+    });
+  }
+  if (btnShareClose) {
+    btnShareClose.addEventListener("click", () => {
+      modalShare.classList.add("hidden");
+    });
+  }
+}
+
 function initStatusUI() {
   // Menu trois points (toggle)
   const btnMenu = document.getElementById("btn-menu");
@@ -567,6 +595,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderIntersections();
   initHandlers();
   initStatusUI();
+  initShareUI();
   startStatusPolling();
   poll();
 });
