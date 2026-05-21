@@ -21,14 +21,17 @@
       <label class="field-label">Mode</label>
       <div class="chip-group" data-field="mode">
         <button class="chip selected" data-value="human_vs_ai">Humain vs IA</button>
+        <button class="chip" data-value="human_vs_human">Humain vs Humain</button>
         <button class="chip" data-value="ai_vs_ai">IA vs IA</button>
       </div>
 
-      <label class="field-label">Difficulté</label>
-      <div class="chip-group" data-field="difficulty">
-        <button class="chip" data-value="facile">Facile</button>
-        <button class="chip selected" data-value="normal">Normal</button>
-        <button class="chip" data-value="difficile">Difficile</button>
+      <div id="difficulty-block">
+        <label class="field-label">Difficulté</label>
+        <div class="chip-group" data-field="difficulty">
+          <button class="chip" data-value="facile">Facile</button>
+          <button class="chip selected" data-value="normal">Normal</button>
+          <button class="chip" data-value="difficile">Difficile</button>
+        </div>
       </div>
 
       <div id="speed-block" class="hidden">

@@ -365,6 +365,7 @@ function initHandlers() {
           homeForm[field] = value;
           if (field === "mode") {
             document.getElementById("speed-block").classList.toggle("hidden", value !== "ai_vs_ai");
+            document.getElementById("difficulty-block").classList.toggle("hidden", value === "human_vs_human");
           }
         }
       });
