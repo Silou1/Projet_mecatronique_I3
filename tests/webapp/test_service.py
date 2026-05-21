@@ -250,7 +250,14 @@ class TestHumainVsHumain:
 
     def test_hvh_wall_de_j2_forwarded_au_plateau(self):
         """Le mur pose par J2 en HvH doit etre envoye au plateau physique
-        avec inversion H<->V (convention plateau)."""
+        avec l'orientation inchangée (convention identique engine ↔ firmware
+        depuis la recalibration complète des matrices).
+
+        Les forwards physiques sont exécutés dans un thread daemon avec
+        flag _plateau_busy ; le test simule un firmware (ACK HOME OK / WALL OK)
+        et attend la fin de chaque worker avant le coup suivant.
+        """
+        import time as _time
         from webapp.transport import NullTransport
 
         lignes_envoyees = []
@@ -258,18 +265,49 @@ class TestHumainVsHumain:
         class FakeTransport(NullTransport):
             description = "fake"
             is_alive = True
+            def __init__(self):
+                self._responses = []
             def write_line(self, line):
                 lignes_envoyees.append(line)
+                # Simule la réponse du firmware
+                if line == "HOME":
+                    self._responses.append("HOME OK")
+                elif line.startswith("WALL "):
+                    parts = line.split()
+                    self._responses.append(
+                        f"WALL OK {parts[1]} {parts[2]} {parts[3]} raised=2"
+                    )
+                elif line == "PING":
+                    self._responses.append("PONG")
+                else:
+                    self._responses.append("OK")  # LED, LEDCLEAR, LEDSHOW
+            def read_line(self, timeout=1.0):
+                if self._responses:
+                    return self._responses.pop(0)
+                return None
+
+        def wait_not_busy(service, timeout=3.0):
+            deadline = _time.monotonic() + timeout
+            while _time.monotonic() < deadline:
+                if not service._plateau_busy:
+                    return
+                _time.sleep(0.02)
+            raise AssertionError("plateau toujours busy après timeout")
 
         transport = FakeTransport()
         transport.open()
         service = QuoridorService(transport=transport)
         service.new_game(mode="human_vs_human", difficulty="normal", plateau_mode=True)
+        wait_not_busy(service)  # attend la fin du HOME worker
+
         # J1 deplace son pion (turn count 1, current player = j2)
         service.apply_user_move({"type": "deplacement", "target": (4, 3)})
-        lignes_envoyees.clear()  # on ignore les HOME/autres au demarrage
+        wait_not_busy(service)
+        lignes_envoyees.clear()  # on ignore HOME + LEDs du déplacement
+
         # J2 pose un mur horizontal
         service.apply_user_move({"type": "mur", "orientation": "h", "row": 1, "col": 2})
-        # Verifier que la commande WALL a ete envoyee (avec inversion h->V)
-        assert any(ligne.startswith("WALL V 1 2") for ligne in lignes_envoyees), \
+        wait_not_busy(service)
+        # Verifier que la commande WALL a ete envoyee (orientation inchangée)
+        assert any(ligne.startswith("WALL H 1 2") for ligne in lignes_envoyees), \
             f"WALL non envoye, lignes: {lignes_envoyees}"

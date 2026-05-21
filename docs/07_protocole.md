@@ -65,12 +65,11 @@ WALL V 0 0
 WALL H 4 4
 ```
 
-> **Note — inversion d'orientation** : la couche Python (`webapp/service.py`,
-> méthode `_forward_to_plateau_unlocked`) applique une inversion `H ↔ V` avant
-> d'envoyer la commande, pour compenser la convention d'orientation inverse entre
-> l'engine Quoridor et les matrices physiques du firmware. Le firmware reçoit donc
-> l'orientation **déjà corrigée** ; les exemples ci-dessus sont ceux effectivement
-> envoyés sur le fil.
+> **Note — convention d'orientation alignée** : depuis la recalibration complète
+> des 60 positions de murs (commit `1a420a9`, 2026-05-21), le firmware suit la
+> même convention `H/V` que l'engine Quoridor. La couche Python transmet donc
+> l'orientation **telle quelle** dans `_forward_to_plateau_unlocked`. Toute
+> inversion historique a été retirée.
 
 ---
 
@@ -167,11 +166,23 @@ Les **60 positions** (30 H + 30 V) validées au 2026-05-21 sont encodées dans l
 
 - **Pas de déduplication** : si une commande `WALL` est envoyée deux fois pour la même
   position, le firmware lèvera deux fois (ou tentera de le faire).
-- **Côté Mac** : envoyer la commande, attendre la ligne de réponse (timeout recommandé :
-  10 secondes, pour couvrir les déplacements CoreXY les plus longs).
+- **Côté Mac** : toutes les commandes (`PING`, `HOME`, `WALL`, `LED*`) passent par
+  `PlateauBridge.send_command_await(cmd, accept_prefixes, timeout)` (cf. [`webapp/plateau.py`](../webapp/plateau.py)).
+  Cette méthode sérialise via le `_tx_lock`, draine les lignes verbeuses du firmware
+  (`GOTO ...`, `done`, `servo 0 deg`, etc.) et boucle jusqu'à lire un ACK préfixe-matché
+  (`HOME OK`, `WALL OK`, `WALL ERR`, `PONG`, `OK`, `ERR`). Tout ACK réussi déclenche
+  `_mark_alive()` qui reset les compteurs `failed_pings` et lève `transport_lost` si actif —
+  un round-trip applicatif prouve la santé du canal.
+- **Heartbeat applicatif** (`PING` toutes les 5 s) : le thread daemon skippe son PING si
+  le `_tx_lock` est déjà tenu par une commande métier (un `WALL` de 10 s ne provoque plus
+  2 PING ratés successifs).
+- **Forwards physiques en thread daemon** : `HOME` et `WALL` sont exécutés hors du service
+  lock dans un worker dédié, avec un flag `_plateau_busy = True` exposé via `/api/state`
+  sous `plateau.busy`. Tant que `busy = True`, le coup suivant (humain ou IA) est refusé
+  côté backend ET les clics sont désactivés côté frontend — on attend la fin physique
+  réelle du coup précédent avant d'autoriser le suivant.
 - **Phase démo** : ne pas faire de retry automatique en cas de timeout ; afficher une
-  erreur côté UI et laisser le joueur décider. Le bridge se désactive (`available = False`)
-  à la première erreur de transport ; les forwards suivants sont des no-ops silencieux.
+  erreur côté UI et laisser le joueur décider.
 
 ---
 

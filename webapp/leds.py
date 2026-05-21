@@ -152,9 +152,16 @@ class LedRenderer:
         self._send_line("LEDSHOW")
 
     def _send_line(self, line: str) -> None:
-        """Envoi best-effort. Toute exception est avalee silencieusement (cf.
-        pattern de _forward_to_plateau_unlocked dans service.py)."""
+        """Envoi best-effort, sérialisé via send_command_await (lock TX + drain).
+
+        Le firmware répond `OK` ou `ERR ...` à chaque commande LED. Passe par
+        send_command_await pour drainer d'éventuels verbeux résiduels et pour
+        déclencher mark_alive sur chaque round-trip réussi (renforce la
+        stabilité du heartbeat USB).
+        """
         try:
-            self._bridge.transport.write_line(line)
+            self._bridge.send_command_await(
+                line, accept_prefixes=("OK", "ERR"), timeout=2.0,
+            )
         except Exception as e:  # noqa: BLE001
             log.warning("LED forward echoue (%s)", e)

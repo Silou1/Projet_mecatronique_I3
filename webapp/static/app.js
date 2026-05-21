@@ -20,6 +20,7 @@ const homeForm = {
 // ============ HELPERS ÉTAT ============
 function isHumanTurn(state) {
   if (!state || state.status !== "playing") return false;
+  if (state.plateau && state.plateau.busy) return false;  // plateau physique en cours
   return !state.players[state.current_player].is_ai;
 }
 
@@ -178,6 +179,12 @@ function renderHeader(state) {
   if (state.ai_thinking) {
     ind.textContent = "IA réfléchit";
     ind.classList.add("ai-thinking");
+    return;
+  }
+  // Plateau physique en cours (mur en train de monter, chariot en train de bouger)
+  if (state.plateau && state.plateau.busy) {
+    ind.textContent = "Plateau en cours…";
+    ind.classList.add("ai-thinking");  // réutilise le style "en attente"
     return;
   }
   // Couleur selon le joueur courant

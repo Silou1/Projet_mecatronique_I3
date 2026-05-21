@@ -51,6 +51,9 @@ class QuoridorService:
         self._difficulty: str = "normal"
         self._speed: str = "normal"
         self._plateau_mode: bool = False
+        # True tant qu'un forward physique (WALL ou LED) est en cours. Bloque
+        # le coup IA suivant et désactive les clics côté frontend.
+        self._plateau_busy: bool = False
         self._reset_partie()
 
     def _reset_partie(self) -> None:
@@ -68,7 +71,9 @@ class QuoridorService:
         # Eteindre les LEDs (state est None, donc on appelle directement LEDCLEAR)
         if self._plateau.available:
             try:
-                self._plateau.transport.write_line("LEDCLEAR")
+                self._plateau.send_command_await(
+                    "LEDCLEAR", accept_prefixes=("OK", "ERR"), timeout=2.0,
+                )
             except Exception:
                 pass
 
@@ -89,15 +94,26 @@ class QuoridorService:
                 pass  # aucune IA, les deux joueurs poussent leurs coups via apply_user_move
             self._status = "playing"
             self._last_ai_move_at = time.monotonic()
-            # Re-home le plateau physique au debut de chaque partie pour repartir
-            # d'un etat connu (chariot a l'origine).
-            if plateau_mode and self._plateau.available:
-                try:
-                    self._plateau.transport.write_line("HOME")
-                except Exception as e:  # noqa: BLE001
-                    log.warning("HOME echoue (%s)", e)
-            # Pousser l'etat initial sur les LEDs
-            self._led_renderer.update(self._state)
+            state_snapshot = self._state
+            do_home = plateau_mode and self._plateau.available
+            if do_home:
+                self._plateau_busy = True
+        # I/O plateau HORS du lock : HOME peut prendre 5-15 s (chariot CoreXY),
+        # le polling /api/state ne doit pas se figer pendant ce temps. On exécute
+        # dans un thread daemon pour libérer la requête /api/new-game.
+        def _home_worker():
+            try:
+                if do_home:
+                    log.info("HOME -> envoi au plateau")
+                    reply = self._plateau.send_command_await(
+                        "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
+                    )
+                    log.info("HOME -> reponse=%r", reply)
+                self._led_renderer.update(state_snapshot)
+            finally:
+                with self._lock:
+                    self._plateau_busy = False
+        threading.Thread(target=_home_worker, daemon=True, name="home-worker").start()
 
     def to_dict(self) -> dict:
         """Sérialise l'état pour /api/state."""
@@ -109,6 +125,7 @@ class QuoridorService:
             "available": self._plateau.available,
             "mode_active": self._plateau_mode,
             "connected": self._plateau.available and self._plateau_mode,
+            "busy": self._plateau_busy,
         }
 
         if self._state is None:
@@ -179,6 +196,11 @@ class QuoridorService:
                 raise InvalidMoveError(
                     "Ce n'est pas le tour du joueur humain.", NackCode.WRONG_TURN
                 )
+            if self._plateau_busy:
+                raise InvalidMoveError(
+                    "Plateau occupé, attendez la fin du coup précédent.",
+                    NackCode.WRONG_TURN,
+                )
 
             player = self._state.current_player
             move_type = move_payload.get("type")
@@ -205,8 +227,9 @@ class QuoridorService:
             self._wall_placement_mode = None
             self._last_ai_move_at = time.monotonic()
             self._check_game_over_unlocked()
-            self._forward_to_plateau_unlocked((move_type, move_payload))
-            self._led_renderer.update(self._state)
+            state_snapshot = self._state
+            forward_args = (move_type, move_payload)
+            self._start_physical_forward_unlocked(forward_args, state_snapshot)
 
     def _is_ai_turn_unlocked(self) -> bool:
         """True si le tour courant est celui d'une IA. Suppose le lock acquis."""
@@ -273,6 +296,8 @@ class QuoridorService:
                 return False
             if not self._is_ai_turn_unlocked():
                 return False
+            if self._plateau_busy:
+                return False  # attend la fin du forward physique du coup précédent
             elapsed = time.monotonic() - self._last_ai_move_at
             if elapsed < _DELAIS[self._speed]:
                 return False
@@ -328,9 +353,10 @@ class QuoridorService:
                     "row": move_data[1],
                     "col": move_data[2],
                 }
-            self._forward_to_plateau_unlocked((move_type, payload))
-            self._led_renderer.update(self._state)
-            return True
+            state_snapshot = self._state
+            forward_args = (move_type, payload)
+            self._start_physical_forward_unlocked(forward_args, state_snapshot)
+        return True
 
     def start_tick_thread(self) -> None:
         """Démarre le thread daemon qui appelle tick_once() en boucle.
@@ -351,11 +377,34 @@ class QuoridorService:
         self._tick_thread = threading.Thread(target=_loop, daemon=True, name="tick")
         self._tick_thread.start()
 
-    def _forward_to_plateau_unlocked(self, move: tuple) -> None:
-        """Forward best-effort au plateau physique si actif. Suppose le lock acquis.
+    def _start_physical_forward_unlocked(self, forward_args: tuple, state_snapshot: GameState) -> None:
+        """Pose le flag busy et lance le worker thread daemon. Suppose lock acquis.
 
-        Inversion H<->V : convention du plateau physique inverse de l'engine
-        (mesure manuelle de la matrice).
+        Le worker exécute le forward WALL (5-10 s) puis l'update LED, et
+        repasse _plateau_busy à False sous lock. Sert pour humain ET IA.
+        """
+        if self._plateau_mode and self._plateau.available:
+            self._plateau_busy = True
+
+        def _worker():
+            try:
+                self._forward_to_plateau_unlocked(forward_args)
+                self._led_renderer.update(state_snapshot)
+            finally:
+                with self._lock:
+                    self._plateau_busy = False
+
+        threading.Thread(target=_worker, daemon=True, name="physical-forward").start()
+
+    def _forward_to_plateau_unlocked(self, move: tuple) -> None:
+        """Forward best-effort au plateau physique si actif.
+
+        Appelé HORS du service lock pour ne pas figer le polling /api/state
+        pendant les 5-10 s d'exécution physique (CoreXY + servo).
+
+        L'orientation H/V est transmise telle quelle : depuis la recalibration
+        complète des matrices (60/60 murs, commit 1a420a9), le firmware suit la
+        même convention que l'engine.
         """
         if not self._plateau_mode:
             return
@@ -364,12 +413,26 @@ class QuoridorService:
         move_type, payload = move
         if move_type != "mur":
             return  # déplacements de pion non répercutés sur le plateau
-        _SWAP = {"H": "V", "V": "H", "h": "v", "v": "h"}
         try:
-            orientation = _SWAP[payload["orientation"].upper()]
+            orientation = payload["orientation"].upper()
             row = int(payload["row"])
             col = int(payload["col"])
-            self._plateau.transport.write_line(f"WALL {orientation} {row} {col}")
+            cmd = f"WALL {orientation} {row} {col}"
+            log.info("WALL -> envoi %r", cmd)
+            reply = self._plateau.send_command_await(
+                cmd, accept_prefixes=("WALL OK", "WALL ERR"), timeout=12.0,
+            )
+            log.info("WALL -> reponse=%r", reply)
+            if reply is None:
+                self._last_error = {
+                    "code": "PLATEAU_LOST",
+                    "message": "Plateau déconnecté, partie en mode app.",
+                }
+            elif reply.startswith("WALL ERR"):
+                self._last_error = {
+                    "code": "WALL_FAIL",
+                    "message": f"Plateau : {reply}",
+                }
         except Exception as e:  # noqa: BLE001
             log.warning("WALL forward echoue (%s), desactivation plateau", e)
             self._last_error = {

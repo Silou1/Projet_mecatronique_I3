@@ -92,6 +92,69 @@ class PlateauBridge:
                 return None
             return self._transport.read_line(timeout=timeout)
 
+    def send_command_await(
+        self,
+        cmd: str,
+        accept_prefixes: tuple[str, ...],
+        timeout: float = 10.0,
+    ) -> Optional[str]:
+        """Envoie une commande et lit les lignes jusqu'à un ACK matching un préfixe.
+
+        Sert pour HOME, WALL, LED, PING : le firmware émet des logs verbeux
+        (`GOTO ...`, `servo 0 deg`, `=== HOME ===`, etc.) puis termine par une
+        ligne ACK. Cette méthode skip les verbeux (loggés en debug) et retourne
+        la première ligne dont le préfixe matche.
+
+        Acquiert le lock TX → toute commande concurrente attend.
+        Tout match d'ACK déclenche `_mark_alive_unlocked()` : un round-trip
+        réussi prouve que le canal est sain, donc reset des compteurs PING ratés
+        et levée du flag transport_lost si actif.
+        Retourne None si timeout total dépassé ou écriture échouée.
+        """
+        with self._tx_lock:
+            try:
+                self._transport.write_line(cmd)
+            except TransportError as e:
+                log.warning("send_command_await(%r) : write echoue : %s", cmd, e)
+                return None
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    log.warning(
+                        "send_command_await(%r) : timeout (aucun ACK match %r)",
+                        cmd, accept_prefixes,
+                    )
+                    return None
+                line = self._transport.read_line(timeout=min(0.5, remaining))
+                if line is None:
+                    continue  # rien lu cette tranche, on retente jusqu'à deadline
+                if any(line.startswith(p) for p in accept_prefixes):
+                    self._mark_alive()
+                    return line
+                log.debug("send_command_await(%r) : verbeux ignore %r", cmd, line)
+
+    def _mark_alive(self) -> None:
+        """Indique que le canal est sain après un round-trip réussi.
+
+        Reset failed_pings, met à jour last_pong_at, et lève transport_lost si
+        actif. Appelé après chaque ACK valide dans send_command_await.
+        """
+        was_lost = False
+        with self._counters_lock:
+            if self.transport_lost:
+                was_lost = True
+                self.transport_lost = False
+            self.failed_pings = 0
+            self.last_pong_at = time.monotonic()
+        if was_lost:
+            log.info("Reconnexion confirmee par round-trip, notification des abonnes")
+            for cb in self._on_reconnect_callbacks:
+                try:
+                    cb()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Callback on_reconnect echoue (%s)", e)
+
     def start_heartbeat(self) -> None:
         """Lance le thread daemon qui envoie PING toutes les heartbeat_interval secondes."""
         if self._heartbeat_thread is not None and self._heartbeat_thread.is_alive():
@@ -110,33 +173,35 @@ class PlateauBridge:
             self._heartbeat_thread = None
 
     def _heartbeat_loop(self) -> None:
-        """Boucle : attend interval, envoie PING, mesure latence, met à jour compteurs."""
+        """Boucle : attend interval, envoie PING, mesure latence, met à jour compteurs.
+
+        Skip le PING si une commande métier (WALL/HOME/LED) tient déjà le lock
+        TX : le round-trip applicatif en cours sert lui-même de heartbeat (il
+        appellera _mark_alive() en cas d'ACK). Évite les faux positifs où un
+        WALL de 10 s ferait timeout 2 PING successifs.
+        """
         while not self._stop_event.wait(self._heartbeat_interval):
             if not self._transport.is_alive:
                 continue
+            # Si une commande métier tient le lock, ne pas la perturber.
+            # Elle appellera _mark_alive() à la fin et reset les compteurs.
+            if self._tx_lock.locked():
+                log.debug("heartbeat skip : commande metier en cours")
+                continue
             t0 = time.monotonic()
-            reply = self.send_command("PING", timeout=self._pong_timeout)
+            # send_command_await drain les eventuels verbeux residuels avant PONG.
+            reply = self.send_command_await(
+                "PING", accept_prefixes=("PONG",), timeout=self._pong_timeout,
+            )
             if reply == "PONG":
                 latency_ms = (time.monotonic() - t0) * 1000.0
                 with self._counters_lock:
-                    was_lost = self.transport_lost
-                    self.last_pong_at = time.monotonic()
-                    self.failed_pings = 0
-                    self.transport_lost = False
+                    # _mark_alive() a déjà fait le reset des compteurs et levé
+                    # transport_lost. Ici on ne touche qu'à la moyenne latence.
                     self._latency_samples.append(latency_ms)
                     if len(self._latency_samples) > self._max_samples:
                         self._latency_samples.pop(0)
                     self.latency_avg_ms = sum(self._latency_samples) / len(self._latency_samples)
-                # Si on revient d'une coupure -> notifier les abonnes (LedRenderer notamment).
-                # Hors du _counters_lock pour ne pas bloquer les lectures /api/status pendant
-                # l'execution des callbacks.
-                if was_lost:
-                    log.info("Reconnexion confirmee par PONG, notification des abonnes")
-                    for cb in self._on_reconnect_callbacks:
-                        try:
-                            cb()
-                        except Exception as e:  # noqa: BLE001
-                            log.warning("Callback on_reconnect echoue (%s)", e)
             else:
                 with self._counters_lock:
                     self.failed_pings += 1

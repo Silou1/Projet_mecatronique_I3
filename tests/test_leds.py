@@ -118,15 +118,15 @@ class TestLedRenderer:
     """LedRenderer : envoi diff vers PlateauBridge + reconnexion."""
 
     def _make_bridge(self, available: bool = True):
-        """Cree un mock de PlateauBridge avec transport.write_line mockable."""
+        """Cree un mock de PlateauBridge avec send_command_await mockable."""
         bridge = MagicMock()
         bridge.available = available
-        bridge.transport = MagicMock()
+        bridge.send_command_await = MagicMock(return_value="OK")
         return bridge
 
     def _lines_sent(self, bridge) -> list[str]:
-        """Recupere la sequence de lignes envoyees via transport.write_line."""
-        return [call.args[0] for call in bridge.transport.write_line.call_args_list]
+        """Recupere la sequence de lignes envoyees via send_command_await."""
+        return [call.args[0] for call in bridge.send_command_await.call_args_list]
 
     def test_update_premier_appel_pousse_full_frame(self):
         """Premier update : LEDCLEAR + toutes les LEDs allumees + LEDSHOW."""
@@ -153,7 +153,7 @@ class TestLedRenderer:
 
         state = create_new_game()
         renderer.update(state)
-        bridge.transport.write_line.reset_mock()  # oublie le full frame initial
+        bridge.send_command_await.reset_mock()  # oublie le full frame initial
 
         state = move_pawn(state, PLAYER_ONE, (4, 3))  # J1 (5,3)->(4,3)
         renderer.update(state)
@@ -173,10 +173,10 @@ class TestLedRenderer:
 
         state = create_new_game()
         renderer.update(state)
-        bridge.transport.write_line.reset_mock()
+        bridge.send_command_await.reset_mock()
 
         renderer.update(state)  # meme etat
-        assert bridge.transport.write_line.call_count == 0
+        assert bridge.send_command_await.call_count == 0
 
     def test_update_no_op_si_bridge_indisponible(self):
         """Si bridge.available est False, update est un no-op silencieux."""
@@ -185,7 +185,7 @@ class TestLedRenderer:
 
         state = create_new_game()
         renderer.update(state)
-        assert bridge.transport.write_line.call_count == 0
+        assert bridge.send_command_await.call_count == 0
 
     def test_on_reconnect_repush_full_frame(self):
         """on_reconnect : re-envoie le dernier frame en full (firmware a reset)."""
@@ -194,7 +194,7 @@ class TestLedRenderer:
 
         state = create_new_game()
         renderer.update(state)
-        bridge.transport.write_line.reset_mock()
+        bridge.send_command_await.reset_mock()
 
         renderer.on_reconnect()
 
@@ -210,4 +210,4 @@ class TestLedRenderer:
         renderer = LedRenderer(bridge)
 
         renderer.on_reconnect()
-        assert bridge.transport.write_line.call_count == 0
+        assert bridge.send_command_await.call_count == 0

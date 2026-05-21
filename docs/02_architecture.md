@@ -128,10 +128,24 @@ fermer l'ancienne) + **watchdog 30 s** (drop des clients silencieux pour libére
 socket si un client a disparu sans fermeture propre).
 
 Côté Mac, `PlateauBridge` ajoute :
-- **Heartbeat applicatif** : `PING` toutes les 5 s, détection coupure après 2 PONG ratés
-- **Reconnexion auto** : tâche en arrière-plan qui retente `transport.open()` toutes les 10 s
+- **Heartbeat applicatif** : `PING` toutes les 5 s, détection coupure après 2 PONG ratés.
+  Le heartbeat **skip** son PING si une commande métier (WALL/HOME/LED) tient déjà le
+  `_tx_lock` : le round-trip applicatif en cours sert lui-même de preuve de vie.
+- **Reconnexion auto** : tâche en arrière-plan qui retente `transport.open()` toutes les 10 s.
 - **Lock TX** : sérialise toutes les paires (write, read response) pour éviter les races
-  entre heartbeat et commandes utilisateur
+  entre heartbeat et commandes utilisateur.
+- **`send_command_await(cmd, accept_prefixes, timeout)`** : toutes les commandes
+  (PING, HOME, WALL, LED*) passent par ce helper qui draine les lignes verbeuses du
+  firmware (`GOTO`, `done`, `servo 0 deg`, etc.) et lit en boucle jusqu'à un ACK
+  préfixe-matché. Tout ACK réussi appelle `_mark_alive()` : reset des `failed_pings`,
+  mise à jour de `last_pong_at`, levée de `transport_lost` si actif — une commande
+  métier réussie suffit à confirmer la santé du canal.
+- **`_plateau_busy`** (côté `QuoridorService`) : flag à `True` pendant qu'un forward
+  physique (HOME ou WALL) est exécuté dans un thread daemon. Exposé via `/api/state`
+  sous `plateau.busy`. Tant que `busy = True`, le service refuse le coup suivant
+  (humain ou IA) — on garantit que l'action physique précédente est entièrement
+  terminée (servo revenu en position repos, chariot immobile) avant d'autoriser le
+  suivant. Le frontend désactive aussi les clics et affiche **"Plateau en cours…"**.
 
 ### Test de bascule manuelle entre les deux transports
 
@@ -191,12 +205,13 @@ l'interface SVG, sans action physique. C'est le mode de démo minimum (P0).
 1. Le joueur clique dans la webapp (déplacement de pion ou pose de mur).
 2. La webapp valide via `quoridor_engine` : déplacement légal, mur non bloquant (BFS).
 3. Si déplacement de pion : mise à jour de l'état interne seulement (pas de commande ESP32).
-4. Si pose de mur : la webapp envoie `WALL <H|V> <row> <col>` à l'ESP32 via `PlateauBridge` (`webapp/plateau.py`), qui sérialise les commandes via un lock TX et passe par le `Transport` actif (USB ou Wi-Fi).
+4. Si pose de mur : la webapp passe `plateau.busy = true`, démarre un worker thread daemon qui envoie `WALL <H|V> <row> <col>` à l'ESP32 via `PlateauBridge.send_command_await()` (sérialisation via le lock TX, lecture jusqu'au `WALL OK ... raised=N`, transport USB ou Wi-Fi indifférent).
 5. L'ESP32 calcule la position physique depuis les matrices `MURS_H` / `MURS_V`.
 6. L'ESP32 enchaîne : `GOTO` jusqu'à la 1re case → `LEVER` → `BAISSER`. Si le mur occupe
    2 cases physiques, répète GOTO + LEVER + BAISSER pour la 2e case.
 7. L'ESP32 répond `WALL OK <H|V> <row> <col> raised=<n>`.
-8. La webapp met à jour l'affichage SVG (confirmation visuelle).
+8. Le worker thread reçoit l'ACK, met à jour les LEDs, puis remet `plateau.busy = false`.
+   Seul ce moment-là débloque le coup suivant (humain ou IA).
 
 Si l'ESP32 ne répond pas dans le délai ou renvoie `ERR`, la webapp affiche une
 notification `PLATEAU_LOST` et continue en mode autonome (fallback gracieux).
