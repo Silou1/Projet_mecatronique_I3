@@ -13,6 +13,7 @@ from typing import Optional, TYPE_CHECKING
 
 from quoridor_engine import GameState, AI, InvalidMoveError
 from quoridor_engine.core import PLAYER_ONE, PLAYER_TWO, create_new_game
+from webapp.leds import LedRenderer
 from webapp.plateau import PlateauBridge
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class QuoridorService:
             transport = NullTransport()
             transport.open()
         self._plateau = PlateauBridge(transport=transport)
+        self._led_renderer = LedRenderer(bridge=self._plateau)
         self._startup_error = startup_error
         self._lock = threading.Lock()
         # Réglages persistés entre parties (cf. spec §9.7)
@@ -59,6 +61,12 @@ class QuoridorService:
         self._last_ai_move_at: float = 0.0
         self._last_error: Optional[dict] = None
         self._wall_placement_mode: Optional[str] = None
+        # Eteindre les LEDs (state est None, donc on appelle directement LEDCLEAR)
+        if self._plateau.available:
+            try:
+                self._plateau.transport.write_line("LEDCLEAR")
+            except Exception:
+                pass
 
     def new_game(self, mode: str, difficulty: str, plateau_mode: bool) -> None:
         """Démarre une nouvelle partie."""
@@ -82,6 +90,8 @@ class QuoridorService:
                     self._plateau.transport.write_line("HOME")
                 except Exception as e:  # noqa: BLE001
                     log.warning("HOME echoue (%s)", e)
+            # Pousser l'etat initial sur les LEDs
+            self._led_renderer.update(self._state)
 
     def to_dict(self) -> dict:
         """Sérialise l'état pour /api/state."""
@@ -194,6 +204,7 @@ class QuoridorService:
             self._last_ai_move_at = time.monotonic()
             self._check_game_over_unlocked()
             self._forward_to_plateau_unlocked((move_type, move_payload))
+            self._led_renderer.update(self._state)
 
     def _is_ai_turn_unlocked(self) -> bool:
         """True si le tour courant est celui d'une IA. Suppose le lock acquis."""
@@ -316,6 +327,7 @@ class QuoridorService:
                     "col": move_data[2],
                 }
             self._forward_to_plateau_unlocked((move_type, payload))
+            self._led_renderer.update(self._state)
             return True
 
     def start_tick_thread(self) -> None:
