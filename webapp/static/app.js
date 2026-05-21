@@ -17,6 +17,12 @@ const homeForm = {
   plateau_mode: false,
 };
 
+// ============ HELPERS ÉTAT ============
+function isHumanTurn(state) {
+  if (!state || state.status !== "playing") return false;
+  return !state.players[state.current_player].is_ai;
+}
+
 // ============ HELPERS GEO ============
 function cellCenterXY(row, col) {
   // row 0 = haut, col 0 = gauche
@@ -75,7 +81,7 @@ function renderIntersections() {
       if (HAS_HOVER) {
         dot.addEventListener("mouseenter", () => {
           if (!state || !state.wall_placement_mode) return;
-          if (state.current_player !== "j1") return;
+          if (!isHumanTurn(state)) return;
           dot.classList.add("hovered");
           addGhost(state.wall_placement_mode, r, c);
         });
@@ -292,10 +298,8 @@ async function api(method, path, body) {
 }
 
 async function handleCellClick(row, col) {
-  if (!state || state.status !== "playing") return;
+  if (!isHumanTurn(state)) return;
   if (state.wall_placement_mode) return;  // pas en mode mur
-  if (state.mode === "ai_vs_ai") return;
-  if (state.current_player !== "j1") return;  // pas mon tour
   try {
     const next = await api("POST", "/api/move", { type: "deplacement", target: [row, col] });
     render(next);
@@ -306,7 +310,7 @@ async function handleCellClick(row, col) {
 
 async function handleIntersectionClick(row, col) {
   if (!state || !state.wall_placement_mode) return;
-  if (state.current_player !== "j1") return;
+  if (!isHumanTurn(state)) return;
   const orientation = state.wall_placement_mode;
   try {
     const next = await api("POST", "/api/move", {
