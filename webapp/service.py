@@ -41,6 +41,9 @@ class QuoridorService:
         self._plateau = PlateauBridge(transport=transport)
         self._led_renderer = LedRenderer(bridge=self._plateau)
         self._plateau.add_on_reconnect_callback(self._led_renderer.on_reconnect)
+        # P1 (bonus) : afficher les cases atteignables du joueur courant en cyan dim
+        from webapp.leds import RenderOptions
+        self._led_renderer.set_options(RenderOptions(show_legal_moves=True))
         self._startup_error = startup_error
         self._lock = threading.Lock()
         # Réglages persistés entre parties (cf. spec §9.7)
