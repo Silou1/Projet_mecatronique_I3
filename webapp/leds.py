@@ -82,3 +82,79 @@ def render_state(state: GameState, opts: RenderOptions) -> list[LedColor]:
     frame[engine_to_strip_index(r2, c2)] = COLOR_PLAYER_TWO
 
     return frame
+
+
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from webapp.plateau import PlateauBridge
+
+log = logging.getLogger(__name__)
+
+
+class LedRenderer:
+    """Maintient l'etat des LEDs et envoie les diffs au firmware via PlateauBridge.
+
+    Le rendu est declenche manuellement via update(state) apres chaque mutation
+    de GameState. La classe garde le dernier frame en memoire et ne pousse que
+    les LEDs qui ont change (diff). En cas de reconnexion du bridge (firmware
+    reboote), on_reconnect() force un re-push complet.
+    """
+
+    def __init__(self, bridge: "PlateauBridge"):
+        self._bridge = bridge
+        self._last_frame: list[LedColor] | None = None
+        self._options = RenderOptions(show_legal_moves=False)
+
+    def set_options(self, options: RenderOptions) -> None:
+        """Modifie les options de rendu (toggle P1 par ex). Force un re-render."""
+        self._options = options
+        self._last_frame = None  # force full frame au prochain update
+
+    def update(self, state: GameState) -> None:
+        """Calcule le nouveau frame et envoie le diff au firmware.
+
+        No-op silencieux si le bridge n'est pas disponible (mode autonome ou
+        ESP32 hors ligne).
+        """
+        if not self._bridge.available:
+            return
+        new_frame = render_state(state, self._options)
+        if self._last_frame is None:
+            self._send_full_frame(new_frame)
+        else:
+            self._send_diff(self._last_frame, new_frame)
+        self._last_frame = new_frame
+
+    def on_reconnect(self) -> None:
+        """A appeler quand le bridge recupere la connexion apres coupure.
+
+        Le firmware a reboote, son buffer LED est a 0. On re-pousse le dernier
+        frame connu pour resynchroniser.
+        """
+        if self._last_frame is not None:
+            self._send_full_frame(self._last_frame)
+
+    def _send_full_frame(self, frame: list[LedColor]) -> None:
+        self._send_line("LEDCLEAR")
+        for idx, color in enumerate(frame):
+            if color != COLOR_OFF:
+                self._send_line(f"LED {idx} {color.r} {color.g} {color.b}")
+        self._send_line("LEDSHOW")
+
+    def _send_diff(self, old: list[LedColor], new: list[LedColor]) -> None:
+        changed = [(idx, c) for idx, (o, c) in enumerate(zip(old, new)) if o != c]
+        if not changed:
+            return  # rien a faire, pas de LEDSHOW non plus
+        for idx, color in changed:
+            self._send_line(f"LED {idx} {color.r} {color.g} {color.b}")
+        self._send_line("LEDSHOW")
+
+    def _send_line(self, line: str) -> None:
+        """Envoi best-effort. Toute exception est avalee silencieusement (cf.
+        pattern de _forward_to_plateau_unlocked dans service.py)."""
+        try:
+            self._bridge.transport.write_line(line)
+        except Exception as e:  # noqa: BLE001
+            log.warning("LED forward echoue (%s)", e)
