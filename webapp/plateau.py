@@ -37,11 +37,13 @@ class PlateauBridge:
         transport: Transport,
         heartbeat_interval: float = HEARTBEAT_INTERVAL_DEFAULT,
         pong_timeout: float = PONG_TIMEOUT_DEFAULT,
+        reconnect_interval: float = HEARTBEAT_INTERVAL_DEFAULT * 2,
     ):
         self._transport = transport
         self._tx_lock = threading.Lock()
         self._heartbeat_interval = heartbeat_interval
         self._pong_timeout = pong_timeout
+        self._reconnect_interval = reconnect_interval
 
         # Compteurs heartbeat (lecture par /api/status, écriture par thread heartbeat)
         self._counters_lock = threading.Lock()
@@ -55,6 +57,10 @@ class PlateauBridge:
         # Thread heartbeat
         self._stop_event = threading.Event()
         self._heartbeat_thread: Optional[threading.Thread] = None
+
+        # Reconnect watcher
+        self._reconnect_stop = threading.Event()
+        self._reconnect_thread: Optional[threading.Thread] = None
 
     @property
     def transport(self) -> Transport:
@@ -120,7 +126,42 @@ class PlateauBridge:
                         self.transport_lost = True
                         log.warning("Transport perdu apres %d PING rates", self.failed_pings)
 
+    def start_reconnect_watcher(self) -> None:
+        """Lance le thread daemon qui retente transport.open() si transport_lost."""
+        if self._reconnect_thread is not None and self._reconnect_thread.is_alive():
+            return
+        self._reconnect_stop.clear()
+        self._reconnect_thread = threading.Thread(
+            target=self._reconnect_loop, daemon=True, name="plateau-reconnect"
+        )
+        self._reconnect_thread.start()
+
+    def stop_reconnect_watcher(self) -> None:
+        self._reconnect_stop.set()
+        if self._reconnect_thread is not None:
+            self._reconnect_thread.join(timeout=2.0)
+            self._reconnect_thread = None
+
+    def _reconnect_loop(self) -> None:
+        """Boucle : attend interval, si transport_lost tente close()+open().
+
+        Acquiert _tx_lock pendant close+open pour eviter qu'un PING heartbeat
+        soit envoye pendant que le transport est temporairement ferme.
+        """
+        while not self._reconnect_stop.wait(self._reconnect_interval):
+            if not self.transport_lost:
+                continue
+            log.info("Tentative de reconnexion %s ...", self._transport.description)
+            with self._tx_lock:
+                try:
+                    self._transport.close()
+                    self._transport.open()
+                    log.info("Reconnexion reussie. Le heartbeat va valider via PING.")
+                except TransportError as e:
+                    log.info("Reconnexion echouee : %s", e)
+
     def close(self) -> None:
         """Ferme le transport sous-jacent et arrête les threads."""
         self.stop_heartbeat()
+        self.stop_reconnect_watcher()
         self._transport.close()

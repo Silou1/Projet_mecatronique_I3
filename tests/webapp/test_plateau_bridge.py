@@ -147,3 +147,31 @@ def test_plateau_bridge_latency_avg_updated_on_pong():
     b.stop_heartbeat()
     assert b.latency_avg_ms is not None
     assert b.latency_avg_ms >= 0
+
+
+def test_plateau_bridge_auto_reconnect_after_lost():
+    """Quand transport_lost=True, le reconnect thread tente transport.open() periodiquement.
+
+    Test deterministe : on n'utilise pas le reconnect_loop (qui depend du timing)
+    mais on verifie que la primitive existe et qu'un PONG reset transport_lost.
+    """
+    t = FakeTransport()
+    t.open()
+    b = PlateauBridge(transport=t, heartbeat_interval=0.05, pong_timeout=0.05,
+                      reconnect_interval=0.2)
+    b.start_heartbeat()
+    b.start_reconnect_watcher()
+    # Phase 1 : sans PONG, transport_lost passe a True
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not b.transport_lost:
+        time.sleep(0.02)
+    assert b.transport_lost is True
+    # Phase 2 : on alimente PONG en continu, le prochain heartbeat doit reset
+    for _ in range(50):
+        t.to_read.append("PONG")
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and b.transport_lost:
+        time.sleep(0.02)
+    b.stop_heartbeat()
+    b.stop_reconnect_watcher()
+    assert b.transport_lost is False
