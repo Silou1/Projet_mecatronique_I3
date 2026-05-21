@@ -6,6 +6,7 @@ sérialisation pour /api/state.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Optional, TYPE_CHECKING
@@ -13,8 +14,10 @@ from typing import Optional, TYPE_CHECKING
 from quoridor_engine import GameState, AI, InvalidMoveError
 from quoridor_engine.core import PLAYER_ONE, PLAYER_TWO, create_new_game
 
+log = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
-    from webapp.uart_bridge import UartBridge
+    from webapp.transport import Transport
 
 
 # Délais minimaux entre deux coups IA, en secondes
@@ -28,8 +31,16 @@ class QuoridorService:
     Le thread `tick` appelle aussi `_lock` ; les sections critiques doivent être courtes.
     """
 
-    def __init__(self, uart_bridge: Optional["UartBridge"] = None):
-        self._uart_bridge = uart_bridge
+    def __init__(self, transport: Optional["Transport"] = None, startup_error: Optional[str] = None):
+        # Compatibilité transitoire : self._uart_bridge contient maintenant un
+        # Transport (Serial/WiFi/Null) au lieu de l'ancien UartBridge.
+        # Sera renommé en self._plateau (PlateauBridge complet) en Task C1.
+        if transport is None:
+            from webapp.transport import NullTransport
+            transport = NullTransport()
+            transport.open()
+        self._uart_bridge = transport
+        self._startup_error = startup_error
         self._lock = threading.Lock()
         # Réglages persistés entre parties (cf. spec §9.7)
         self._mode: str = "human_vs_ai"
@@ -68,12 +79,11 @@ class QuoridorService:
             self._last_ai_move_at = time.monotonic()
             # Re-home le plateau physique au debut de chaque partie pour repartir
             # d'un etat connu (chariot a l'origine).
-            if (
-                plateau_mode
-                and self._uart_bridge is not None
-                and self._uart_bridge.available
-            ):
-                self._uart_bridge.send_home()
+            if plateau_mode and self._uart_bridge.is_alive:
+                try:
+                    self._uart_bridge.write_line("HOME")
+                except Exception as e:  # noqa: BLE001
+                    log.warning("HOME echoue (%s)", e)
 
     def to_dict(self) -> dict:
         """Sérialise l'état pour /api/state."""
@@ -82,13 +92,9 @@ class QuoridorService:
 
     def _to_dict_unlocked(self) -> dict:
         plateau = {
-            "available": self._uart_bridge is not None and self._uart_bridge.available,
+            "available": self._uart_bridge.is_alive,
             "mode_active": self._plateau_mode,
-            "connected": (
-                self._uart_bridge is not None
-                and self._uart_bridge.available
-                and self._plateau_mode
-            ),
+            "connected": self._uart_bridge.is_alive and self._plateau_mode,
         }
 
         if self._state is None:
@@ -334,15 +340,31 @@ class QuoridorService:
         self._tick_thread.start()
 
     def _forward_to_plateau_unlocked(self, move: tuple) -> None:
-        """Forward best-effort au plateau physique si actif. Suppose le lock acquis."""
+        """Forward best-effort au plateau physique si actif. Suppose le lock acquis.
+
+        Inversion H<->V : convention du plateau physique inverse de l'engine
+        (mesure manuelle de la matrice).
+        """
         if not self._plateau_mode:
             return
-        if self._uart_bridge is None or not self._uart_bridge.available:
+        if not self._uart_bridge.is_alive:
             return
-        self._uart_bridge.forward_move(move)  # ne lève jamais (cf. contrat UartBridge)
-        # Si le bridge vient de se désactiver à cause d'une erreur, notifier le client.
-        if not self._uart_bridge.available:
+        move_type, payload = move
+        if move_type != "mur":
+            return  # déplacements de pion non répercutés sur le plateau
+        _SWAP = {"H": "V", "V": "H", "h": "v", "v": "h"}
+        try:
+            orientation = _SWAP[payload["orientation"].upper()]
+            row = int(payload["row"])
+            col = int(payload["col"])
+            self._uart_bridge.write_line(f"WALL {orientation} {row} {col}")
+        except Exception as e:  # noqa: BLE001
+            log.warning("WALL forward echoue (%s), desactivation plateau", e)
             self._last_error = {
                 "code": "PLATEAU_LOST",
                 "message": "Plateau déconnecté, partie en mode app.",
             }
+
+    def _plateau_available_unlocked(self) -> bool:
+        """True si le transport est ouvert (utilisable par /api/new-game)."""
+        return self._uart_bridge.is_alive

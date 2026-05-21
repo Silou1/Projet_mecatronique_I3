@@ -9,7 +9,7 @@ from quoridor_engine import InvalidMoveError
 
 @pytest.fixture
 def service():
-    return QuoridorService(uart_bridge=None)
+    return QuoridorService(transport=None)
 
 
 class TestNewGame:
@@ -188,20 +188,24 @@ class TestRobustesse:
         assert service.tick_once() is False
 
     def test_forward_plateau_lost_genere_last_error(self, service):
-        """Quand UartBridge.forward_move() désactive le bridge, last_error doit être set."""
-        # Mock minimal de UartBridge
-        class FakeBridge:
-            def __init__(self):
-                self.available = True
-            def forward_move(self, move):
-                self.available = False  # simule échec immédiat
+        """Quand Transport.write_line() echoue sur un WALL, last_error doit etre set."""
+        from webapp.transport import TransportError
 
-        fake = FakeBridge()
-        service._uart_bridge = fake
+        class FakeTransport:
+            is_alive = True
+            description = "fake"
+            def open(self): pass
+            def write_line(self, line):
+                raise TransportError("simule echec")
+            def read_line(self, timeout=1.0): return None
+            def close(self): pass
+
+        service._uart_bridge = FakeTransport()
         service._plateau_mode = True
-        # Appel direct de la méthode (lock manuel)
+        # Move de type 'mur' pour declencher la logique (les deplacements sont no-op)
+        mur_payload = {"type": "mur", "orientation": "H", "row": 2, "col": 3}
         with service._lock:
-            service._forward_to_plateau_unlocked(("deplacement", {"type": "deplacement", "target": [4, 3]}))
+            service._forward_to_plateau_unlocked(("mur", mur_payload))
         state = service.to_dict()
         assert state["last_error"] is not None
         assert state["last_error"]["code"] == "PLATEAU_LOST"

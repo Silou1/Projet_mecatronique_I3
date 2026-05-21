@@ -7,7 +7,7 @@ from webapp.server import create_app
 
 @pytest.fixture
 def client():
-    app = create_app(uart_bridge=None)
+    app = create_app(transport=None)
     return TestClient(app)
 
 

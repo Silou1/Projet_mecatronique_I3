@@ -37,18 +37,24 @@ def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
     )
 
 
-def create_app(uart_bridge: Optional[object] = None) -> FastAPI:
+def create_app(transport: Optional[object] = None, startup_error: Optional[str] = None) -> FastAPI:
     """Crée et configure l'application FastAPI.
 
     Args:
-        uart_bridge: instance optionnelle de UartBridge (None en tests).
+        transport: instance Transport (peut être NullTransport ; None = autonome auto en tests).
+        startup_error: message d'erreur si le transport demandé a échoué à l'open().
     """
     from quoridor_engine import InvalidMoveError
+    from webapp.transport import NullTransport
+
+    if transport is None:
+        transport = NullTransport()
+        transport.open()
 
     app = FastAPI(title="Quoridor Demo")
-    service = QuoridorService(uart_bridge=uart_bridge)
+    service = QuoridorService(transport=transport, startup_error=startup_error)
     app.state.service = service
-    app.state.uart_bridge = uart_bridge
+    app.state.transport = transport
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -65,7 +71,7 @@ def create_app(uart_bridge: Optional[object] = None) -> FastAPI:
 
     @app.post("/api/new-game")
     def post_new_game(payload: NewGamePayload):
-        if payload.plateau_mode and (uart_bridge is None or not uart_bridge.available):
+        if payload.plateau_mode and not service._plateau_available_unlocked():
             return _error_response(
                 "PLATEAU_UNAVAILABLE", "Plateau non détecté.", 400
             )
@@ -116,13 +122,23 @@ def create_app(uart_bridge: Optional[object] = None) -> FastAPI:
 def main() -> None:
     """Entrypoint CLI."""
     import uvicorn
-    from webapp import uart_bridge as uart_bridge_module
+    from webapp.transport import make_transport, TransportError, NullTransport
 
-    bridge = uart_bridge_module.init()
-    app = create_app(uart_bridge=bridge)
+    transport = make_transport()
+    startup_error: str | None = None
+    try:
+        transport.open()
+    except TransportError as e:
+        log.warning("Transport %s indisponible : %s", transport.description, e)
+        startup_error = str(e)
+        transport = NullTransport()
+        transport.open()
+
+    app = create_app(transport=transport, startup_error=startup_error)
     app.state.service.start_tick_thread()
 
-    log.info("Quoridor web app demarree sur http://0.0.0.0:8000")
+    log.info("Quoridor web app demarree sur http://0.0.0.0:8000 (transport=%s)",
+             transport.description)
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
 
 
