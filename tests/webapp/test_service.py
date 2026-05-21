@@ -210,3 +210,16 @@ class TestRobustesse:
         state = service.to_dict()
         assert state["last_error"] is not None
         assert state["last_error"]["code"] == "PLATEAU_LOST"
+
+
+class TestHumainVsHumain:
+    def test_hvh_no_ai_created(self, service):
+        service.new_game(mode="human_vs_human", difficulty="normal", plateau_mode=False)
+        assert service._ai_j1 is None
+        assert service._ai_j2 is None
+        state = service.to_dict()
+        assert state["mode"] == "human_vs_human"
+        assert state["players"]["j1"]["is_ai"] is False
+        assert state["players"]["j2"]["is_ai"] is False
+        assert state["status"] == "playing"
+        assert state["current_player"] == "j1"

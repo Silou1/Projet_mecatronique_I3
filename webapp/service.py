@@ -85,6 +85,8 @@ class QuoridorService:
             elif mode == "ai_vs_ai":
                 self._ai_j1 = AI(player=PLAYER_ONE, difficulty=difficulty)
                 self._ai_j2 = AI(player=PLAYER_TWO, difficulty=difficulty)
+            elif mode == "human_vs_human":
+                pass  # aucune IA, les deux joueurs poussent leurs coups via apply_user_move
             self._status = "playing"
             self._last_ai_move_at = time.monotonic()
             # Re-home le plateau physique au debut de chaque partie pour repartir
