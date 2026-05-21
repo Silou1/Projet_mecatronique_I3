@@ -11,6 +11,7 @@ from __future__ import annotations
 import glob
 import logging
 import platform
+import socket
 import time
 from abc import ABC, abstractmethod
 
@@ -168,3 +169,88 @@ class SerialTransport(Transport):
     @property
     def description(self) -> str:
         return f"serial {self._port or 'aucun port détecté'}"
+
+
+class WiFiTransport(Transport):
+    """Transport TCP brut vers l'ESP32 en mode AP.
+
+    Connexion à 192.168.4.1:3333 par défaut. Protocole ligne par ligne, UTF-8.
+    Buffer interne pour gérer les chunks TCP coupés au milieu d'une ligne.
+    """
+
+    def __init__(
+        self,
+        host: str = "192.168.4.1",
+        port: int = 3333,
+        connect_timeout: float = 3.0,
+    ):
+        self._host = host
+        self._port = port
+        self._connect_timeout = connect_timeout
+        self._sock: socket.socket | None = None
+        self._rx_buffer = bytearray()
+
+    def open(self) -> None:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self._connect_timeout)
+            sock.connect((self._host, self._port))
+            sock.settimeout(0.1)  # lecture par défaut, ajustée par read_line
+            self._sock = sock
+        except (OSError, socket.timeout) as e:
+            raise TransportError(
+                f"connexion {self._host}:{self._port} échouée : {e}"
+            ) from e
+
+    def write_line(self, line: str) -> None:
+        if self._sock is None:
+            raise TransportError("WiFiTransport non ouvert")
+        try:
+            self._sock.sendall((line + "\n").encode("utf-8"))
+        except OSError as e:
+            raise TransportError(f"écriture TCP échouée : {e}") from e
+
+    def read_line(self, timeout: float = 1.0) -> str | None:
+        if self._sock is None:
+            return None
+        # Si une ligne complète est déjà dans le buffer, la retourner directement
+        if b"\n" in self._rx_buffer:
+            return self._pop_line()
+        try:
+            self._sock.settimeout(timeout)
+            while b"\n" not in self._rx_buffer:
+                chunk = self._sock.recv(256)
+                if not chunk:  # connexion fermée par le pair
+                    return None
+                self._rx_buffer.extend(chunk)
+        except socket.timeout:
+            return None
+        except OSError:
+            return None
+        return self._pop_line()
+
+    def _pop_line(self) -> str:
+        line, _, rest = self._rx_buffer.partition(b"\n")
+        self._rx_buffer = bytearray(rest)
+        return line.decode("utf-8", errors="replace").rstrip("\r")
+
+    def close(self) -> None:
+        if self._sock is not None:
+            try:
+                self._sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
+        self._rx_buffer.clear()
+
+    @property
+    def is_alive(self) -> bool:
+        return self._sock is not None
+
+    @property
+    def description(self) -> str:
+        return f"wifi {self._host}:{self._port}"
