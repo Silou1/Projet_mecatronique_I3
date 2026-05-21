@@ -434,6 +434,11 @@ function initHandlers() {
     render(next);
   });
   document.getElementById("btn-home-from-end").addEventListener("click", goHome);
+
+  // Modal de transition entre tours (HvH)
+  document.getElementById("btn-transition-ok").addEventListener("click", () => {
+    document.getElementById("modal-transition").classList.add("hidden");
+  });
 }
 
 // ============ STATUT PLATEAU ============
