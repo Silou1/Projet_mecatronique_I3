@@ -68,29 +68,6 @@ html, body {
 }
 .chip:active { transform: scale(0.97); }
 
-.toggle-row {
-  display: flex; align-items: center; gap: 12px;
-  margin: 20px 0 24px;
-}
-.toggle-row .field-label { margin: 0; flex: 1; }
-.toggle {
-  width: 50px; height: 28px; border-radius: 14px;
-  background: #d9c8a3; border: none; padding: 2px;
-  position: relative; cursor: pointer;
-  transition: background 0.2s;
-}
-.toggle.on { background: var(--primary); }
-.toggle:disabled { opacity: 0.5; cursor: not-allowed; }
-.toggle-knob {
-  display: block;
-  width: 24px; height: 24px; border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  transition: transform 0.2s;
-}
-.toggle.on .toggle-knob { transform: translateX(22px); }
-.hint { font-size: 12px; color: var(--text-soft); }
-
 .btn-primary {
   width: 100%;
   padding: 14px;

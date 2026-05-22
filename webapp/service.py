@@ -50,7 +50,6 @@ class QuoridorService:
         self._mode: str = "human_vs_ai"
         self._difficulty: str = "normal"
         self._speed: str = "normal"
-        self._plateau_mode: bool = False
         # True tant qu'un forward physique (WALL ou LED) est en cours. Bloque
         # le coup IA suivant et désactive les clics côté frontend.
         self._plateau_busy: bool = False
@@ -77,13 +76,17 @@ class QuoridorService:
             except Exception:
                 pass
 
-    def new_game(self, mode: str, difficulty: str, plateau_mode: bool) -> None:
-        """Démarre une nouvelle partie."""
+    def new_game(self, mode: str, difficulty: str) -> None:
+        """Démarre une nouvelle partie.
+
+        Le mode plateau physique est dérivé automatiquement de la disponibilité
+        du transport ESP32 (`self._plateau.available`) au moment du forward de
+        chaque coup — pas figé au new_game.
+        """
         with self._lock:
             self._reset_partie()
             self._mode = mode
             self._difficulty = difficulty
-            self._plateau_mode = plateau_mode
             self._state = create_new_game()
             if mode == "human_vs_ai":
                 self._ai_j2 = AI(player=PLAYER_TWO, difficulty=difficulty)
@@ -95,7 +98,7 @@ class QuoridorService:
             self._status = "playing"
             self._last_ai_move_at = time.monotonic()
             state_snapshot = self._state
-            do_home = plateau_mode and self._plateau.available
+            do_home = self._plateau.available
             if do_home:
                 self._plateau_busy = True
         # I/O plateau HORS du lock : HOME peut prendre 5-15 s (chariot CoreXY),
@@ -121,10 +124,14 @@ class QuoridorService:
             return self._to_dict_unlocked()
 
     def _to_dict_unlocked(self) -> dict:
+        # Mode plateau dérivé dynamiquement de la disponibilité du transport :
+        # available == mode_active == connected, donc inutile de les distinguer.
+        # On garde les 3 clés pour compat frontend (statuts identiques).
+        avail = self._plateau.available
         plateau = {
-            "available": self._plateau.available,
-            "mode_active": self._plateau_mode,
-            "connected": self._plateau.available and self._plateau_mode,
+            "available": avail,
+            "mode_active": avail,
+            "connected": avail,
             "busy": self._plateau_busy,
         }
 
@@ -278,7 +285,7 @@ class QuoridorService:
             self._speed = speed
 
     def quit_to_home(self) -> None:
-        """Termine la partie. Garde mode/difficulté/vitesse/plateau_mode."""
+        """Termine la partie. Garde mode/difficulté/vitesse."""
         with self._lock:
             self._reset_partie()
 
@@ -383,7 +390,7 @@ class QuoridorService:
         Le worker exécute le forward WALL (5-10 s) puis l'update LED, et
         repasse _plateau_busy à False sous lock. Sert pour humain ET IA.
         """
-        if self._plateau_mode and self._plateau.available:
+        if self._plateau.available:
             self._plateau_busy = True
 
         def _worker():
@@ -406,8 +413,6 @@ class QuoridorService:
         complète des matrices (60/60 murs, commit 1a420a9), le firmware suit la
         même convention que l'engine.
         """
-        if not self._plateau_mode:
-            return
         if not self._plateau.available:
             return
         move_type, payload = move

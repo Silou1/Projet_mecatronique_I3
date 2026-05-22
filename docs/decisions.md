@@ -15,6 +15,68 @@ L'objectif de ce document est double :
 
 ---
 
+## 2026-05-22 — Retrait du toggle « Mode plateau » de la webapp
+
+### Contexte
+
+Depuis la mise en place du transport ESP32 (Wi-Fi + USB), la page d'accueil
+de la webapp exposait un toggle « Plateau physique » que le joueur devait
+activer manuellement pour que les murs posés dans la webapp soient miroités
+sur le plateau (commande `WALL` au firmware). Le toggle était grisé tant que
+le transport n'était pas détecté ; sinon, le joueur devait penser à l'activer.
+
+### Décision
+
+**Suppression du toggle et de la notion `plateau_mode` dans l'API.** Le
+forward physique des coups au plateau est désormais **automatique** :
+chaque pose de mur déclenche un `WALL` ssi `_plateau.available == True` au
+moment du forward.
+
+### Raisons
+
+1. **UX simplifiée.** En pratique, le seul cas où on veut explicitement
+   désactiver le plateau alors qu'il est joignable est marginal (debug
+   webapp pur). Pour ce cas, la variable d'env `QUORIDOR_TRANSPORT=none`
+   couvre déjà.
+2. **Robustesse aux blips de canal.** L'ancienne logique figeait
+   `plateau_mode` à la valeur du toggle au moment du `new_game`. Si le
+   canal était momentanément perdu à cet instant (PING raté + reconnect
+   en cours), la partie restait en mode app pure même après retour du
+   canal. La nouvelle logique évalue la disponibilité **à chaque coup**,
+   donc un blip momentané n'affecte qu'éventuellement un mur, pas toute
+   la partie.
+3. **Code plus simple.** Suppression d'un champ d'état (`_plateau_mode`),
+   d'un paramètre de `new_game`, d'un champ du `NewGamePayload` Pydantic,
+   et de tout le câblage UI (toggle HTML + CSS + listener JS).
+
+### Impact
+
+- **Schéma API** : `NewGamePayload` perd le champ `plateau_mode`. Pydantic v2
+  ignore les champs extra par défaut, donc les anciens clients qui envoient
+  encore `plateau_mode` ne sont pas cassés (champ silencieusement ignoré).
+- **Frontend** : `index.html` perd le bloc `.toggle-row` ; `app.js` perd
+  l'event listener `#plateau-toggle` et la fonction `renderPlateauToggle()` ;
+  `style.css` perd les règles `.toggle*` et `.hint`.
+- **Backend** : `QuoridorService._plateau_mode` retiré, toutes les
+  occurrences remplacées par `self._plateau.available` (évaluation
+  dynamique). `to_dict()` retourne désormais `mode_active == available`.
+- **Tests** : 253 tests unitaires passent toujours après simplification
+  (paramètre `plateau_mode` retiré des appels de test).
+- **Démo validée** : partie IA vs IA difficulté facile, 37 tours, 10 murs
+  forwardés bout-en-bout, sans crash ni perte de transport.
+
+### Liens
+
+- Commit (à venir, cette session).
+- Code modifié : [`webapp/service.py`](../webapp/service.py),
+  [`webapp/server.py`](../webapp/server.py),
+  [`webapp/schemas.py`](../webapp/schemas.py),
+  [`webapp/static/index.html`](../webapp/static/index.html),
+  [`webapp/static/app.js`](../webapp/static/app.js),
+  [`webapp/static/style.css`](../webapp/static/style.css).
+
+---
+
 ## 2026-05-21 — Abandon du système de boutons physiques (matrice 6×6)
 
 ### Contexte

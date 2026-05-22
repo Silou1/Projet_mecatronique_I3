@@ -31,7 +31,7 @@ class TestGetState:
     def test_get_state_apres_new_game(self, client):
         client.post(
             "/api/new-game",
-            json={"mode": "human_vs_ai", "difficulty": "normal", "plateau_mode": False},
+            json={"mode": "human_vs_ai", "difficulty": "normal"},
         )
         r = client.get("/api/state")
         data = r.json()
@@ -43,7 +43,7 @@ class TestPostMove:
     def _start(self, client):
         client.post(
             "/api/new-game",
-            json={"mode": "human_vs_ai", "difficulty": "facile", "plateau_mode": False},
+            json={"mode": "human_vs_ai", "difficulty": "facile"},
         )
 
     def test_deplacement_valide(self, client):
@@ -80,7 +80,7 @@ class TestRoutesControles:
     def _start_ai_vs_ai(self, client):
         client.post(
             "/api/new-game",
-            json={"mode": "ai_vs_ai", "difficulty": "facile", "plateau_mode": False},
+            json={"mode": "ai_vs_ai", "difficulty": "facile"},
         )
 
     def test_pause_resume(self, client):
@@ -103,7 +103,7 @@ class TestRoutesControles:
     def test_wall_mode_active_horizontal(self, client):
         client.post(
             "/api/new-game",
-            json={"mode": "human_vs_ai", "difficulty": "facile", "plateau_mode": False},
+            json={"mode": "human_vs_ai", "difficulty": "facile"},
         )
         r = client.post("/api/wall-mode", json={"orientation": "h"})
         assert r.status_code == 200

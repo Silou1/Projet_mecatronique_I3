@@ -13,21 +13,20 @@ from webapp.schemas import (
 
 class TestNewGamePayload:
     def test_payload_valide(self):
-        p = NewGamePayload(mode="human_vs_ai", difficulty="normal", plateau_mode=False)
+        p = NewGamePayload(mode="human_vs_ai", difficulty="normal")
         assert p.mode == "human_vs_ai"
         assert p.difficulty == "normal"
-        assert p.plateau_mode is False
 
     def test_mode_invalide_rejete(self):
         with pytest.raises(ValidationError):
-            NewGamePayload(mode="duel", difficulty="normal", plateau_mode=False)
+            NewGamePayload(mode="duel", difficulty="normal")
 
     def test_difficulte_invalide_rejetee(self):
         with pytest.raises(ValidationError):
-            NewGamePayload(mode="human_vs_ai", difficulty="extreme", plateau_mode=False)
+            NewGamePayload(mode="human_vs_ai", difficulty="extreme")
 
     def test_payload_accepte_human_vs_human(self):
-        p = NewGamePayload(mode="human_vs_human", difficulty="normal", plateau_mode=False)
+        p = NewGamePayload(mode="human_vs_human", difficulty="normal")
         assert p.mode == "human_vs_human"
 
 

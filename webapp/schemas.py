@@ -12,10 +12,14 @@ PlayerId = Literal["j1", "j2"]
 
 
 class NewGamePayload(BaseModel):
-    """Payload de POST /api/new-game."""
+    """Payload de POST /api/new-game.
+
+    Le mode plateau physique est dérivé automatiquement côté serveur :
+    plateau actif ssi le transport ESP32 est joignable au moment de la
+    création de la partie.
+    """
     mode: Mode
     difficulty: Difficulty
-    plateau_mode: bool = False
 
 
 class MovePayload(BaseModel):

@@ -82,15 +82,7 @@ def create_app(transport: Optional[object] = None, startup_error: Optional[str] 
 
     @app.post("/api/new-game")
     def post_new_game(payload: NewGamePayload):
-        if payload.plateau_mode and not service._plateau_available_unlocked():
-            return _error_response(
-                "PLATEAU_UNAVAILABLE", "Plateau non détecté.", 400
-            )
-        service.new_game(
-            mode=payload.mode,
-            difficulty=payload.difficulty,
-            plateau_mode=payload.plateau_mode,
-        )
+        service.new_game(mode=payload.mode, difficulty=payload.difficulty)
         return service.to_dict()
 
     @app.post("/api/move")

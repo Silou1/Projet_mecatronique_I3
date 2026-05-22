@@ -14,7 +14,6 @@ const homeForm = {
   mode: "human_vs_ai",
   difficulty: "normal",
   speed: "normal",
-  plateau_mode: false,
 };
 
 // ============ HELPERS ÉTAT ============
@@ -244,19 +243,6 @@ function renderModal(state) {
   }
 }
 
-function renderPlateauToggle(state) {
-  const toggle = document.getElementById("plateau-toggle");
-  const hint = document.getElementById("plateau-hint");
-  if (state.plateau.available) {
-    toggle.disabled = false;
-    hint.textContent = state.plateau.connected ? "Connecté" : "Disponible";
-  } else {
-    toggle.disabled = true;
-    toggle.classList.remove("on");
-    hint.textContent = "Plateau non détecté";
-  }
-}
-
 function renderError(state) {
   if (state.last_error && state.last_error.code) {
     // Le serveur garde last_error jusqu'à new-game/quit ; on ne montre le toast
@@ -317,7 +303,6 @@ function render(newState) {
   document.getElementById("pawn-j2").classList.toggle(
     "current", isPlaying && state.current_player === "j2"
   );
-  renderPlateauToggle(state);
   // Sync chip vitesse in-game avec le serveur
   const speedGroup = document.querySelector('[data-field="speed-ingame"]');
   if (speedGroup) {
@@ -423,13 +408,6 @@ function initHandlers() {
     });
   });
 
-  // Toggle plateau
-  document.getElementById("plateau-toggle").addEventListener("click", e => {
-    if (e.currentTarget.disabled) return;
-    e.currentTarget.classList.toggle("on");
-    homeForm.plateau_mode = e.currentTarget.classList.contains("on");
-  });
-
   // Bouton start
   document.getElementById("btn-start").addEventListener("click", async () => {
     try {
@@ -472,7 +450,6 @@ function initHandlers() {
     const next = await api("POST", "/api/new-game", {
       mode: state.mode,
       difficulty: state.difficulty,
-      plateau_mode: state.plateau.mode_active,
     });
     render(next);
   });

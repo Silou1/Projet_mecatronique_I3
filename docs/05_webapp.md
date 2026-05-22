@@ -21,6 +21,13 @@ hébergé par l'ESP32.
 
 Bascule à chaud sans redémarrer via `POST /api/transport/switch`.
 
+**Forward au plateau physique : automatique.** Quand le transport ESP32 est
+joignable (`/api/status` → `transport.alive=true`), chaque mur posé dans la
+webapp est miroité sur le plateau (commande `WALL` → chariot CoreXY + servo).
+Pas de toggle UI : le mode plateau suit dynamiquement la disponibilité du
+transport — un blip momentané du canal n'affecte que les coups concernés, pas
+la partie entière.
+
 Lancer le serveur :
 
 ```bash
