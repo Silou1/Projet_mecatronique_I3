@@ -386,7 +386,9 @@ async function poll() {
       document.getElementById("overlay-reconnect").classList.remove("hidden");
     }
   } finally {
-    setTimeout(poll, 500);
+    // 200ms : feedback ~2.5x plus rapide que 500ms. Impact CPU/reseau
+    // negligeable en USB local (la charge /api/state est ~1ms).
+    setTimeout(poll, 200);
   }
 }
 
@@ -500,7 +502,13 @@ function renderStatus(s) {
       tDetail.textContent = s.transport.startup_error
         ? `Erreur : ${s.transport.startup_error}`
         : "Le transport ne répond plus.";
-    } else if (s.transport.last_pong_age_seconds !== null && s.transport.last_pong_age_seconds >= 10) {
+    } else if (s.transport.last_pong_age_seconds !== null
+               && s.transport.last_pong_age_seconds >= 10
+               && !(s.plateau && s.plateau.busy)) {
+      // Pendant un WALL/HOME en cours (plateau.busy=true), le _tx_lock est tenu
+      // donc le heartbeat skip ses PING : l'age du dernier PONG monte
+      // mecaniquement. C'est attendu, pas une vraie panne -> on ne montre pas
+      // le warning orange dans ce cas.
       tDot.className = "status-indicator dot-orange";
       tText.textContent = `Connecté · ${s.transport.description} (heartbeat en retard)`;
       tDetail.textContent = `Dernier PONG : il y a ${Math.round(s.transport.last_pong_age_seconds)} s`;

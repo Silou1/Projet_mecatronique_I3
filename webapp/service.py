@@ -131,8 +131,12 @@ class QuoridorService:
         def _home_worker():
             try:
                 log.info("HOME -> envoi au plateau")
+                # Timeout 60s : couvre le pire cas firmware (~30-40s en pratique,
+                # 80s theorique en cas extreme 4000 pas/axe * 10ms/pas * 2 axes).
+                # Avant : 20s, ce qui ratait parfois le HOME OK sans que le
+                # chariot n'ait fini son mouvement.
                 reply = self._plateau.send_command_await(
-                    "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
+                    "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=60.0,
                 )
                 log.info("HOME -> reponse=%r", reply)
                 if reply is not None and reply.startswith("HOME OK"):
