@@ -108,38 +108,36 @@ class QuoridorService:
             self._status = "playing"
             self._last_ai_move_at = time.monotonic()
             state_snapshot = self._state
-            # Skip HOME si :
-            #  - chariot deja a l'origine (HOME quit fini avant le clic), OU
-            #  - un HOME du quit_to_home est deja en cours (_plateau_busy).
-            # Dans les 2 cas le chariot sera (ou est) a home -> evite double HOME.
-            # Si HOME en cours, on garde _plateau_busy=True (libere par le worker quit).
-            do_home = (
-                self._plateau.available
-                and not self._chariot_at_home
-                and not self._plateau_busy
-            )
+            # HOME systematique au demarrage de chaque partie (le user veut
+            # toujours voir le chariot revenir a l'origine au tout debut).
+            do_home = self._plateau.available
             if do_home:
                 self._plateau_busy = True
-        # I/O plateau HORS du lock : HOME peut prendre 5-15 s (chariot CoreXY),
-        # le polling /api/state ne doit pas se figer pendant ce temps. On exécute
-        # dans un thread daemon pour libérer la requête /api/new-game.
+
+        # Push LED IMMEDIAT (positions des pions) AVANT le HOME : le user voit
+        # le plateau colore instantanement, le HOME (5-15s) tourne en background.
+        from webapp.leds import BRIGHTNESS_GAME
+        try:
+            self._led_renderer.set_brightness(BRIGHTNESS_GAME)
+            self._led_renderer.update(state_snapshot)
+            with self._lock:
+                self._led_mode = "playing"
+        except Exception:
+            pass
+
+        if not do_home:
+            return
+        # HOME en thread daemon : I/O long (5-15s), ne fige pas /api/state.
         def _home_worker():
             try:
-                if do_home:
-                    log.info("HOME -> envoi au plateau")
-                    reply = self._plateau.send_command_await(
-                        "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
-                    )
-                    log.info("HOME -> reponse=%r", reply)
-                    if reply is not None and reply.startswith("HOME OK"):
-                        with self._lock:
-                            self._chariot_at_home = True
-                # Pousse le brightness "partie" avant le 1er push de frame
-                from webapp.leds import BRIGHTNESS_GAME
-                self._led_renderer.set_brightness(BRIGHTNESS_GAME)
-                self._led_renderer.update(state_snapshot)
-                with self._lock:
-                    self._led_mode = "playing"
+                log.info("HOME -> envoi au plateau")
+                reply = self._plateau.send_command_await(
+                    "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
+                )
+                log.info("HOME -> reponse=%r", reply)
+                if reply is not None and reply.startswith("HOME OK"):
+                    with self._lock:
+                        self._chariot_at_home = True
             finally:
                 with self._lock:
                     self._plateau_busy = False
@@ -319,44 +317,23 @@ class QuoridorService:
             self._speed = speed
 
     def quit_to_home(self) -> None:
-        """Termine la partie et ramene le chariot CoreXY a l'origine.
+        """Termine la partie + plateau en veille blanche douce.
 
-        Reset l'etat Python (status->waiting, LEDs eteintes, etc.) puis lance
-        un thread daemon qui envoie HOME au plateau. Le flag _plateau_busy
-        reste True pendant le HOME, le frontend voit ainsi l'etat "plateau
-        en cours de reinitialisation". Apres HOME OK, _chariot_at_home=True
-        ce qui permet au prochain new_game() de sauter le HOME redondant.
+        Reset l'etat Python (status->waiting, LEDs eteintes, etc.) puis
+        rallume le plateau en blanc doux (visuel "veille"). N'envoie PAS de
+        HOME au chariot : c'est le new_game suivant qui le fera, ce qui
+        evite que le user soit bloque a l'accueil le temps d'un HOME inutile.
 
         Garde mode/difficulte/vitesse pour la prochaine partie.
         """
         with self._lock:
             self._reset_partie()
-            do_home = self._plateau.available
-            if do_home:
-                self._plateau_busy = True
         # Veille blanche douce sur le plateau apres quit (au lieu d'eteint).
-        # No-op si plateau pas dispo. Sequence : clear (rapide) -> fill blanc
-        # (36 commandes LED mais en USB ~5ms/cmd, ~200ms total).
+        # No-op si plateau pas dispo.
         try:
             self._led_renderer.fill_idle_white()
         except Exception:
             pass
-        if not do_home:
-            return
-        def _home_worker():
-            try:
-                log.info("quit_to_home : HOME -> envoi au plateau")
-                reply = self._plateau.send_command_await(
-                    "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
-                )
-                log.info("quit_to_home : HOME -> reponse=%r", reply)
-                if reply is not None and reply.startswith("HOME OK"):
-                    with self._lock:
-                        self._chariot_at_home = True
-            finally:
-                with self._lock:
-                    self._plateau_busy = False
-        threading.Thread(target=_home_worker, daemon=True, name="quit-home-worker").start()
 
     def tick_once(self) -> bool:
         """Effectue une itération de tick : si c'est au tour d'une IA
@@ -493,21 +470,26 @@ class QuoridorService:
     def _start_physical_forward_unlocked(self, forward_args: tuple, state_snapshot: GameState) -> None:
         """Pose le flag busy et lance le worker thread daemon. Suppose lock acquis.
 
-        Le worker exécute le forward WALL (5-10 s) puis l'update LED, et
-        repasse _plateau_busy à False sous lock. Sert pour humain ET IA.
+        Le worker pousse d'abord l'update LED (~200ms en USB) pour feedback
+        visuel immediat, PUIS execute le forward WALL physique (5-10s). Le
+        user voit ainsi le mur s'allumer instantanement, et le chariot bouge
+        ensuite pour le poser physiquement. Repasse _plateau_busy a False
+        sous lock a la fin. Sert pour humain ET IA.
         """
         if self._plateau.available:
             self._plateau_busy = True
 
         def _worker():
             try:
-                self._forward_to_plateau_unlocked(forward_args)
+                # 1. Update LED en premier : feedback visuel immediat (~200ms USB).
                 # Skip l'update "playing" si on est passe en mode victory entre-temps :
                 # l'animation a deja pris le relais sur les LEDs.
                 with self._lock:
                     should_update = (self._led_mode == "playing")
                 if should_update:
                     self._led_renderer.update(state_snapshot)
+                # 2. WALL physique apres (5-10s, chariot bouge).
+                self._forward_to_plateau_unlocked(forward_args)
             finally:
                 with self._lock:
                     self._plateau_busy = False
