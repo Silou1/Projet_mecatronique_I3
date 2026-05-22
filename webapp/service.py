@@ -50,6 +50,13 @@ class QuoridorService:
         # True tant qu'un forward physique (WALL ou LED) est en cours. Bloque
         # le coup IA suivant et désactive les clics côté frontend.
         self._plateau_busy: bool = False
+        # True si on sait que le chariot CoreXY est physiquement a l'origine
+        # (apres HOME OK). Permet de sauter le HOME au new_game suivant s'il
+        # vient juste d'etre fait par quit_to_home. False par defaut au boot :
+        # on ne sait pas si le HOME firmware automatique a reussi (cf. echec
+        # observe 2026-05-22), donc safety first -> HOME explicite au 1er
+        # new_game.
+        self._chariot_at_home: bool = False
         self._reset_partie()
 
     def _reset_partie(self) -> None:
@@ -68,7 +75,10 @@ class QuoridorService:
         self._led_mode: str = "idle"
         self._led_step: int = 0
         self._victory_color: Optional[LedColor] = None
-        # Eteindre les LEDs et revenir au brightness de repos
+        # Eteindre les LEDs et revenir au brightness de repos.
+        # Au boot/init : reste eteint (clear rapide).
+        # Au quit_to_home : un fill_idle_white est applique apres ce reset
+        # pour passer en veille blanche douce (cf. quit_to_home).
         from webapp.leds import BRIGHTNESS_IDLE
         try:
             self._led_renderer.set_brightness(BRIGHTNESS_IDLE)
@@ -98,7 +108,16 @@ class QuoridorService:
             self._status = "playing"
             self._last_ai_move_at = time.monotonic()
             state_snapshot = self._state
-            do_home = self._plateau.available
+            # Skip HOME si :
+            #  - chariot deja a l'origine (HOME quit fini avant le clic), OU
+            #  - un HOME du quit_to_home est deja en cours (_plateau_busy).
+            # Dans les 2 cas le chariot sera (ou est) a home -> evite double HOME.
+            # Si HOME en cours, on garde _plateau_busy=True (libere par le worker quit).
+            do_home = (
+                self._plateau.available
+                and not self._chariot_at_home
+                and not self._plateau_busy
+            )
             if do_home:
                 self._plateau_busy = True
         # I/O plateau HORS du lock : HOME peut prendre 5-15 s (chariot CoreXY),
@@ -112,6 +131,9 @@ class QuoridorService:
                         "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
                     )
                     log.info("HOME -> reponse=%r", reply)
+                    if reply is not None and reply.startswith("HOME OK"):
+                        with self._lock:
+                            self._chariot_at_home = True
                 # Pousse le brightness "partie" avant le 1er push de frame
                 from webapp.leds import BRIGHTNESS_GAME
                 self._led_renderer.set_brightness(BRIGHTNESS_GAME)
@@ -297,9 +319,44 @@ class QuoridorService:
             self._speed = speed
 
     def quit_to_home(self) -> None:
-        """Termine la partie. Garde mode/difficulté/vitesse."""
+        """Termine la partie et ramene le chariot CoreXY a l'origine.
+
+        Reset l'etat Python (status->waiting, LEDs eteintes, etc.) puis lance
+        un thread daemon qui envoie HOME au plateau. Le flag _plateau_busy
+        reste True pendant le HOME, le frontend voit ainsi l'etat "plateau
+        en cours de reinitialisation". Apres HOME OK, _chariot_at_home=True
+        ce qui permet au prochain new_game() de sauter le HOME redondant.
+
+        Garde mode/difficulte/vitesse pour la prochaine partie.
+        """
         with self._lock:
             self._reset_partie()
+            do_home = self._plateau.available
+            if do_home:
+                self._plateau_busy = True
+        # Veille blanche douce sur le plateau apres quit (au lieu d'eteint).
+        # No-op si plateau pas dispo. Sequence : clear (rapide) -> fill blanc
+        # (36 commandes LED mais en USB ~5ms/cmd, ~200ms total).
+        try:
+            self._led_renderer.fill_idle_white()
+        except Exception:
+            pass
+        if not do_home:
+            return
+        def _home_worker():
+            try:
+                log.info("quit_to_home : HOME -> envoi au plateau")
+                reply = self._plateau.send_command_await(
+                    "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
+                )
+                log.info("quit_to_home : HOME -> reponse=%r", reply)
+                if reply is not None and reply.startswith("HOME OK"):
+                    with self._lock:
+                        self._chariot_at_home = True
+            finally:
+                with self._lock:
+                    self._plateau_busy = False
+        threading.Thread(target=_home_worker, daemon=True, name="quit-home-worker").start()
 
     def tick_once(self) -> bool:
         """Effectue une itération de tick : si c'est au tour d'une IA
@@ -478,6 +535,10 @@ class QuoridorService:
             col = int(payload["col"])
             cmd = f"WALL {orientation} {row} {col}"
             log.info("WALL -> envoi %r", cmd)
+            # Le chariot va bouger : invalide le flag at_home avant l'envoi.
+            # Ecriture bool atomique (GIL), pas besoin du lock — important car
+            # cette methode peut etre appelee avec ou sans le lock acquis.
+            self._chariot_at_home = False
             reply = self._plateau.send_command_await(
                 cmd, accept_prefixes=("WALL OK", "WALL ERR"), timeout=12.0,
             )

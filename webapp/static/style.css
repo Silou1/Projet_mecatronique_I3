@@ -82,6 +82,31 @@ html, body {
   transition: transform 0.1s;
 }
 .btn-primary:active { transform: scale(0.98); }
+.btn-primary.disabled,
+.btn-primary:disabled {
+  background: #c9a584; cursor: not-allowed; box-shadow: none;
+  opacity: 0.7;
+}
+
+/* Banniere "Reinitialisation du plateau..." pendant quit_to_home -> HOME */
+.busy-banner {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(184, 107, 58, 0.12);
+  color: var(--text-soft);
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px;
+}
+.busy-spinner {
+  display: inline-block;
+  font-size: 18px;
+  animation: busy-spin 1.2s linear infinite;
+}
+@keyframes busy-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 
 .btn-secondary {
   padding: 10px 18px;

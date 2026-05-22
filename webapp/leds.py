@@ -193,6 +193,18 @@ class LedRenderer:
             self._send_line("LEDSHOW")
             self._last_frame = [COLOR_OFF] * 36
 
+    def fill_idle_white(self) -> None:
+        """Affiche un blanc doux uniforme sur les 36 LEDs.
+
+        Sert au reset_partie (au lieu du clear total) : visuel "plateau en
+        veille" plutot que noir, transition plus douce entre 2 parties.
+        """
+        if not self._bridge.available:
+            return
+        with self._push_lock:
+            new_frame = [COLOR_FREE] * 36
+            self._push_frame_unlocked(new_frame)
+
     def push_animation_frame(self, step: int, color: LedColor) -> None:
         """Push une frame de l'animation 'onde depuis le centre' (mode victory).
 

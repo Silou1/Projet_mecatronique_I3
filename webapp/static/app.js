@@ -218,6 +218,11 @@ function renderViews(state) {
     aiCtrls.classList.add("hidden");
     moveActions.classList.remove("hidden");
   }
+
+  // Note : le bouton "Commencer la partie" reste toujours actif sur l'accueil,
+  // meme si un HOME du quit precedent est en cours (state.plateau.busy=true).
+  // Le new_game gere le cas en sautant son propre HOME ; la transition est
+  // fluide sur l'ecran de jeu via le busy flag.
 }
 
 let _prevWallMode = null;
