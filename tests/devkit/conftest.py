@@ -27,6 +27,15 @@ def wifi_fixture():
     macOS, ESP32 hors ligne), le test peut quand même tenter sa
     connexion TCP — qui échouera proprement.
     """
+    # 2026-05-22 : bascule AP -> STA tethering iPhone. Plus de wifi_switch.py
+    # (Mac et ESP32 partagent le hotspot iPhone, plus de bascule networksetup).
+    # Les tests devkit_wifi sont obsoletes en attendant un refactor STA.
+    if not WIFI_SWITCH.exists():
+        pytest.skip(
+            "tools/wifi_switch.py retire (bascule mode STA tethering 2026-05-22). "
+            "Tests devkit_wifi a refactorer pour le nouveau mode STA."
+        )
+
     restore_ssid = os.environ.get("QUORIDOR_SSID_RESTORE")
     save_arg = ["--save-current", restore_ssid] if restore_ssid else []
 

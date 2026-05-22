@@ -12,6 +12,6 @@ webapp = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27", "segno>=1.
 markers = [
   "devkit: tests qui requièrent le DevKit ESP32 branché (skipés sinon)",
   "devkit_serial: tests devkit nécessitant l'ESP32 en USB-série",
-  "devkit_wifi: tests devkit nécessitant l'ESP32 en mode AP Wi-Fi (bascule réseau Mac)",
+  "devkit_wifi: tests devkit nécessitant l'ESP32 (OBSOLÈTE depuis 2026-05-22 — bascule mode STA tethering, à refactorer)",
 ]
 testpaths = ["tests"]

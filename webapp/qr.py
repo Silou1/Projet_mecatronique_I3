@@ -25,10 +25,11 @@ def detect_lan_ip() -> str:
         s.connect(("1.1.1.1", 80))
         ip = s.getsockname()[0]
     except OSError:
-        # Pas de route par défaut (mode AP sans Internet). On essaie 192.168.4.1
-        # qui est l'IP de l'ESP32 en mode AP, ce qui donne notre IP sur cet AP.
+        # Pas de route par défaut (iPhone hotspot sans cellular ?). On essaie
+        # quoridor.local qui est l'ESP32 sur le même sous-réseau hotspot iPhone,
+        # ce qui donne notre IP sur ce hotspot.
         try:
-            s.connect(("192.168.4.1", 80))
+            s.connect(("quoridor.local", 80))
             ip = s.getsockname()[0]
         except OSError:
             ip = "127.0.0.1"

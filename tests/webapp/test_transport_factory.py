@@ -42,3 +42,21 @@ def test_make_transport_case_insensitive(monkeypatch):
     monkeypatch.setenv("QUORIDOR_TRANSPORT", "WiFi")
     t = make_transport()
     assert isinstance(t, WiFiTransport)
+
+
+def test_make_transport_wifi_default_host_is_mdns(monkeypatch):
+    """Sans QUORIDOR_WIFI_HOST, le defaut est quoridor.local (mDNS)."""
+    monkeypatch.setenv("QUORIDOR_TRANSPORT", "wifi")
+    monkeypatch.delenv("QUORIDOR_WIFI_HOST", raising=False)
+    t = make_transport()
+    assert isinstance(t, WiFiTransport)
+    assert "quoridor.local" in t.description
+
+
+def test_make_transport_wifi_host_override(monkeypatch):
+    """QUORIDOR_WIFI_HOST override le defaut mDNS (utile si mDNS plante)."""
+    monkeypatch.setenv("QUORIDOR_TRANSPORT", "wifi")
+    monkeypatch.setenv("QUORIDOR_WIFI_HOST", "172.20.10.7")
+    t = make_transport()
+    assert isinstance(t, WiFiTransport)
+    assert "172.20.10.7:3333" in t.description

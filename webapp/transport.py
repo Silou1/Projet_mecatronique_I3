@@ -55,7 +55,7 @@ class Transport(ABC):
     def description(self) -> str:
         """Description lisible pour le panneau Statut.
 
-        Ex: 'wifi 192.168.4.1:3333' ou 'serial /dev/cu.usbserial-110'.
+        Ex: 'wifi quoridor.local:3333' ou 'serial /dev/cu.usbserial-110'.
         """
 
 
@@ -173,15 +173,17 @@ class SerialTransport(Transport):
 
 
 class WiFiTransport(Transport):
-    """Transport TCP brut vers l'ESP32 en mode AP.
+    """Transport TCP brut vers l'ESP32 en mode STA (tethering iPhone).
 
-    Connexion à 192.168.4.1:3333 par défaut. Protocole ligne par ligne, UTF-8.
+    Connexion à quoridor.local:3333 par défaut (résolu via mDNS Bonjour).
+    Override possible via QUORIDOR_WIFI_HOST (IP directe pour bypass mDNS).
+    Protocole ligne par ligne, UTF-8.
     Buffer interne pour gérer les chunks TCP coupés au milieu d'une ligne.
     """
 
     def __init__(
         self,
-        host: str = "192.168.4.1",
+        host: str = "quoridor.local",
         port: int = 3333,
         connect_timeout: float = 3.0,
     ):
@@ -267,10 +269,15 @@ def make_transport() -> Transport:
 
     Valeurs acceptées (case-insensitive) : 'wifi', 'serial', 'none'.
     Défaut : 'wifi'.
+
+    Pour le transport 'wifi', le host est lu depuis QUORIDOR_WIFI_HOST (défaut :
+    'quoridor.local' via mDNS). L'override IP est utile si mDNS ne résout pas
+    sur le réseau courant.
     """
     kind = os.environ.get("QUORIDOR_TRANSPORT", "wifi").lower()
     if kind == "wifi":
-        return WiFiTransport()
+        host = os.environ.get("QUORIDOR_WIFI_HOST", "quoridor.local")
+        return WiFiTransport(host=host)
     if kind == "serial":
         return SerialTransport()
     if kind == "none":
