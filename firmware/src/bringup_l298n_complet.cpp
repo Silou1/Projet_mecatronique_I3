@@ -50,6 +50,7 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include "esp_task_wdt.h"
 #include <Adafruit_NeoPixel.h>
 
@@ -58,9 +59,9 @@
 #define LED_COUNT   36
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-// === Wi-Fi AP (phase 5) ===
-const char* AP_SSID = "Quoridor-ESP32";
-const char* AP_PASS = "quoridor2026";
+// === Wi-Fi STA (tethering iPhone, 2026-05-22) ===
+const char* STA_SSID = "IphoneSilou";
+const char* STA_PASS = "quoridor2026";
 const uint16_t TCP_PORT = 3333;
 // 2026-05-22 : 30s -> 120s. Le HOME peut bloquer loop() jusqu'a 80s en pire cas
 // (4000 pas/axe x 10ms), pendant lesquels last_rx_from_client n'est pas
@@ -1159,6 +1160,17 @@ static void traiter(String s, Stream* reply) {
 // Setup / Loop
 // ============================================================================
 
+// Demarre (ou re-publie) le service mDNS. Idempotent : appele a chaque
+// event GOT_IP pour absorber les reconnexions auto qui changent l'IP DHCP.
+void start_mdns() {
+  if (MDNS.begin("quoridor")) {
+    MDNS.addService("quoridor", "tcp", TCP_PORT);
+    Serial.println("[WiFi] mDNS demarre : quoridor.local");
+  } else {
+    Serial.println("[WiFi] MDNS.begin echoue");
+  }
+}
+
 void setup() {
   // Init strip LED en premier (avant tout autre periph) :
   // securise l'etat des LEDs des le boot, evite affichage residuel.
@@ -1207,19 +1219,34 @@ void setup() {
   afficher_aide();
   Serial.println();
 
-  // 4. Demarrage Wi-Fi AP (phase 5)
-  WiFi.mode(WIFI_AP);
-  bool ap_ok = WiFi.softAP(AP_SSID, AP_PASS);
-  if (ap_ok) {
-    Serial.print("[WiFi] AP demarre : ");
-    Serial.print(AP_SSID);
-    Serial.print(" / IP : ");
-    Serial.println(WiFi.softAPIP());
-  } else {
-    Serial.println("[WiFi] AP softAP() echoue");
+  // 4. Demarrage Wi-Fi STA (tethering iPhone, 2026-05-22)
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
+
+  // Event handler enregistre AVANT begin() pour catcher la premiere connexion.
+  // Re-publie mDNS a chaque GOT_IP (les reconnexions auto peuvent changer l'IP).
+  WiFi.onEvent([](WiFiEvent_t e, WiFiEventInfo_t i) {
+    Serial.print("[WiFi] connecte, IP : ");
+    Serial.println(WiFi.localIP());
+    start_mdns();
+  }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+
+  WiFi.begin(STA_SSID, STA_PASS);
+  Serial.print("[WiFi] connexion a ");
+  Serial.print(STA_SSID);
+  unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 30000) {
+    delay(500);
+    Serial.print(".");
   }
-  wifi_server.begin();
-  Serial.print("[WiFi] Serveur TCP demarre sur port ");
+  Serial.println();
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[WiFi] timeout 30s. Auto-reconnect actif en arriere-plan.");
+  }
+
+  wifi_server.begin();  // bind INADDR_ANY, OK meme sans IP STA assignee
+  Serial.print("[WiFi] Serveur TCP en attente sur port ");
   Serial.println(TCP_PORT);
   Serial.println();
 }
