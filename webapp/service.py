@@ -13,7 +13,7 @@ from typing import Optional, TYPE_CHECKING
 
 from quoridor_engine import GameState, AI, InvalidMoveError
 from quoridor_engine.core import PLAYER_ONE, PLAYER_TWO, create_new_game
-from webapp.leds import LedRenderer
+from webapp.leds import LedColor, LedRenderer
 from webapp.plateau import PlateauBridge
 
 log = logging.getLogger(__name__)
@@ -41,9 +41,6 @@ class QuoridorService:
         self._plateau = PlateauBridge(transport=transport)
         self._led_renderer = LedRenderer(bridge=self._plateau)
         self._plateau.add_on_reconnect_callback(self._led_renderer.on_reconnect)
-        # P1 (bonus) : afficher les cases atteignables du joueur courant en cyan dim
-        from webapp.leds import RenderOptions
-        self._led_renderer.set_options(RenderOptions(show_legal_moves=True))
         self._startup_error = startup_error
         self._lock = threading.Lock()
         # Réglages persistés entre parties (cf. spec §9.7)
@@ -67,14 +64,17 @@ class QuoridorService:
         self._last_ai_move_at: float = 0.0
         self._last_error: Optional[dict] = None
         self._wall_placement_mode: Optional[str] = None
-        # Eteindre les LEDs (state est None, donc on appelle directement LEDCLEAR)
-        if self._plateau.available:
-            try:
-                self._plateau.send_command_await(
-                    "LEDCLEAR", accept_prefixes=("OK", "ERR"), timeout=2.0,
-                )
-            except Exception:
-                pass
+        # Mode LED : idle (LEDs eteintes, thread anim no-op)
+        self._led_mode: str = "idle"
+        self._led_step: int = 0
+        self._victory_color: Optional[LedColor] = None
+        # Eteindre les LEDs et revenir au brightness de repos
+        from webapp.leds import BRIGHTNESS_IDLE
+        try:
+            self._led_renderer.set_brightness(BRIGHTNESS_IDLE)
+            self._led_renderer.clear()
+        except Exception:
+            pass
 
     def new_game(self, mode: str, difficulty: str) -> None:
         """Démarre une nouvelle partie.
@@ -112,7 +112,12 @@ class QuoridorService:
                         "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=20.0,
                     )
                     log.info("HOME -> reponse=%r", reply)
+                # Pousse le brightness "partie" avant le 1er push de frame
+                from webapp.leds import BRIGHTNESS_GAME
+                self._led_renderer.set_brightness(BRIGHTNESS_GAME)
                 self._led_renderer.update(state_snapshot)
+                with self._lock:
+                    self._led_mode = "playing"
             finally:
                 with self._lock:
                     self._plateau_busy = False
@@ -256,6 +261,13 @@ class QuoridorService:
         if is_over:
             self._status = "finished"
             self._winner = winner
+            # Bascule en mode victory : animation "onde depuis le centre" couleur gagnant
+            from webapp.leds import COLOR_PLAYER_ONE, COLOR_PLAYER_TWO
+            self._victory_color = (
+                COLOR_PLAYER_ONE if winner == PLAYER_ONE else COLOR_PLAYER_TWO
+            )
+            self._led_mode = "victory"
+            self._led_step = 0
 
     def set_wall_mode(self, orientation: Optional[str]) -> None:
         """Active ou désactive le mode placement de mur."""
@@ -384,6 +396,43 @@ class QuoridorService:
         self._tick_thread = threading.Thread(target=_loop, daemon=True, name="tick")
         self._tick_thread.start()
 
+    def _led_anim_tick(self) -> None:
+        """Une iteration du thread d'animation LED. Tick rate = 250 ms.
+
+        Selon `_led_mode` :
+          - idle / playing : no-op. En playing, le rendu est event-driven (update
+                             apres chaque coup), pas de clignotement (le canal
+                             serie est monopolise pendant les pulses moteurs).
+          - victory        : push frame d'animation "onde depuis le centre"
+                             couleur gagnant.
+        """
+        with self._lock:
+            mode = self._led_mode
+            if mode != "victory":
+                return
+            step = self._led_step
+            victory_color = self._victory_color
+            self._led_step += 1
+
+        if victory_color is not None:
+            self._led_renderer.push_animation_frame(step, victory_color)
+
+    def start_anim_thread(self) -> None:
+        """Démarre le thread daemon qui pilote les animations LED (tick 250 ms)."""
+        if hasattr(self, "_anim_thread") and self._anim_thread.is_alive():
+            return
+
+        def _loop():
+            while True:
+                time.sleep(0.25)
+                try:
+                    self._led_anim_tick()
+                except Exception:  # noqa: BLE001 — robustesse maximale du thread
+                    pass
+
+        self._anim_thread = threading.Thread(target=_loop, daemon=True, name="led-anim")
+        self._anim_thread.start()
+
     def _start_physical_forward_unlocked(self, forward_args: tuple, state_snapshot: GameState) -> None:
         """Pose le flag busy et lance le worker thread daemon. Suppose lock acquis.
 
@@ -396,7 +445,12 @@ class QuoridorService:
         def _worker():
             try:
                 self._forward_to_plateau_unlocked(forward_args)
-                self._led_renderer.update(state_snapshot)
+                # Skip l'update "playing" si on est passe en mode victory entre-temps :
+                # l'animation a deja pris le relais sur les LEDs.
+                with self._lock:
+                    should_update = (self._led_mode == "playing")
+                if should_update:
+                    self._led_renderer.update(state_snapshot)
             finally:
                 with self._lock:
                     self._plateau_busy = False

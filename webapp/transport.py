@@ -196,6 +196,11 @@ class WiFiTransport(Transport):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self._connect_timeout)
             sock.connect((self._host, self._port))
+            # Désactive Nagle : la webapp envoie des commandes courtes et attend
+            # la réponse, on veut zéro délai d'agrégation.
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            # Active TCP keep-alive pour détecter rapidement les coupures Wi-Fi.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             sock.settimeout(0.1)  # lecture par défaut, ajustée par read_line
             self._sock = sock
         except (OSError, socket.timeout) as e:

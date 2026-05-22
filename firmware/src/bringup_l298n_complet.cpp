@@ -62,7 +62,11 @@ Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 const char* AP_SSID = "Quoridor-ESP32";
 const char* AP_PASS = "quoridor2026";
 const uint16_t TCP_PORT = 3333;
-const unsigned long CLIENT_WATCHDOG_MS = 30000;
+// 2026-05-22 : 30s -> 120s. Le HOME peut bloquer loop() jusqu'a 80s en pire cas
+// (4000 pas/axe x 10ms), pendant lesquels last_rx_from_client n'est pas
+// rafraichi. Avec 30s, le watchdog tuait le client juste apres HOME -> reply
+// perdu cote client TCP.
+const unsigned long CLIENT_WATCHDOG_MS = 120000;
 
 WiFiServer wifi_server(TCP_PORT);
 WiFiClient wifi_client;
@@ -277,12 +281,37 @@ static void appliquer_duty_courant() {
   analogWrite(M2.ena, pwm); analogWrite(M2.enb, pwm);
 }
 
+// Veille / reveil physiques sans toucher drivers_actifs.
+// Objectif : silence acoustique entre les mouvements (le PWM ENA/ENB ~1 kHz
+// d'analogWrite fait siffler les bobines a l'arret). On coupe EN et phases
+// apres chaque mouvement et on reveille avant le suivant. La derniere phase
+// est perdue (pas de couple de maintien) : acceptable car le stepper reduit
+// 64:1 ne derive pas sous la simple tension des courroies.
+static void veille_drivers() {
+  analogWrite(M1.ena, 0); analogWrite(M1.enb, 0);
+  analogWrite(M2.ena, 0); analogWrite(M2.enb, 0);
+  couper_phases(M1); couper_phases(M2);
+}
+
+static void reveil_drivers() {
+  if (!drivers_actifs) return;  // EN OFF manuel : on respecte.
+  uint8_t pwm = duty_to_pwm(duty_pct);
+  analogWrite(M1.ena, pwm); analogWrite(M1.enb, pwm);
+  analogWrite(M2.ena, pwm); analogWrite(M2.enb, pwm);
+  appliquer_phase(M1, M1.phase); appliquer_phase(M2, M2.phase);
+}
+
 // Avance les phases de M1 et/ou M2 simultanement pour nb_pas, avec sens donnes.
 static void pulse_2_moteurs(uint32_t nb_pas,
                             bool m1_actif, bool m1_fwd,
                             bool m2_actif, bool m2_fwd) {
   // 2026-05-21 : cablage moteurs refait -> bobines inversees sur les 2 L298N,
   // d'ou inversion globale du sens (1/3 echanges). Garde la logique X/Y CoreXY.
+  // 2026-05-22 : delay() au lieu de delayMicroseconds() bloquant + yield() a
+  // chaque pas, sinon la pile Wi-Fi ESP32 est etouffee pendant le HOME et le
+  // client TCP perd la connexion avant que "HOME OK" soit envoye.
+  uint32_t ms = demi_periode_us / 1000;
+  uint32_t us = demi_periode_us % 1000;
   for (uint32_t i = 0; i < nb_pas; ++i) {
     if (m1_actif) {
       M1.phase = (M1.phase + (m1_fwd ? 3 : 1)) & 3;
@@ -292,8 +321,9 @@ static void pulse_2_moteurs(uint32_t nb_pas,
       M2.phase = (M2.phase + (m2_fwd ? 3 : 1)) & 3;
       appliquer_phase(M2, M2.phase);
     }
-    delayMicroseconds(demi_periode_us);
-    if ((i & 0x3F) == 0) yield();
+    if (ms > 0) delay(ms);            // cede au scheduler FreeRTOS (yield Wi-Fi)
+    if (us > 0) delayMicroseconds(us); // ajuste sub-millisecond
+    yield();                           // garantit la pile reseau toutes les pas
   }
 }
 
@@ -365,14 +395,15 @@ static bool homing_complet() {
   if (!drivers_actifs) activer_drivers(true);
 
   bool ok_x = homing_axe("X", PIN_LIMIT_Y, /*m1_back*/ false, /*m2_back*/ true);
-  if (!ok_x) return false;
+  if (!ok_x) { veille_drivers(); return false; }
   delay(150);
   bool ok_y = homing_axe("Y", PIN_LIMIT_X, /*m1_back*/ false, /*m2_back*/ false);
-  if (!ok_y) return false;
+  if (!ok_y) { veille_drivers(); return false; }
 
   pos_x = 0; pos_y = 0;
   position_connue = true;
   Serial.println("HOME OK. Origine (0, 0) etablie.");
+  veille_drivers();
   return true;
 }
 
@@ -724,8 +755,10 @@ static void goto_xy(int32_t x_cible, int32_t y_cible) {
   Serial.print("GOTO ("); Serial.print(x_cible); Serial.print(", "); Serial.print(y_cible);
   Serial.print(")  dx="); Serial.print(dx); Serial.print(" dy="); Serial.println(dy);
 
+  reveil_drivers();
   if (dx != 0) deplacer_x((uint32_t)abs(dx), dx > 0);
   if (dy != 0) deplacer_y((uint32_t)abs(dy), dy > 0);
+  veille_drivers();
   Serial.println("done");
 }
 
@@ -1044,22 +1077,30 @@ static void traiter(String s, Stream* reply) {
   }
   if (s.startsWith("X F ") || s.startsWith("X B ")) {
     long n = parse_n_apres(s, 4); if (n < 0) return;
+    reveil_drivers();
     deplacer_x((uint32_t)n, s.charAt(2) == 'F');
+    veille_drivers();
     reply->println("done"); return;
   }
   if (s.startsWith("Y F ") || s.startsWith("Y B ")) {
     long n = parse_n_apres(s, 4); if (n < 0) return;
+    reveil_drivers();
     deplacer_y((uint32_t)n, s.charAt(2) == 'F');
+    veille_drivers();
     reply->println("done"); return;
   }
   if (s.startsWith("M1 F ") || s.startsWith("M1 B ")) {
     long n = parse_n_apres(s, 5); if (n < 0) return;
+    reveil_drivers();
     deplacer_m1((uint32_t)n, s.charAt(3) == 'F');
+    veille_drivers();
     reply->println("done (position INVALIDEE)"); return;
   }
   if (s.startsWith("M2 F ") || s.startsWith("M2 B ")) {
     long n = parse_n_apres(s, 5); if (n < 0) return;
+    reveil_drivers();
     deplacer_m2((uint32_t)n, s.charAt(3) == 'F');
+    veille_drivers();
     reply->println("done (position INVALIDEE)"); return;
   }
 
@@ -1190,6 +1231,7 @@ void loop() {
       wifi_client.stop();
     }
     wifi_client = wifi_server.available();
+    wifi_client.setNoDelay(true);  // pas de Nagle : ACK partent direct
     tampon_wifi = "";
     last_rx_from_client = millis();
     Serial.print("[WiFi] Nouveau client : ");
@@ -1221,6 +1263,9 @@ void loop() {
         traiter(tampon_wifi, &wifi_client);
         tampon_wifi = "";
         last_rx_from_client = millis();
+        // Flush explicite : garantit que la reply part avant qu'un drop client
+        // suivant ne tue la socket.
+        wifi_client.flush();
       } else {
         tampon_wifi += c;
         if (tampon_wifi.length() > 64) {

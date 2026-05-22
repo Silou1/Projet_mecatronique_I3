@@ -15,6 +15,82 @@ L'objectif de ce document est double :
 
 ---
 
+## 2026-05-22 (soir) — Polissage LED + silence drivers + bug Wi-Fi non résolu
+
+### Contexte
+
+Soirée de polissage avant la démo : suppression du sifflement L298N à
+l'arrêt, refonte du rendu LED (cases blanches + contraste de luminosité
+sur le pion courant, animation victoire), tentative de validation
+end-to-end en Wi-Fi.
+
+### Décisions et changements
+
+1. **Coupure auto des drivers à l'arrêt** ([firmware/src/bringup_l298n_complet.cpp](../firmware/src/bringup_l298n_complet.cpp)).
+   Le sifflement à 1 kHz vient du PWM `analogWrite(ENA/ENB)` qui hache en
+   continu le courant dans les bobines tant que les drivers sont actifs.
+   Ajout de `veille_drivers()` / `reveil_drivers()` appelés autour de
+   chaque mouvement haut niveau (`goto_xy`, `deplacer_*`, `homing_complet`).
+   La dernière phase est perdue (perte du couple de maintien) mais le
+   stepper réduit 64:1 ne dérive pas sous la simple tension des courroies.
+   Validé acoustiquement.
+
+2. **Refonte du rendu LED** ([webapp/leds.py](../webapp/leds.py)).
+   - Cases libres : blanc très doux `(20, 20, 20)` au lieu d'éteintes.
+   - Retrait du cyan dim sur les coups légaux (`show_legal_moves` supprimé).
+   - Pion courant : couleur pleine à 60% brightness.
+   - Pion non-courant : couleur atténuée `(0, 0, 60)` / `(60, 0, 0)`.
+   - Le clignotement initialement envisagé a été **abandonné** : pendant
+     les mouvements moteurs, `pulse_2_moteurs` bloque `loop()` 5-15 s,
+     les commandes LED Python timeoutent. Différenciation par contraste
+     statique à la place.
+   - `LEDBRIGHT 153` pendant la partie, `LEDBRIGHT 102` au repos.
+
+3. **Animation victoire** : ondes concentriques 3 anneaux (4+12+20 LEDs)
+   couleur du gagnant, cycle 1 s, en boucle jusqu'à `quit` / nouvelle
+   partie. Pas d'animation pré-HOME (canal monopolisé). Thread `led-anim`
+   à 250 ms dans `service.py`.
+
+4. **Tentatives de fix Wi-Fi** (NON validées). En USB tout marche
+   parfaitement, en Wi-Fi la commande `HOME` timeout côté client Python
+   (`send_command_await(...): timeout`) :
+   - `pulse_2_moteurs` : `delay()` + `yield()` à chaque pas (au lieu de
+     `delayMicroseconds()` + yield tous les 64 pas) pour servir la pile
+     Wi-Fi pendant les mouvements longs.
+   - `CLIENT_WATCHDOG_MS` 30 s → 120 s.
+   - `wifi_client.setNoDelay(true)` à l'accept + `flush()` après chaque
+     `traiter()`.
+   - Côté Python : `TCP_NODELAY` + `SO_KEEPALIVE`, `FAILED_PINGS_LIMIT`
+     2 → 5.
+
+   **Aucun de ces fixes n'a résolu le problème.** Le PING/PONG TCP brut
+   marche (test direct socket), mais la webapp Python n'arrive pas à
+   compléter un `HOME` via le bridge. Cause racine probablement plus
+   profonde dans la pile Wi-Fi softAP de l'ESP32 quand le `loop()` est
+   bloqué — non identifié avec certitude.
+
+### Décision pour la suite
+
+**Bascule de l'architecture Wi-Fi : ESP32 en mode STA (client) du
+tethering du téléphone, au lieu de mode AP (point d'accès).**
+Proposition initialement faite par les enseignants. Avantages :
+
+- Pile Wi-Fi ESP32 plus simple (STA seul, mode standard très éprouvé).
+- Mac garde Internet (via tethering).
+- Pas de macOS qui rebascule sur ICAM (problème récurrent ce soir).
+- Découverte de l'ESP32 via mDNS (`quoridor.local`) au lieu d'IP fixe.
+
+À implémenter dans une nouvelle session avec contexte frais.
+
+### Impact code
+
+7 fichiers modifiés. 276 tests Python passent. Firmware re-flashé deux
+fois ce soir. Webapp validée en USB end-to-end (partie IA vs IA jusqu'à
+victoire avec animation rouge). Wi-Fi laissé en l'état actuel (mode AP
+non fonctionnel), à remplacer.
+
+---
+
 ## 2026-05-22 — Retrait du toggle « Mode plateau » de la webapp
 
 ### Contexte

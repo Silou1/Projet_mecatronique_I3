@@ -7,6 +7,14 @@ a droite, rangee 1 va de droite a gauche, etc.
 L'engine Quoridor utilise sa propre convention : (row, col) avec row=0 en haut,
 col=0 a gauche. Ce module fait la traduction.
 
+Comportement visuel en partie :
+- Cases libres : blanc tres doux (COLOR_FREE).
+- Pion J1 : bleu (COLOR_PLAYER_ONE).
+- Pion J2 : rouge (COLOR_PLAYER_TWO).
+- Pion du joueur courant : clignote (alterne entre couleur pleine et COLOR_FREE,
+  toggle declenche par LedRenderer.tick() depuis un thread externe a 1 Hz).
+- Luminosite globale poussee a 60% pendant la partie via LEDBRIGHT 153.
+
 Voir spec : docs/superpowers/specs/2026-05-21-leds-design.md
 """
 from __future__ import annotations
@@ -31,8 +39,26 @@ def engine_to_strip_index(row: int, col: int) -> int:
     return row_phys * 6 + (5 - col)  # rangee impaire : droite -> gauche
 
 
+def _ring_of(row: int, col: int) -> int:
+    """Index d'anneau concentrique de la case (row, col) autour du centre virtuel.
+
+    Plateau 6x6, centre virtuel (2.5, 2.5). Distance Chebyshev :
+      ring 0 = 4 cases centrales  (2,2)(2,3)(3,2)(3,3)
+      ring 1 = 12 cases du cadre intermediaire
+      ring 2 = 20 cases du bord
+    """
+    return int(max(abs(2 * row - 5), abs(2 * col - 5)) / 2)
+
+
+# Table de lookup ring[strip_idx] -> 0|1|2, pre-calculee une fois.
+_RING_OF_STRIP_IDX: list[int] = [0] * 36
+for _r in range(6):
+    for _c in range(6):
+        _RING_OF_STRIP_IDX[engine_to_strip_index(_r, _c)] = _ring_of(_r, _c)
+
+
 from dataclasses import dataclass
-from quoridor_engine.core import GameState, get_possible_pawn_moves, PLAYER_ONE, PLAYER_TWO
+from quoridor_engine.core import GameState, PLAYER_ONE, PLAYER_TWO
 
 
 @dataclass(frozen=True)
@@ -43,48 +69,80 @@ class LedColor:
     b: int
 
 
-# Palette (valeurs nominales, le firmware applique setBrightness(102) = 40%)
-COLOR_OFF        = LedColor(0,   0,   0  )  # fond eteint
-COLOR_PLAYER_ONE = LedColor(0,   0,   255)  # J1 humain : bleu
-COLOR_PLAYER_TWO = LedColor(255, 0,   0  )  # J2 IA : rouge
-COLOR_LEGAL_MOVE = LedColor(0,   64,  64 )  # coups legaux : cyan dim (P1 bonus)
+# Palette nominale. Le firmware applique setBrightness ; en partie on pousse a
+# 153 (60%), hors partie on reste a 102 (40%).
+# Pas de clignotement : la canal serie est monopolise par les pulses moteurs
+# pendant un WALL, le clignotement timeouterait. A la place, on differencie le
+# joueur courant par contraste de luminosite.
+COLOR_OFF        = LedColor(0,   0,   0  )  # extinction complete (hors partie / clear)
+COLOR_FREE       = LedColor(20,  20,  20 )  # blanc tres tres doux : cases libres
+COLOR_PLAYER_ONE = LedColor(0,   0,   255)  # J1 courant : bleu plein
+COLOR_PLAYER_TWO = LedColor(255, 0,   0  )  # J2 courant : rouge plein
+COLOR_PLAYER_ONE_DIM = LedColor(0, 0, 60)   # J1 non-courant : bleu attenue
+COLOR_PLAYER_TWO_DIM = LedColor(60, 0, 0)   # J2 non-courant : rouge attenue
+
+
+# Luminosite globale poussee par le service au demarrage de partie.
+BRIGHTNESS_GAME = 153  # ~60% : le pion en pleine couleur ressort vraiment
+BRIGHTNESS_IDLE = 102  # ~40% : valeur de repos cote firmware (cf. setup())
 
 
 @dataclass(frozen=True)
 class RenderOptions:
-    """Options de rendu (extensibles pour scope futur)."""
-    show_legal_moves: bool = False
+    """Options de rendu. Conserve pour extension future."""
+    pass
 
 
 def render_state(state: GameState, opts: RenderOptions) -> list[LedColor]:
     """Convertit un GameState en frame complete de 36 couleurs.
 
-    Fonction pure : sortie totalement determinee par les inputs, pas de side effect.
-
-    Args:
-        state: etat de la partie en cours
-        opts: options de rendu (P0/P1 toggles)
-
-    Returns:
-        Liste de 36 LedColor, index = position sur le strip serpentin.
+    Fonction pure. Le joueur courant est mis en pleine couleur, l'autre en
+    couleur attenuee, le fond en blanc tres doux. Contraste de luminosite a
+    la place du clignotement (incompatible avec les pulses moteurs).
     """
-    frame: list[LedColor] = [COLOR_OFF] * 36
+    frame: list[LedColor] = [COLOR_FREE] * 36
 
-    # P1 (bonus) : coups legaux peints EN PREMIER (ecrases par les pions ensuite)
-    if opts.show_legal_moves:
-        for row, col in get_possible_pawn_moves(state, state.current_player):
-            frame[engine_to_strip_index(row, col)] = COLOR_LEGAL_MOVE
-
-    # P0 : pions peints EN DERNIER pour ecraser tout coup legal au meme endroit
     r1, c1 = state.player_positions[PLAYER_ONE]
     r2, c2 = state.player_positions[PLAYER_TWO]
-    frame[engine_to_strip_index(r1, c1)] = COLOR_PLAYER_ONE
-    frame[engine_to_strip_index(r2, c2)] = COLOR_PLAYER_TWO
+    idx1 = engine_to_strip_index(r1, c1)
+    idx2 = engine_to_strip_index(r2, c2)
+
+    current = state.current_player
+    frame[idx1] = COLOR_PLAYER_ONE if current == PLAYER_ONE else COLOR_PLAYER_ONE_DIM
+    frame[idx2] = COLOR_PLAYER_TWO if current == PLAYER_TWO else COLOR_PLAYER_TWO_DIM
 
     return frame
 
 
+def render_animation_frame(step: int, color: LedColor) -> list[LedColor]:
+    """Frame d'animation "onde concentrique depuis le centre" (mode victory).
+
+    Cycle de 4 etapes (step % 4), 250 ms par etape -> 1 s par cycle :
+      0 : anneau 0 a pleine couleur, reste eteint
+      1 : anneau 1 plein, anneau 0 attenue (1/4 intensite)
+      2 : anneau 2 plein, anneau 1 attenue
+      3 : tout eteint (pause avant boucle suivante)
+
+    Fonction pure.
+    """
+    phase = step % 4
+    if phase == 3:
+        return [COLOR_OFF] * 36
+    full_ring = phase
+    dim_ring = phase - 1  # -1 = aucun en dim (phase 0)
+    dim = LedColor(color.r // 4, color.g // 4, color.b // 4)
+    frame: list[LedColor] = [COLOR_OFF] * 36
+    for idx in range(36):
+        ring = _RING_OF_STRIP_IDX[idx]
+        if ring == full_ring:
+            frame[idx] = color
+        elif ring == dim_ring:
+            frame[idx] = dim
+    return frame
+
+
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -96,36 +154,63 @@ log = logging.getLogger(__name__)
 class LedRenderer:
     """Maintient l'etat des LEDs et envoie les diffs au firmware via PlateauBridge.
 
-    Le rendu est declenche manuellement via update(state) apres chaque mutation
-    de GameState. La classe garde le dernier frame en memoire et ne pousse que
-    les LEDs qui ont change (diff). En cas de reconnexion du bridge (firmware
-    reboote), on_reconnect() force un re-push complet.
+    Trois sources d'updates concurrentes (toutes thread-safe via _push_lock) :
+      - update(state)   : mutation logique (coup joue, HOME termine).
+      - tick(state)     : flip de phase pour l'animation de clignotement (1 Hz).
+      - clear()         : extinction totale (reset partie).
+      - on_reconnect()  : firmware redemarre, re-push de la derniere frame.
     """
 
     def __init__(self, bridge: "PlateauBridge"):
         self._bridge = bridge
         self._last_frame: list[LedColor] | None = None
-        self._options = RenderOptions(show_legal_moves=False)
+        self._options = RenderOptions()
+        self._push_lock = threading.Lock()
 
     def set_options(self, options: RenderOptions) -> None:
-        """Modifie les options de rendu (toggle P1 par ex). Force un re-render."""
-        self._options = options
-        self._last_frame = None  # force full frame au prochain update
+        """Modifie les options de rendu. Force un re-render."""
+        with self._push_lock:
+            self._options = options
+            self._last_frame = None
 
     def update(self, state: GameState) -> None:
-        """Calcule le nouveau frame et envoie le diff au firmware.
+        """Calcule le frame et envoie le diff au firmware.
 
-        No-op silencieux si le bridge n'est pas disponible (mode autonome ou
-        ESP32 hors ligne).
+        No-op silencieux si le bridge n'est pas disponible.
         """
         if not self._bridge.available:
             return
-        new_frame = render_state(state, self._options)
-        if self._last_frame is None:
-            self._send_full_frame(new_frame)
-        else:
-            self._send_diff(self._last_frame, new_frame)
-        self._last_frame = new_frame
+        with self._push_lock:
+            new_frame = render_state(state, self._options)
+            self._push_frame_unlocked(new_frame)
+
+    def clear(self) -> None:
+        """Eteint toutes les LEDs (frame OFF totale). Pour reset_partie."""
+        if not self._bridge.available:
+            return
+        with self._push_lock:
+            self._send_line("LEDCLEAR")
+            self._send_line("LEDSHOW")
+            self._last_frame = [COLOR_OFF] * 36
+
+    def push_animation_frame(self, step: int, color: LedColor) -> None:
+        """Push une frame de l'animation 'onde depuis le centre' (mode victory).
+
+        L'appelant gere le step (compteur incremental) et la couleur. No-op si
+        le bridge n'est pas disponible.
+        """
+        if not self._bridge.available:
+            return
+        with self._push_lock:
+            new_frame = render_animation_frame(step, color)
+            self._push_frame_unlocked(new_frame)
+
+    def set_brightness(self, value: int) -> None:
+        """Envoie LEDBRIGHT <value> au firmware. value dans [0..255]."""
+        if not self._bridge.available:
+            return
+        with self._push_lock:
+            self._send_line(f"LEDBRIGHT {value}")
 
     def on_reconnect(self) -> None:
         """A appeler quand le bridge recupere la connexion apres coupure.
@@ -133,8 +218,18 @@ class LedRenderer:
         Le firmware a reboote, son buffer LED est a 0. On re-pousse le dernier
         frame connu pour resynchroniser.
         """
-        if self._last_frame is not None:
+        with self._push_lock:
+            if self._last_frame is None:
+                return
             self._send_full_frame(self._last_frame)
+
+    def _push_frame_unlocked(self, new_frame: list[LedColor]) -> None:
+        """Send full ou diff selon l'etat. _push_lock doit etre tenu."""
+        if self._last_frame is None:
+            self._send_full_frame(new_frame)
+        else:
+            self._send_diff(self._last_frame, new_frame)
+        self._last_frame = new_frame
 
     def _send_full_frame(self, frame: list[LedColor]) -> None:
         self._send_line("LEDCLEAR")
@@ -146,7 +241,7 @@ class LedRenderer:
     def _send_diff(self, old: list[LedColor], new: list[LedColor]) -> None:
         changed = [(idx, c) for idx, (o, c) in enumerate(zip(old, new)) if o != c]
         if not changed:
-            return  # rien a faire, pas de LEDSHOW non plus
+            return
         for idx, color in changed:
             self._send_line(f"LED {idx} {color.r} {color.g} {color.b}")
         self._send_line("LEDSHOW")

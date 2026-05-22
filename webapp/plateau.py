@@ -22,7 +22,11 @@ log = logging.getLogger(__name__)
 
 HEARTBEAT_INTERVAL_DEFAULT = 5.0
 PONG_TIMEOUT_DEFAULT = 2.0
-FAILED_PINGS_LIMIT = 2
+# 2026-05-22 : 2 -> 5. En Wi-Fi le HOME peut bloquer le loop() ESP32 ~5-15 s,
+# les PING peuvent timeout transitoirement sans que le transport soit mort.
+# Seuil plus large evite un transport_lost premature qui fermerait la socket
+# pendant qu'une reponse longue est en transit.
+FAILED_PINGS_LIMIT = 5
 
 
 class PlateauBridge:

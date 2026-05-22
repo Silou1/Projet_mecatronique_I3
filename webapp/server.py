@@ -214,6 +214,7 @@ def main() -> None:
 
     app = create_app(transport=transport, startup_error=startup_error)
     app.state.service.start_tick_thread()
+    app.state.service.start_anim_thread()
     app.state.service._plateau.start_heartbeat()
     app.state.service._plateau.start_reconnect_watcher()
 
