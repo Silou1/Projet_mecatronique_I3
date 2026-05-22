@@ -127,25 +127,27 @@ class QuoridorService:
 
         if not do_home:
             return
-        # HOME en thread daemon : I/O long (5-15s), ne fige pas /api/state.
-        def _home_worker():
-            try:
-                log.info("HOME -> envoi au plateau")
-                # Timeout 60s : couvre le pire cas firmware (~30-40s en pratique,
-                # 80s theorique en cas extreme 4000 pas/axe * 10ms/pas * 2 axes).
-                # Avant : 20s, ce qui ratait parfois le HOME OK sans que le
-                # chariot n'ait fini son mouvement.
-                reply = self._plateau.send_command_await(
-                    "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=60.0,
-                )
-                log.info("HOME -> reponse=%r", reply)
-                if reply is not None and reply.startswith("HOME OK"):
-                    with self._lock:
-                        self._chariot_at_home = True
-            finally:
+        # HOME SYNCHRONE : bloque la requete /api/new-game jusqu'a HOME OK.
+        # Volontaire : le HOME async en thread daemon creait une UX confuse
+        # ("ecran de jeu avec TON TOUR" alors que le chariot n'avait pas
+        # encore bouge). Maintenant, le frontend voit un loading pendant la
+        # fetch, puis l'ecran de jeu apparait apres HOME OK.
+        # Le polling /api/state continue de repondre via les autres workers
+        # uvicorn (seule la requete /api/new-game est bloquee).
+        # Timeout 60s : couvre le pire cas firmware (~30-40s en pratique,
+        # 80s theorique en cas extreme 4000 pas/axe * 10ms/pas * 2 axes).
+        try:
+            log.info("HOME -> envoi au plateau (synchrone)")
+            reply = self._plateau.send_command_await(
+                "HOME", accept_prefixes=("HOME OK", "HOME ERR"), timeout=60.0,
+            )
+            log.info("HOME -> reponse=%r", reply)
+            if reply is not None and reply.startswith("HOME OK"):
                 with self._lock:
-                    self._plateau_busy = False
-        threading.Thread(target=_home_worker, daemon=True, name="home-worker").start()
+                    self._chariot_at_home = True
+        finally:
+            with self._lock:
+                self._plateau_busy = False
 
     def to_dict(self) -> dict:
         """Sérialise l'état pour /api/state."""

@@ -415,13 +415,24 @@ function initHandlers() {
     });
   });
 
-  // Bouton start
+  // Bouton start. La requete /api/new-game est BLOQUANTE cote backend
+  // jusqu'a HOME OK (~5-15s). On affiche un etat de chargement pendant ce
+  // temps : bouton grise + texte "Initialisation du plateau...".
   document.getElementById("btn-start").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-start");
+    const labelOrig = btn.textContent;
+    btn.disabled = true;
+    btn.classList.add("disabled");
+    btn.textContent = "Initialisation du plateau...";
     try {
       const next = await api("POST", "/api/new-game", homeForm);
       render(next);
     } catch (e) {
       showToast(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("disabled");
+      btn.textContent = labelOrig;
     }
   });
 
